@@ -11,6 +11,7 @@ SQLite" em What NOT to Use).
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from weakref import WeakKeyDictionary
 
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine import make_url
@@ -69,18 +70,37 @@ def make_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, expire_on_commit=False, class_=Session)
 
 
+# Cache de fábricas por engine: `sessionmaker` é caro e deve ser criado uma única
+# vez por engine e reusado (WR-03). Chaveado pela identidade do engine; usa
+# WeakKeyDictionary para não impedir a coleta do engine quando descartado.
+_SESSION_FACTORIES: "WeakKeyDictionary[Engine, sessionmaker[Session]]" = WeakKeyDictionary()
+
+
+def get_session_factory(engine: Engine) -> sessionmaker[Session]:
+    """Retorna a fábrica de sessões do engine, criando-a (e cacheando) uma vez."""
+    factory = _SESSION_FACTORIES.get(engine)
+    if factory is None:
+        factory = make_session_factory(engine)
+        _SESSION_FACTORIES[engine] = factory
+    return factory
+
+
 @contextmanager
 def get_session(engine: Engine) -> Iterator[Session]:
     """Fornece uma sessão SQLAlchemy 2.0 e a fecha ao final.
 
-    Usável como dependência ou context manager. Faz commit em caso de sucesso e
-    rollback em caso de exceção.
+    Usável como dependência ou context manager. Reusa a fábrica de sessões
+    cacheada por engine (WR-03). Só faz `commit` quando há trabalho pendente
+    (novos/sujos/removidos) — blocos somente-leitura (ex.: `SELECT 1` do health)
+    não emitem COMMIT, evitando contenção desnecessária com o único writer sob
+    SQLite WAL (WR-04). Faz rollback e re-levanta em caso de exceção.
     """
-    factory = make_session_factory(engine)
+    factory = get_session_factory(engine)
     session = factory()
     try:
         yield session
-        session.commit()
+        if session.in_transaction() and (session.new or session.dirty or session.deleted):
+            session.commit()
     except Exception:
         session.rollback()
         raise
