@@ -27,7 +27,7 @@ def _default_data_dir() -> Path:
     """
     programdata = os.environ.get("PROGRAMDATA")
     if os.name == "nt" or programdata:
-        base = programdata or os.path.expandvars(r"%SystemDrive%\\ProgramData")
+        base = programdata or os.path.expandvars(r"%SystemDrive%\ProgramData")
         return Path(base) / "ProcessadorDocumentos"
     return Path.home() / ".processador_documentos"
 
@@ -72,7 +72,11 @@ class Settings(BaseSettings):
         """
         if self.database_url:
             return self.database_url
-        return f"sqlite:///{self.data_dir / 'app.db'}"
+        # Normaliza para barras "/" (as_posix) antes de montar a URL: no Windows
+        # (plataforma primária) o caminho stringifica com "\", o que quebra o
+        # parsing da URL sqlite. `sqlite:///` + caminho POSIX é seguro em ambas
+        # as plataformas.
+        return "sqlite:///" + (self.data_dir / "app.db").as_posix()
 
 
 def ensure_data_dir(settings: "Settings | None" = None) -> Path:
