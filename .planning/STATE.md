@@ -52,9 +52,6 @@ Progress: [█░░░░░░░░░] 13%
 - Trend: —
 
 *Updated after each plan completion*
-| Phase 01 P02 | 5min | 3 tasks | 13 files |
-| Phase 01 P03 | 3min | 1 tasks | 2 files |
-| Phase 01 P04 | 4min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
