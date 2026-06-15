@@ -45,7 +45,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Modelos de domínio (Document/Page/AuditLog/Usage) + Alembic desde o dia 1 (migração 0001)
+- [x] 01-02-PLAN.md — Modelos de domínio (Document/Page/AuditLog/Usage) + Alembic desde o dia 1 (migração 0001)
 - [ ] 01-03-PLAN.md — CAS imutável por hash SHA-256 dentro da pasta de dados (copia o original, recuperável)
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -165,7 +165,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Fundação de Estado e Storage | 1/4 | In progress | - |
+| 1. Fundação de Estado e Storage | 2/4 | In Progress|  |
 | 2. Ingestão e Fila Assíncrona | 0/TBD | Not started | - |
 | 3. Extração Genérica via IA e Medição de Tokens | 0/TBD | Not started | - |
 | 4. Templates, Sub-templates e Classificação | 0/TBD | Not started | - |

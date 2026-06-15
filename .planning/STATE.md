@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-06-15T22:10:30Z"
-last_activity: 2026-06-15 -- Completed 01-01-PLAN.md (backend foundation)
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-06-15T22:19:55.574Z"
+last_activity: 2026-06-15
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
-  percent: 25
+  completed_plans: 2
+  percent: 0
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 ## Current Position
 
 Phase: 01 (funda-o-de-estado-e-storage) — EXECUTING
-Plan: 2 of 4
-Status: Executing Phase 01
-Last activity: 2026-06-15 -- Completed 01-01-PLAN.md (backend foundation)
+Plan: 3 of 4
+Status: Ready to execute
+Last activity: 2026-06-15
 
 Progress: [██░░░░░░░░] 25%
 
@@ -52,6 +52,7 @@ Progress: [██░░░░░░░░] 25%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01 P02 | 5min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 - [Roadmap]: Documentação e atualização segura entre versões são entregáveis de v1 (Phase 8).
 - [01-01]: Camada de banco atrás de interface única (Base/create_db_engine/get_session); PRAGMAs WAL aplicados só no dialeto sqlite — porta aberta para Postgres pela connection string.
 - [01-01]: Chave OpenAI lida da config como SecretStr; nunca em repr/str/logs nem em respostas (USE-01 atendido na fundação).
+- [01-02]: Modelos de domínio SQLAlchemy 2.0 (Document/Page/AuditLog/Usage); DocState com 6 estados enxutos (D-04); last_completed_step como marcador interno (D-05).
+- [01-02]: Alembic desde o dia 1 — schema versionado (0001_initial), URL/metadata da app, render_as_batch; nenhum create_all em produção (D-10).
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-15T22:10:30Z
+Last session: 2026-06-15T22:19:35.925Z
 Stopped at: Completed 01-01-PLAN.md
 Resume file: None
