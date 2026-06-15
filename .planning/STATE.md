@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-06-15T22:00:03.852Z"
-last_activity: 2026-06-15 -- Phase 1 planning complete
+last_updated: "2026-06-15T22:10:30Z"
+last_activity: 2026-06-15 -- Completed 01-01-PLAN.md (backend foundation)
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 25
 ---
 
 # Project State
@@ -21,30 +21,30 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-15)
 
 **Core value:** Transformar uma pilha de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados corretamente de forma automática e confiável — sem o usuário perder arquivos nem confiar cegamente na IA.
-**Current focus:** Phase 1 — Fundação de Estado e Storage
+**Current focus:** Phase 01 — funda-o-de-estado-e-storage
 
 ## Current Position
 
-Phase: 1 of 8 (Fundação de Estado e Storage)
-Plan: 0 of TBD in current phase
-Status: Ready to execute
-Last activity: 2026-06-15 -- Phase 1 planning complete
+Phase: 01 (funda-o-de-estado-e-storage) — EXECUTING
+Plan: 2 of 4
+Status: Executing Phase 01
+Last activity: 2026-06-15 -- Completed 01-01-PLAN.md (backend foundation)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: — min
-- Total execution time: 0.0 hours
+- Total plans completed: 1
+- Average duration: ~6 min
+- Total execution time: 0.1 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01 | 1 | ~6 min | ~6 min |
 
 **Recent Trend:**
 
@@ -64,6 +64,8 @@ Recent decisions affecting current work:
 - [Roadmap]: Windows é plataforma primária; modo padrão usa fila in-process (SQLite), sem broker externo (refletido nas Phases 1 e 2).
 - [Roadmap]: Reversibilidade (dry-run + audit write-ahead + undo + anti-colisão) é definição de pronto da Phase 6, não extra posterior.
 - [Roadmap]: Documentação e atualização segura entre versões são entregáveis de v1 (Phase 8).
+- [01-01]: Camada de banco atrás de interface única (Base/create_db_engine/get_session); PRAGMAs WAL aplicados só no dialeto sqlite — porta aberta para Postgres pela connection string.
+- [01-01]: Chave OpenAI lida da config como SecretStr; nunca em repr/str/logs nem em respostas (USE-01 atendido na fundação).
 
 ### Pending Todos
 
@@ -88,6 +90,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-15T21:47:11.218Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-funda-o-de-estado-e-storage/01-CONTEXT.md
+Last session: 2026-06-15T22:10:30Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None

@@ -56,7 +56,7 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 ### IA & Cobrança (USE)
 
-- [ ] **USE-01**: Cada instância usa uma chave OpenAI por cliente (provisionada pelo fornecedor); o cliente é responsável pelo consumo
+- [x] **USE-01**: Cada instância usa uma chave OpenAI por cliente (provisionada pelo fornecedor); o cliente é responsável pelo consumo
 - [ ] **USE-02**: Sistema mede e registra o uso de tokens/chamadas por documento, para apoiar a cobrança por consumo
 
 ### Distribuição & Atualização (DIST)
@@ -148,7 +148,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | PROC-01 | Phase 1 | Pending |
 | PROC-02 | Phase 2 | Pending |
 | PROC-03 | Phase 2 | Pending |
-| USE-01 | Phase 1 | Pending |
+| USE-01 | Phase 1 | Complete (01-01) |
 | USE-02 | Phase 3 | Pending |
 | DIST-01 | Phase 1 | Pending |
 | DIST-02 | Phase 1 | Pending |
