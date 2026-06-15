@@ -33,7 +33,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. O sistema sobe e opera em Windows no modo padrão sem broker externo e sem dependências de infraestrutura adicionais
   4. A chave OpenAI por instância é configurável e lida da configuração da aplicação (sem proxy central)
   5. O schema do banco evolui via migração versionada (Alembic) sem recriar o banco
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 01-01-PLAN.md — Scaffold backend + config (data dir %ProgramData%, chave OpenAI) + engine SQLite WAL atrás de interface
+- [ ] 01-02-PLAN.md — Modelos de domínio (Document/Page/AuditLog/Usage) + Alembic desde o dia 1 (migração 0001)
+- [ ] 01-03-PLAN.md — CAS imutável por hash SHA-256 dentro da pasta de dados (copia o original, recuperável)
+- [ ] 01-04-PLAN.md — Máquina de estados explícita (transições válidas; inválida falha sem corromper) + marcador interno de etapa
 
 ### Phase 2: Ingestão e Fila Assíncrona
 **Goal**: O usuário consegue colocar documentos no sistema por três caminhos (upload, pasta monitorada, lote CLI) e cada documento entra numa fila assíncrona idempotente que nunca reprocessa nem cobra duas vezes o mesmo arquivo.
@@ -127,7 +132,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Fundação de Estado e Storage | 0/TBD | Not started | - |
+| 1. Fundação de Estado e Storage | 0/4 | Not started | - |
 | 2. Ingestão e Fila Assíncrona | 0/TBD | Not started | - |
 | 3. Extração Genérica via IA e Medição de Tokens | 0/TBD | Not started | - |
 | 4. Templates, Sub-templates e Classificação | 0/TBD | Not started | - |
