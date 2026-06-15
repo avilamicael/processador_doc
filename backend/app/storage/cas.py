@@ -79,10 +79,14 @@ def store(src: Path) -> str:
     # garantindo que o os.replace posterior seja um rename atômico, não um copy).
     root = cas_root()
     root.mkdir(parents=True, exist_ok=True)
-    tmp_path = root / f".{uuid.uuid4().hex}.tmp"
+    # `cleanup_target` aponta SEMPRE para o único temporário que esta chamada
+    # ainda possui; é zerado assim que um `os.replace` o consome. Assim o
+    # `finally` jamais pode remover o blob final — defesa em profundidade contra
+    # perda irreversível de um documento do cliente (D-08).
+    cleanup_target: Path | None = root / f".{uuid.uuid4().hex}.tmp"
 
     try:
-        with src.open("rb") as fin, tmp_path.open("wb") as fout:
+        with src.open("rb") as fin, cleanup_target.open("wb") as fout:
             while chunk := fin.read(_CHUNK_SIZE):
                 hasher.update(chunk)
                 fout.write(chunk)
@@ -92,21 +96,30 @@ def store(src: Path) -> str:
 
         if final_path.is_file():
             # Mesmo conteúdo já armazenado: descarta o temporário (idempotência).
-            tmp_path.unlink(missing_ok=True)
+            cleanup_target.unlink(missing_ok=True)
+            cleanup_target = None
             return content_hash
 
         final_path.parent.mkdir(parents=True, exist_ok=True)
         # Move o temporário para o diretório de shard final antes do replace, de
         # modo que tmp e destino fiquem no mesmo diretório (rename atômico local).
-        staged_tmp = final_path.parent / tmp_path.name
-        os.replace(tmp_path, staged_tmp)
-        tmp_path = staged_tmp
-        os.replace(tmp_path, final_path)
+        staged_tmp = final_path.parent / cleanup_target.name
+        os.replace(cleanup_target, staged_tmp)
+        cleanup_target = staged_tmp
+        os.replace(staged_tmp, final_path)
+        # `staged_tmp` foi consumido pelo replace: nada mais a limpar e o blob
+        # final NUNCA é candidato a remoção.
+        cleanup_target = None
         return content_hash
     finally:
-        # Limpa qualquer temporário remanescente (ex.: exceção no meio da cópia).
-        if tmp_path.exists() and tmp_path.name.endswith(".tmp"):
-            tmp_path.unlink(missing_ok=True)
+        # Limpa apenas o temporário que esta chamada ainda possui — nunca o blob
+        # final. O assert é defesa em profundidade: garante que o alvo de limpeza
+        # jamais coincide com o caminho do blob de destino.
+        if cleanup_target is not None and cleanup_target.exists():
+            assert cleanup_target != path_for(hasher.hexdigest()), (
+                "cleanup nunca pode apontar para o blob final do CAS"
+            )
+            cleanup_target.unlink(missing_ok=True)
 
 
 def read_bytes(content_hash: str) -> bytes:
