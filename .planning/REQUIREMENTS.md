@@ -61,7 +61,7 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 ### Distribuição & Atualização (DIST)
 
-- [ ] **DIST-01**: Sistema roda em Windows (plataforma primária) — instalação, watcher e operações de arquivo confiáveis nele
+- [x] **DIST-01**: Sistema roda em Windows (plataforma primária) — instalação, watcher e operações de arquivo confiáveis nele
 - [ ] **DIST-02**: Sistema roda no modo padrão sem broker externo (fila in-process), e opcionalmente em servidor
 - [ ] **DIST-03**: Produto tem versão visível e releases versionadas
 - [ ] **DIST-04**: Fornecedor consegue publicar novas versões e o cliente consegue atualizar o sistema
@@ -150,7 +150,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | PROC-03 | Phase 2 | Pending |
 | USE-01 | Phase 1 | Complete (01-01) |
 | USE-02 | Phase 3 | Pending |
-| DIST-01 | Phase 1 | Pending |
+| DIST-01 | Phase 1 | Complete |
 | DIST-02 | Phase 1 | Pending |
 | DIST-03 | Phase 8 | Pending |
 | DIST-04 | Phase 8 | Pending |
@@ -161,6 +161,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | DOC-04 | Phase 8 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 38 total
 - Mapped to phases: 38 ✓
 - Unmapped: 0
