@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Aplicação web (FastAPI + React, web-first) vendida como produto para empresas que recebem muitos documentos — notas fiscais, boletos e similares. O cliente roda na própria máquina ou servidor e configura, pelo app, **templates** por tipo de documento e **sub-templates por cliente/emissor**, com os campos a extrair e as automações desejadas. O sistema ingere os documentos, separa páginas quando necessário, lê os dados (texto nativo de PDF localmente; imagens e PDFs escaneados via IA da OpenAI), classifica cada documento contra os templates e executa automações — inicialmente **renomear e mover** arquivos com base nos dados extraídos.
+Aplicação web (FastAPI + React, web-first) vendida como produto para empresas que recebem muitos documentos de **tipos variados** (cada cliente tem seus próprios tipos — notas fiscais e boletos são apenas exemplos). O cliente roda na própria máquina ou servidor (majoritariamente **Windows**) e configura, pelo app, **templates** por tipo de documento e **sub-templates por cliente/emissor**, com os campos a extrair e as automações desejadas. O sistema ingere os documentos, separa páginas quando necessário, lê os dados (texto nativo de PDF localmente; imagens e PDFs escaneados via IA da OpenAI), classifica cada documento contra os templates e executa automações — inicialmente **renomear e mover** arquivos com base nos dados extraídos. O motor é **genérico** (qualquer tipo de documento via template + IA); parsing determinístico de tipos conhecidos é otimização, não o foco.
 
 ## Core Value
 
@@ -31,9 +31,10 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 **Leitura/Extração**
 - [ ] Extrair **texto nativo de PDF localmente** (sem custo de IA quando o PDF tem texto)
 - [ ] Extrair dados de **imagens e PDFs escaneados via IA da OpenAI** (OCR + contexto)
-- [ ] Ler **boleto e NF-e sem IA** quando possível: parsing determinístico de linha digitável/código de barras e chave de acesso/XML de NF-e
-- [ ] Roteamento de extração: local primeiro, IA só onde necessário
-- [ ] **Saída estruturada (JSON Schema)** da IA conforme o template + validações de campo (CNPJ, data, valor)
+- [ ] **Extração genérica via IA para qualquer tipo de documento** (caminho principal, dirigido pelo template)
+- [ ] Roteamento de extração: determinístico (quando aplicável) → texto nativo local → IA
+- [ ] **Saída estruturada (JSON Schema)** da IA conforme o template + validações de campo configuráveis
+- [ ] **(Otimização) Parsing determinístico de tipos conhecidos** (ex.: boleto via linha digitável, NF-e via chave/XML) para reduzir custo de IA quando o cliente tiver esses tipos
 
 **Templates & Classificação**
 - [ ] **Construtor de templates no app**: o cliente cria templates por tipo de documento (NF, boleto, etc.)
@@ -89,8 +90,10 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 
 ## Constraints
 
+- **Plataforma primária**: **Windows** — a maioria das instalações roda em Windows; empacotamento, watcher de pasta e operações de arquivo (NTFS, atomicidade, cross-device) devem ser testados e confiáveis nele primeiro
 - **Tech stack**: Backend Python/FastAPI + frontend React (web-first) — alinhado à familiaridade com Python e ao requisito de rodar local ou em servidor
-- **Distribuição**: O mesmo código deve rodar em `localhost` (máquina do cliente) **ou** em servidor — evita travar em modelo desktop; empacotamento desktop (preferência Tauri sobre Electron) fica como evolução
+- **Distribuição**: O mesmo código deve rodar em `localhost` (máquina do cliente Windows) **ou** em servidor — evita travar em modelo desktop; empacotamento desktop (preferência Tauri sobre Electron) fica como evolução. Preferir **fila in-process (SQLite)** ao invés de Redis no modo padrão, para não exigir broker externo no Windows
+- **Domínio genérico**: O motor não pode ser acoplado a tipos fiscais específicos — qualquer tipo de documento deve ser suportado via template + IA; parsing determinístico de tipos conhecidos é um módulo opcional/plugável
 - **Dependência externa**: Parte de IA exige internet e chave OpenAI válida por instância
 - **Provedor de IA**: OpenAI (ChatGPT) — definido pelo usuário
 - **Segurança/LGPD**: Documentos fiscais são sensíveis; minimizar e tornar explícito o que sai da máquina para a OpenAI
@@ -104,7 +107,9 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 | Empacotamento desktop adiado (preferir Tauri se vier) | Mais leve que Electron; só se houver demanda por "instala e abre" | — Pending |
 | Provedor de IA: OpenAI/ChatGPT | Escolha explícita do usuário | — Pending |
 | OCR híbrido: texto nativo local → IA só no que sobra | Reduz custo de tokens e mantém precisão | — Pending |
-| Parsing determinístico de boleto/NF-e antes da IA | Linha digitável/código de barras e chave/XML são exatos e custo zero | — Pending |
+| Motor genérico para qualquer tipo de documento (não acoplado a fiscal) | Clientes têm tipos variados; NF-e/boleto são exemplos | — Pending |
+| Parsing determinístico de tipos conhecidos como módulo opcional/plugável | Linha digitável/chave são exatos e custo zero, mas não podem ser o eixo do produto | — Pending |
+| Windows como plataforma primária; fila in-process (SQLite) em vez de Redis no modo padrão | Maioria das instalações é Windows; evita broker externo difícil de operar lá | — Pending |
 | Chave OpenAI por cliente (sem proxy central) | Cliente arca com o próprio consumo; elimina componente cloud obrigatório | — Pending |
 | Medição de uso por tokens, não por "documento" | Sistema também processa contexto, não só extração; tokens refletem o custo real | — Pending |
 | Single-tenant (sem multiusuário/SaaS no v1) | Produto vendido como app único instalado por cliente | — Pending |
