@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 
 from alembic import command
 
@@ -81,6 +81,41 @@ def test_downgrade_base_remove_as_tabelas(db_url: str) -> None:
 
     # Nenhuma tabela de domínio sobrevive ao downgrade base.
     assert not (ESPERADAS & tabelas), f"tabelas não removidas: {ESPERADAS & tabelas}"
+
+
+def test_updated_at_avanca_em_update_via_sql_cru(db_url: str) -> None:
+    """WR-05: `updated_at` deve avançar mesmo num UPDATE via SQL cru (sem ORM),
+    graças ao trigger criado pela migração."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+
+    engine = create_engine(db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO documents (content_hash, original_filename, state, updated_at) "
+                    "VALUES (:h, :f, 'recebido', '2000-01-01 00:00:00')"
+                ),
+                {"h": "f" * 64, "f": "raw.pdf"},
+            )
+        with engine.begin() as conn:
+            # UPDATE que NÃO toca updated_at: o trigger deve carimbá-lo mesmo assim.
+            conn.execute(
+                text("UPDATE documents SET state = 'processando' WHERE content_hash = :h"),
+                {"h": "f" * 64},
+            )
+        with engine.connect() as conn:
+            updated_at = conn.execute(
+                text("SELECT updated_at FROM documents WHERE content_hash = :h"),
+                {"h": "f" * 64},
+            ).scalar()
+    finally:
+        engine.dispose()
+
+    # O valor inicial era o ano 2000; após o UPDATE o trigger o avançou.
+    assert updated_at is not None
+    assert not str(updated_at).startswith("2000-01-01")
 
 
 def test_round_trip_up_down_up(db_url: str) -> None:
