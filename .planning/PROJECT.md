@@ -58,6 +58,17 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 - [ ] **Chave OpenAI por cliente** (provisionada pelo fornecedor); o cliente é responsável pelo consumo
 - [ ] **Medição de uso por tokens / chamadas de API** para apoiar a cobrança por consumo
 
+**Distribuição & Atualização**
+- [ ] **Versionamento de releases** do produto (instalável por cliente, com versão visível)
+- [ ] **Mecanismo de atualização**: o fornecedor publica novas versões e os clientes atualizam o sistema
+- [ ] **Migração segura entre versões**: atualizar não pode quebrar nem perder templates, configurações e dados do cliente
+
+**Documentação (entregável de primeira classe)**
+- [ ] **Guia de instalação** (rodar em máquina local ou servidor, configurar a chave OpenAI)
+- [ ] **Guia de atualização** (como aplicar updates publicados pelo fornecedor sem perder dados)
+- [ ] **Documentação de uso / experiência do usuário** (criar templates, revisar, aplicar automações) com **exemplos de "como fazer"**
+- [ ] **Guia de operação/administração** (pasta monitorada, backup dos dados, troubleshooting)
+
 ### Out of Scope
 
 <!-- Explicit boundaries with reasoning. -->
@@ -98,6 +109,8 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 | Medição de uso por tokens, não por "documento" | Sistema também processa contexto, não só extração; tokens refletem o custo real | — Pending |
 | Single-tenant (sem multiusuário/SaaS no v1) | Produto vendido como app único instalado por cliente | — Pending |
 | Confiança como requisito de v1 (revisão, dry-run, quarentena, log/desfazer) | Documentos fiscais + mover arquivos do cliente exigem que nada se perca e nada seja aplicado às cegas | — Pending |
+| Documentação tratada como entregável de v1 (instalação, atualização, uso/exemplos, operação) | Produto vendido e instalado por cliente exige docs claras de instalar/usar/atualizar | — Pending |
+| Atualizações publicadas pelo fornecedor com migração segura de dados | Cliente roda a própria instância; updates não podem quebrar templates/config/dados | — Pending |
 
 ## Evolution
 
