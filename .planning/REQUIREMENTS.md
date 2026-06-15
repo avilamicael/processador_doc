@@ -115,17 +115,56 @@ Explicitamente excluídos. Documentado para prevenir scope creep.
 
 ## Traceability
 
-Preenchido durante a criação do roadmap.
+Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (a preencher pelo roadmapper) | — | Pending |
+| ING-01 | Phase 2 | Pending |
+| ING-02 | Phase 2 | Pending |
+| ING-03 | Phase 2 | Pending |
+| ING-04 | Phase 2 | Pending |
+| ING-05 | Phase 2 | Pending |
+| ING-06 | Phase 2 | Pending |
+| EXT-01 | Phase 3 | Pending |
+| EXT-02 | Phase 3 | Pending |
+| EXT-03 | Phase 7 | Pending |
+| EXT-04 | Phase 3 | Pending |
+| EXT-05 | Phase 7 | Pending |
+| TPL-01 | Phase 4 | Pending |
+| TPL-02 | Phase 4 | Pending |
+| TPL-03 | Phase 4 | Pending |
+| TPL-04 | Phase 4 | Pending |
+| REV-01 | Phase 5 | Pending |
+| REV-02 | Phase 5 | Pending |
+| REV-03 | Phase 5 | Pending |
+| REV-04 | Phase 5 | Pending |
+| REV-05 | Phase 5 | Pending |
+| AUT-01 | Phase 6 | Pending |
+| AUT-02 | Phase 6 | Pending |
+| AUT-03 | Phase 6 | Pending |
+| AUT-04 | Phase 6 | Pending |
+| AUT-05 | Phase 6 | Pending |
+| AUT-06 | Phase 6 | Pending |
+| PROC-01 | Phase 1 | Pending |
+| PROC-02 | Phase 2 | Pending |
+| PROC-03 | Phase 2 | Pending |
+| USE-01 | Phase 1 | Pending |
+| USE-02 | Phase 3 | Pending |
+| DIST-01 | Phase 1 | Pending |
+| DIST-02 | Phase 1 | Pending |
+| DIST-03 | Phase 8 | Pending |
+| DIST-04 | Phase 8 | Pending |
+| DIST-05 | Phase 8 | Pending |
+| DOC-01 | Phase 8 | Pending |
+| DOC-02 | Phase 8 | Pending |
+| DOC-03 | Phase 8 | Pending |
+| DOC-04 | Phase 8 | Pending |
 
 **Coverage:**
 - v1 requirements: 38 total
-- Mapped to phases: 0 (a preencher)
-- Unmapped: 38 ⚠️
+- Mapped to phases: 38 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-15*
-*Last updated: 2026-06-15 after initial definition*
+*Last updated: 2026-06-15 after roadmap creation (traceability mapped)*
