@@ -25,7 +25,11 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('content_hash', sa.String(length=64), nullable=False),
     sa.Column('original_filename', sa.String(), nullable=False),
-    sa.Column('state', sa.Enum('recebido', 'processando', 'em_revisao', 'concluido', 'quarentena', 'falha', name='doc_state', native_enum=False, length=20), server_default='recebido', nullable=False),
+    # CHECK (state IN (...)) renderizado inline no CREATE TABLE: a garantia de
+    # estado legal (D-06) passa a ser imposta na fronteira do storage, não só em
+    # Python (WR-06). A constraint é nomeada; o downgrade `op.drop_table` a remove
+    # junto com a tabela (limpo sob batch mode do SQLite).
+    sa.Column('state', sa.Enum('recebido', 'processando', 'em_revisao', 'concluido', 'quarentena', 'falha', name='ck_documents_doc_state', native_enum=False, create_constraint=True, length=20), server_default='recebido', nullable=False),
     sa.Column('last_completed_step', sa.String(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),

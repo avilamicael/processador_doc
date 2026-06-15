@@ -44,8 +44,9 @@ class Document(Base):
     state: Mapped[DocState] = mapped_column(
         SAEnum(
             DocState,
-            name="doc_state",
+            name="ck_documents_doc_state",
             native_enum=False,
+            create_constraint=True,
             values_callable=lambda enum: [member.value for member in enum],
             length=20,
         ),

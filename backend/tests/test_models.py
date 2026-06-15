@@ -10,6 +10,7 @@ from collections.abc import Iterator
 
 import pytest
 from sqlalchemy import Engine, select
+from sqlalchemy.exc import IntegrityError
 
 from app.models import AuditLog, DocState, Document, Page, Usage
 from app.storage.db import Base, get_session
@@ -102,6 +103,24 @@ def test_state_persiste_como_string_de_valor(schema_engine: Engine) -> None:
         assert lido is not None
         assert lido.state == DocState.EM_REVISAO
         assert lido.last_completed_step == "classificacao"
+
+
+def test_state_fora_do_dominio_eh_rejeitado_pelo_banco(schema_engine: Engine) -> None:
+    """A garantia de estado legal (D-06 / WR-06) é imposta no storage, não só em
+    Python: um INSERT via SQL cru com `state` fora do domínio viola a CHECK
+    constraint e é rejeitado pelo banco."""
+    from sqlalchemy import text
+
+    with pytest.raises(IntegrityError):
+        with get_session(schema_engine) as session:
+            session.execute(
+                text(
+                    "INSERT INTO documents (content_hash, original_filename, state) "
+                    "VALUES (:h, :f, :s)"
+                ),
+                {"h": "e" * 64, "f": "x.pdf", "s": "estado_invalido"},
+            )
+            session.commit()
 
 
 def test_audit_log_document_id_eh_nullable(schema_engine: Engine) -> None:
