@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 # busy_timeout em milissegundos: evita falha imediata sob contenção de escrita
@@ -44,14 +45,20 @@ def create_db_engine(url: str, *, echo: bool = False) -> Engine:
     Para SQLite, registra os PRAGMAs WAL/busy_timeout/foreign_keys por conexão.
     Para outros dialetos (ex.: Postgres), nenhum PRAGMA SQLite é aplicado.
     """
+    # Detecta o dialeto UMA única vez e a partir do backend name canônico, para
+    # que `check_same_thread` e os PRAGMAs (WAL/foreign_keys/busy_timeout) nunca
+    # divirjam — caso contrário um URL incomum poderia abrir uma conexão sem WAL
+    # silenciosamente (WR-02).
+    is_sqlite = make_url(url).get_backend_name() == "sqlite"
+
     connect_args: dict = {}
-    if url.startswith("sqlite"):
+    if is_sqlite:
         # FastAPI/worker podem tocar a mesma conexão em threads distintas.
         connect_args["check_same_thread"] = False
 
     engine = create_engine(url, echo=echo, future=True, connect_args=connect_args)
 
-    if engine.dialect.name == "sqlite":
+    if is_sqlite:
         _register_sqlite_pragmas(engine)
 
     return engine
