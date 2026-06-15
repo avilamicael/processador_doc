@@ -62,7 +62,7 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 ### Distribuição & Atualização (DIST)
 
 - [x] **DIST-01**: Sistema roda em Windows (plataforma primária) — instalação, watcher e operações de arquivo confiáveis nele
-- [ ] **DIST-02**: Sistema roda no modo padrão sem broker externo (fila in-process), e opcionalmente em servidor
+- [x] **DIST-02**: Sistema roda no modo padrão sem broker externo (fila in-process), e opcionalmente em servidor
 - [ ] **DIST-03**: Produto tem versão visível e releases versionadas
 - [ ] **DIST-04**: Fornecedor consegue publicar novas versões e o cliente consegue atualizar o sistema
 - [ ] **DIST-05**: Atualização migra dados com segurança (Alembic), sem perder templates, configurações ou dados do cliente
@@ -151,7 +151,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | USE-01 | Phase 1 | Complete (01-01) |
 | USE-02 | Phase 3 | Pending |
 | DIST-01 | Phase 1 | Complete |
-| DIST-02 | Phase 1 | Pending |
+| DIST-02 | Phase 1 | Complete |
 | DIST-03 | Phase 8 | Pending |
 | DIST-04 | Phase 8 | Pending |
 | DIST-05 | Phase 8 | Pending |
