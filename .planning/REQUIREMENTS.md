@@ -50,7 +50,7 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 ### Processamento (PROC)
 
-- [ ] **PROC-01**: Cada documento percorre uma máquina de estados explícita persistida (recebido → … → aplicado, com estados de revisão/quarentena/falha)
+- [x] **PROC-01**: Cada documento percorre uma máquina de estados explícita persistida (recebido → … → aplicado, com estados de revisão/quarentena/falha)
 - [ ] **PROC-02**: Processamento roda numa fila assíncrona com worker em background, com retry e backoff (lida com lotes e rate limit da OpenAI)
 - [ ] **PROC-03**: Fila é idempotente (chave por hash + etapa), impedindo reexecução de etapa concluída e cobrança dupla
 
@@ -145,7 +145,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | AUT-04 | Phase 6 | Pending |
 | AUT-05 | Phase 6 | Pending |
 | AUT-06 | Phase 6 | Pending |
-| PROC-01 | Phase 1 | Pending |
+| PROC-01 | Phase 1 | Complete |
 | PROC-02 | Phase 2 | Pending |
 | PROC-03 | Phase 2 | Pending |
 | USE-01 | Phase 1 | Complete (01-01) |

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-06-15T22:23:57.574Z"
+status: verifying
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-06-15T22:28:52.139Z"
 last_activity: 2026-06-15
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 13
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 
 Phase: 01 (funda-o-de-estado-e-storage) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-15
 
 Progress: [████████░░] 75%
@@ -54,6 +54,7 @@ Progress: [████████░░] 75%
 *Updated after each plan completion*
 | Phase 01 P02 | 5min | 3 tasks | 13 files |
 | Phase 01 P03 | 3min | 1 tasks | 2 files |
+| Phase 01 P04 | 4min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,7 @@ Recent decisions affecting current work:
 - [01-02]: Modelos de domínio SQLAlchemy 2.0 (Document/Page/AuditLog/Usage); DocState com 6 estados enxutos (D-04); last_completed_step como marcador interno (D-05).
 - [01-02]: Alembic desde o dia 1 — schema versionado (0001_initial), URL/metadata da app, render_as_batch; nenhum create_all em produção (D-10).
 - [01-03]: CAS imutável endereçado por SHA-256 dentro da pasta de dados única (data_dir/cas) — store copia preservando o original (D-07), recuperável por hash para sempre (D-08), idempotente por conteúdo; escrita atômica via temporário + os.replace, sem delete/update.
+- [Phase ?]: [01-04]: Máquina de estados explícita — TRANSITIONS allowlist (D-04) + transition() valida antes de atribuir e faz rollback em transição inválida, mantendo o estado persistido intacto (D-06); mark_step avança só o marcador interno (D-05). Auto-laços X->X inválidos por desenho.
 
 ### Pending Todos
 
@@ -95,6 +97,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-15T22:23:42.900Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-06-15T22:28:40.328Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
