@@ -31,6 +31,9 @@ packages = ["app"]
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+# Migrações são artefatos gerados pelo Alembic (templates/autogenerate);
+# não as reformatamos para não divergir da saída padrão da ferramenta.
+extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
