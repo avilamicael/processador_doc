@@ -9,12 +9,12 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 ### Ingestão (ING)
 
-- [ ] **ING-01**: Usuário pode enviar documentos por upload manual (PDF e imagens) pela interface
-- [ ] **ING-02**: Sistema processa automaticamente arquivos colocados numa pasta monitorada (hot folder), só após o arquivo estar estável (não processar arquivo parcialmente escrito)
-- [ ] **ING-03**: Usuário pode processar uma pasta em lote pela linha de comando
+- [ ] **ING-02**: Sistema processa automaticamente arquivos colocados em pasta(s) monitorada(s) (hot folder) — único caminho de ingestão no v1 — só após o arquivo estar estável (não processar arquivo parcialmente escrito); o usuário pode configurar múltiplas pastas pela interface
 - [ ] **ING-04**: Sistema aceita PDF e formatos de imagem comuns (JPG, PNG) como entrada
-- [ ] **ING-05**: Sistema separa um documento multi-página em blocos pela quantidade de páginas configurada pelo usuário
+- [ ] **ING-05**: Sistema separa um documento multi-página em blocos pela quantidade de páginas configurada pelo usuário, por pasta monitorada (cada bloco vira um documento independente)
 - [ ] **ING-06**: Sistema deduplica por hash, evitando reprocessar e cobrar o mesmo arquivo duas vezes
+
+> **Nota de escopo (2026-06-15):** ING-01 (upload manual) e ING-03 (lote por linha de comando) foram removidos do v1 — ingestão é exclusivamente por pasta monitorada. Movidos para v2 (ver ING2). Decisão capturada em `phases/02-ingest-o-e-fila-ass-ncrona/02-CONTEXT.md`.
 
 ### Extração (EXT)
 
@@ -78,6 +78,11 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 Diferidos para depois. Reconhecidos, mas fora do roadmap atual.
 
+### Ingestão diferida (ING2)
+
+- **ING2-01**: Usuário pode enviar documentos por upload manual (PDF e imagens) pela interface (era ING-01; removido do v1 em 2026-06-15)
+- **ING2-02**: Usuário pode processar uma pasta em lote pela linha de comando / backfill (era ING-03; removido do v1 em 2026-06-15)
+
 ### Automações avançadas (AUT2)
 
 - **AUT2-01**: Enviar documentos por e-mail
@@ -119,9 +124,9 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ING-01 | Phase 2 | Pending |
+| ING-01 | — | Removido do v1 → v2 (ING2-01) |
 | ING-02 | Phase 2 | Pending |
-| ING-03 | Phase 2 | Pending |
+| ING-03 | — | Removido do v1 → v2 (ING2-02) |
 | ING-04 | Phase 2 | Pending |
 | ING-05 | Phase 2 | Pending |
 | ING-06 | Phase 2 | Pending |
@@ -162,10 +167,10 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 
 **Coverage:**
 
-- v1 requirements: 38 total
-- Mapped to phases: 38 ✓
+- v1 requirements: 36 total (ING-01 e ING-03 removidos do v1 em 2026-06-15)
+- Mapped to phases: 36 ✓
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-15*
-*Last updated: 2026-06-15 after roadmap creation (traceability mapped)*
+*Last updated: 2026-06-15 — Phase 2 discuss: ING-01/ING-03 removidos do v1 (ingestão só por pasta monitorada)*

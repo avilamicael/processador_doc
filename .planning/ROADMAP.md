@@ -14,7 +14,7 @@ O produto transforma pilhas de documentos heterogêneos (PDFs e imagens, de tipo
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Fundação de Estado e Storage** - Máquina de estados persistida, CAS por hash, migrações Alembic e base Windows single-tenant (completed 2026-06-15)
-- [ ] **Phase 2: Ingestão e Fila Assíncrona** - Upload/hot folder/CLI, dedup por hash e fila in-process idempotente com retry
+- [ ] **Phase 2: Ingestão e Fila Assíncrona** - Pasta(s) monitorada(s) com separação por pasta, dedup por hash e fila in-process idempotente com retry
 - [ ] **Phase 3: Extração Genérica via IA e Medição de Tokens** - Núcleo do motor: extração por IA dirigida pelo template (qualquer tipo) + texto nativo + medição de uso
 - [ ] **Phase 4: Templates, Sub-templates e Classificação** - Construtor schema-first de templates e classificação automática contra eles
 - [ ] **Phase 5: Confiança, Revisão Humana e Quarentena** - Score de confiança determinístico, limiar, fila de revisão lado-a-lado e quarentena visível
@@ -54,16 +54,17 @@ Plans:
 
 ### Phase 2: Ingestão e Fila Assíncrona
 
-**Goal**: O usuário consegue colocar documentos no sistema por três caminhos (upload, pasta monitorada, lote CLI) e cada documento entra numa fila assíncrona idempotente que nunca reprocessa nem cobra duas vezes o mesmo arquivo.
+**Goal**: O usuário configura, pela interface, uma ou mais pastas monitoradas (cada uma com sua regra de separação de páginas) e cada arquivo colocado nelas entra numa fila assíncrona idempotente que nunca reprocessa nem cobra duas vezes o mesmo arquivo. Ingestão é exclusivamente por pasta monitorada no v1.
 **Depends on**: Phase 1
-**Requirements**: ING-01, ING-02, ING-03, ING-04, ING-05, ING-06, PROC-02, PROC-03
+**Requirements**: ING-02, ING-04, ING-05, ING-06, PROC-02, PROC-03
 **Success Criteria** (what must be TRUE):
 
-  1. O usuário consegue enviar PDFs e imagens (JPG/PNG) por upload manual na interface e vê o documento entrar na fila
+  1. O usuário configura pela interface uma ou mais pastas monitoradas (caminho + páginas por bloco) e vê os documentos entrando na fila com seu estado
   2. Arquivos colocados na pasta monitorada são processados automaticamente apenas após estarem estáveis (arquivo parcialmente escrito não é processado)
-  3. O usuário consegue processar uma pasta inteira em lote pela linha de comando
-  4. Um documento multi-página é separado em blocos pela quantidade de páginas configurada pelo usuário
-  5. Enviar o mesmo arquivo duas vezes é detectado por hash e não gera reprocessamento nem cobrança dupla, mesmo após retry/crash da fila
+  3. Um documento multi-página é separado em blocos pela quantidade de páginas configurada na pasta, e cada bloco vira um documento independente no pipeline
+  4. Enviar o mesmo arquivo duas vezes é detectado por hash e não gera reprocessamento nem cobrança dupla, mesmo após retry/crash da fila (com visibilidade de duplicados ignorados na interface)
+
+**Note de escopo (2026-06-15)**: ING-01 (upload manual) e ING-03 (lote CLI) removidos do v1 → v2. Ingestão folder-only. Ver `phases/02-ingest-o-e-fila-ass-ncrona/02-CONTEXT.md`.
 
 **Plans**: TBD
 **UI hint**: yes

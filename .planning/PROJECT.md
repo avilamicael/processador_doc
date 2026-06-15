@@ -21,12 +21,11 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 <!-- Current scope. Building toward these (v1). Hypotheses until shipped. -->
 
 **Ingestão**
-- [ ] Ingerir documentos via **pasta monitorada** (hot folder) processada automaticamente
-- [ ] Ingerir documentos via **upload manual** na interface
-- [ ] Ingerir documentos via **lote/linha de comando** apontando para uma pasta
+- [ ] Ingerir documentos via **pasta(s) monitorada(s)** (hot folder) processada(s) automaticamente — **único caminho de ingestão no v1**; configuráveis pela interface
 - [ ] Aceitar **PDF e imagens** como formatos de entrada
-- [ ] **Separar páginas** por quantidade configurável pelo usuário quando o documento tem mais de uma página
+- [ ] **Separar páginas** por quantidade configurável **por pasta** (cada bloco vira um documento independente)
 - [ ] **Deduplicar por hash** para não reprocessar/cobrar o mesmo arquivo duas vezes
+- _(v2)_ ~~Upload manual na interface~~ e ~~lote/linha de comando~~ — removidos do v1 em 2026-06-15 (ingestão folder-only)
 
 **Leitura/Extração**
 - [ ] Extrair **texto nativo de PDF localmente** (sem custo de IA quando o PDF tem texto)
@@ -116,6 +115,7 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 | Confiança como requisito de v1 (revisão, dry-run, quarentena, log/desfazer) | Documentos fiscais + mover arquivos do cliente exigem que nada se perca e nada seja aplicado às cegas | — Pending |
 | Documentação tratada como entregável de v1 (instalação, atualização, uso/exemplos, operação) | Produto vendido e instalado por cliente exige docs claras de instalar/usar/atualizar | — Pending |
 | Atualizações publicadas pelo fornecedor com migração segura de dados | Cliente roda a própria instância; updates não podem quebrar templates/config/dados | — Pending |
+| Ingestão folder-only no v1 (sem upload manual nem CLI) | Usuário trabalha por pastas; cada pasta tem sua regra de separação; upload/CLI viram v2 | — Pending (Phase 2 discuss, 2026-06-15) |
 
 ## Evolution
 
@@ -135,4 +135,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-15 after initialization*
+*Last updated: 2026-06-15 — Phase 2 discuss: ingestão folder-only (ING-01/ING-03 → v2)*
