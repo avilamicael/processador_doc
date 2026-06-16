@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 4 planned (6 plans, verified)
-last_updated: "2026-06-16T21:16:06.071Z"
+last_updated: "2026-06-16T21:21:54.881Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 19
-  completed_plans: 15
+  completed_plans: 16
   percent: 38
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 ## Current Position
 
 Phase: 04 (templates-sub-templates-e-classifica-o) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-06-16
 
@@ -65,6 +65,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 03 P04 | 12 | 2 tasks | 5 files |
 | Phase 04 P01 | 9 | 3 tasks | 12 files |
 | Phase 04 P02 | 3 | 2 tasks | 7 files |
+| Phase 04 P03 | 8 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [03-03]: extract_stage liga CAS→router(D-03)→pdf_io→openai_client→persistência num commit ÚNICO (Extraction+Usage(step=extract)+marcador 'extraido'); idempotência checa Extraction existente ANTES da chamada paga (called_ai=False=no-op, não re-cobra); estado via set-em-memória do marcador (NÃO mark_step/transition) mantendo state=PROCESSANDO (D-07); só PyMuPDF em asyncio.to_thread, OpenAI await direto; recusa/PDF malformado propagam ao worker sem corromper estado.
 - [Phase ?]: [03-04]: Worker bifurca dispatch por step — extract roda como coroutine (await extract_stage no loop, Pitfall 1 async-vs-thread), ingest segue em to_thread; FALHA roteada por content_hash do bloco (Pitfall 2); AuthenticationError não-retryável (dead-letter imediato, T-03-14); sweep idempotente no startup (enqueue_pending_extractions) enfileira extract p/ blocos aguardando_extracao sem job, cobrindo legados da Fase 2 sem quebrar a atomicidade do ingest. Pipeline ingest→extract completo end-to-end.
 - [Phase ?]: [04-01]: 4 tabelas da Fase 4 (templates/template_fields/classification_results/filled_fields) via Alembic 0004; ClassificationResult.document_id UNIQUE = rede de banco contra double-charge (EXT-04/Pitfall 2); template_id FK SET NULL nullable = quarentena/nao-casou (D-03); limiar de classificacao GLOBAL no v1 (classify_match_threshold), por-template adiado p/ v2.
+- [Phase ?]: [04-03]: decide(matches, threshold) separada de match_templates preserva o seam D-03; MissingFieldsResult REUSA ExtractedField (list-of-pairs strict-safe, Pitfall 1); matcher/filler puros (sem IA/DB).
 
 ### Pending Todos
 
@@ -122,6 +124,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T21:15:49.668Z
+Last session: 2026-06-16T21:21:38.999Z
 Stopped at: Phase 4 planned (6 plans, verified)
 Resume file: None
