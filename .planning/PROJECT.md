@@ -14,7 +14,12 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 
 <!-- Shipped and confirmed valuable. -->
 
-(None yet — ship to validate)
+**Ingestão & Processamento — validados na Fase 2 (2026-06-16)**
+- [x] Ingerir documentos via **pasta(s) monitorada(s)** processada(s) automaticamente após o arquivo estabilizar — configuráveis pela interface (ING-02)
+- [x] Aceitar **PDF e imagens** (allowlist de extensão) (ING-04)
+- [x] **Separar páginas** por quantidade configurável por pasta — cada bloco vira um documento independente (ING-05)
+- [x] **Deduplicar por hash** — não reprocessa nem cobra o mesmo arquivo duas vezes, idempotente mesmo após retry/crash (ING-06, PROC-03)
+- [x] **Fila assíncrona com retry/backoff** (worker in-process SQLite, claim atômico) (PROC-02)
 
 ### Active
 
@@ -135,4 +140,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-15 — Phase 2 discuss: ingestão folder-only (ING-01/ING-03 → v2)*
+*Last updated: 2026-06-16 — Phase 2 complete: ingestão folder-only + fila idempotente (ING-02/04/05/06, PROC-02/03 validados). Próxima: Phase 3 (extração via IA).*
