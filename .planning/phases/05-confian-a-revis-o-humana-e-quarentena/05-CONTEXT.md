@@ -105,7 +105,7 @@ O usuário nunca confia cegamente na IA. Esta fase entrega: (1) um **indicador d
 - **Visualizador de documento na web** (render da página/embed do PDF lado-a-lado) — explicitamente fora de escopo: o usuário manuseia os arquivos pelo Windows Explorer; a web é gestão/triagem. Reconsiderar só se a gestão de documentos na web evoluir.
 - **Limiar de confiança por template** — v1 usa limiar global (D-03); por-template é evolução futura (exigiria UI no construtor de templates).
 - **Combinar auto-relato de confiança da IA no indicador** — rejeitado para v1 (roadmap quer base determinística).
-- **Tensão com a redação do roadmap (REV-03):** o REV-03 diz "fila de revisão com **visualização do documento** ao lado dos campos editáveis". Por D-06, a parte "visualização do documento" cai; mantém-se "campos editáveis + motivo". Recomenda-se ajustar a redação de REV-03 (e revisar REV-04) no ROADMAP/REQUIREMENTS para refletir o modelo "web ativa, leve" antes/durante o planejamento.
+- **Tensão com a redação do roadmap (REV-03) — RESOLVIDA (2026-06-16):** o REV-03 dizia "fila de revisão com **visualização do documento** ao lado dos campos editáveis". A redação de REV-03/REV-04 (REQUIREMENTS), o Goal+SC3/SC4 da Phase 5 (ROADMAP) e o Key Decisions (PROJECT) já foram ajustados para o modelo "web ativa, leve" (visualizador de documento removido). Nada pendente aqui.
 
 </deferred>
 
