@@ -20,7 +20,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pikepdf
-import pytest
 from sqlalchemy import Engine, select
 
 from app.models import DocState, Document, IngestedOriginal, Job, JobStatus
