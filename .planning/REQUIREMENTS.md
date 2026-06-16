@@ -21,12 +21,12 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 - [x] **EXT-01**: Sistema extrai texto nativo de PDFs localmente, sem custo de IA, quando o PDF tem texto
 - [x] **EXT-02**: Sistema extrai dados de qualquer tipo de documento via IA (OpenAI), dirigido pelos campos do template (caminho principal, inclui imagens e PDFs escaneados)
 - [ ] **EXT-03**: Sistema roteia a extração na ordem: determinístico (quando aplicável) → texto nativo local → IA, mandando à IA só o que não foi resolvido localmente
-- [ ] **EXT-04**: IA retorna dados em formato estruturado (JSON Schema derivado do template), com validações de campo configuráveis
+- [x] **EXT-04**: IA retorna dados em formato estruturado (JSON Schema derivado do template), com validações de campo configuráveis
 - [ ] **EXT-05**: (Módulo opcional) Sistema extrai dados de tipos conhecidos sem IA quando presentes — boleto via linha digitável/código de barras e NF-e via chave de 44 dígitos/XML — com validação de dígito verificador
 
 ### Templates & Classificação (TPL)
 
-- [ ] **TPL-01**: Usuário cria templates de documento no app declarando campos (nome, tipo, validação, dica) — editor schema-first, sem desenhar zonas visuais
+- [x] **TPL-01**: Usuário cria templates de documento no app declarando campos (nome, tipo, validação, dica) — editor schema-first, sem desenhar zonas visuais
 - [ ] **TPL-03**: Sistema classifica automaticamente cada documento contra os templates disponíveis (usando IA para contexto)
 - [ ] **TPL-04**: Documento que não casa com nenhum template vai para quarentena (não some)
 
@@ -135,7 +135,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | EXT-03 | Phase 7 | Pending |
 | EXT-04 | Phase 4 | Pending (re-escopado da Fase 3 → Fase 4 em 2026-06-16) |
 | EXT-05 | Phase 7 | Pending |
-| TPL-01 | Phase 4 | Pending |
+| TPL-01 | Phase 4 | Complete |
 | TPL-02 | Phase 6 | Pending (re-escopado Fase 4 → Fase 6 em 2026-06-16) |
 | TPL-03 | Phase 4 | Pending |
 | TPL-04 | Phase 4 | Pending |

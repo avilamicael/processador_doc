@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 4 context gathered
-last_updated: "2026-06-16T20:10:54.242Z"
+status: executing
+stopped_at: Phase 4 planned (6 plans, verified)
+last_updated: "2026-06-16T21:10:12.882Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 13
-  completed_plans: 13
+  total_plans: 19
+  completed_plans: 14
   percent: 38
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-15)
 
 **Core value:** Transformar uma pilha de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados corretamente de forma automática e confiável — sem o usuário perder arquivos nem confiar cegamente na IA.
-**Current focus:** Phase 03 — extra-o-gen-rica-via-ia-e-medi-o-de-tokens
+**Current focus:** Phase 04 — templates-sub-templates-e-classifica-o
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 04 (templates-sub-templates-e-classifica-o) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
 Last activity: 2026-06-16
 
 Progress: [█░░░░░░░░░] 13%
@@ -63,6 +63,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 03 P02 | 9 | 3 tasks | 6 files |
 | Phase 03 P03 | 14 | 2 tasks | 5 files |
 | Phase 03 P04 | 12 | 2 tasks | 5 files |
+| Phase 04 P01 | 9 | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [03-02]: Três primitivas de extração como funções de módulo atrás de interface — pdf_io (magic bytes + heurística texto-vs-visão + render PNG), router.choose (seam D-03 plugável: Fases 4/7 plugam atalho local custo-zero), openai_client (Responses API + Structured Outputs, recusa→ExtractionRefused, ExtractionUsage mapeia input→prompt/output→completion). Chave nunca logada (testado).
 - [Phase ?]: [03-03]: extract_stage liga CAS→router(D-03)→pdf_io→openai_client→persistência num commit ÚNICO (Extraction+Usage(step=extract)+marcador 'extraido'); idempotência checa Extraction existente ANTES da chamada paga (called_ai=False=no-op, não re-cobra); estado via set-em-memória do marcador (NÃO mark_step/transition) mantendo state=PROCESSANDO (D-07); só PyMuPDF em asyncio.to_thread, OpenAI await direto; recusa/PDF malformado propagam ao worker sem corromper estado.
 - [Phase ?]: [03-04]: Worker bifurca dispatch por step — extract roda como coroutine (await extract_stage no loop, Pitfall 1 async-vs-thread), ingest segue em to_thread; FALHA roteada por content_hash do bloco (Pitfall 2); AuthenticationError não-retryável (dead-letter imediato, T-03-14); sweep idempotente no startup (enqueue_pending_extractions) enfileira extract p/ blocos aguardando_extracao sem job, cobrindo legados da Fase 2 sem quebrar a atomicidade do ingest. Pipeline ingest→extract completo end-to-end.
+- [Phase ?]: [04-01]: 4 tabelas da Fase 4 (templates/template_fields/classification_results/filled_fields) via Alembic 0004; ClassificationResult.document_id UNIQUE = rede de banco contra double-charge (EXT-04/Pitfall 2); template_id FK SET NULL nullable = quarentena/nao-casou (D-03); limiar de classificacao GLOBAL no v1 (classify_match_threshold), por-template adiado p/ v2.
 
 ### Pending Todos
 
@@ -119,6 +121,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T20:10:54.228Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-templates-sub-templates-e-classifica-o/04-CONTEXT.md
+Last session: 2026-06-16T21:09:49.453Z
+Stopped at: Phase 4 planned (6 plans, verified)
+Resume file: None

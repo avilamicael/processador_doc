@@ -140,7 +140,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Fundação: deps (python-dateutil) + tunables de classify + 4 modelos (template/campo/resultado/campo-preenchido) + Alembic 0004 + scaffolds Wave 0
+- [x] 04-01-PLAN.md — Fundação: deps (python-dateutil) + tunables de classify + 4 modelos (template/campo/resultado/campo-preenchido) + Alembic 0004 + scaffolds Wave 0
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -228,7 +228,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Fundação de Estado e Storage | 4/4 | Complete    | 2026-06-15 |
 | 2. Ingestão e Fila Assíncrona | 5/5 | Complete    | 2026-06-16 |
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
-| 4. Templates, Sub-templates e Classificação | 0/6 | Not started | - |
+| 4. Templates, Sub-templates e Classificação | 1/6 | In Progress|  |
 | 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |
 | 6. Automações de Arquivo (Renomear/Mover) | 0/TBD | Not started | - |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
