@@ -14,7 +14,6 @@ from app.validation.dates import normalize_date
 from app.validation.doc_ids import is_valid_cnpj, is_valid_cpf, normalize_doc_id
 from app.validation.money import normalize_money_brl
 
-
 # --- CNPJ (Módulo 11 próprio) ---
 
 
