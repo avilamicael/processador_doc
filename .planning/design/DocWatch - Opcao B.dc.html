@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#F5F7FB;color:#141A24;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+button{font-family:inherit}
+:root{
+ --font-ui:'Plus Jakarta Sans',system-ui,sans-serif;
+ --font-mono:'JetBrains Mono',ui-monospace,monospace;
+ --radius:11px; --radius-sm:9px; --row-py:13px;
+ --bg:#F5F7FB; --surface:#FFFFFF; --surface-2:#F8FAFD; --surface-3:#EFF2F8;
+ --border:#E8ECF3; --border-strong:#DBE1EB;
+ --text:#141A24; --text-2:#4B5663; --text-3:#828D9C;
+ --accent:#2563EB; --accent-fg:#FFFFFF; --accent-soft:rgba(37,99,235,.10); --accent-ring:rgba(37,99,235,.24);
+ --sidebar-bg:#FFFFFF; --sidebar-fg:#5A6677; --sidebar-fg-strong:#141A24; --sidebar-muted:#9AA5B4; --sidebar-active-bg:rgba(37,99,235,.10); --sidebar-active-fg:#2563EB; --sidebar-border:#EAEEF4; --sidebar-soft:#F4F6FB;
+ --shadow-card:0 1px 2px rgba(20,26,36,.04),0 8px 22px -14px rgba(20,26,36,.14);
+ --st-encontrado:#1E5FBF; --st-encontrado-bg:rgba(30,95,191,.10);
+ --st-leitura:#B45309; --st-leitura-bg:rgba(180,83,9,.12);
+ --st-tratado:#15803D; --st-tratado-bg:rgba(21,128,61,.12);
+ --st-erro:#DC2626; --st-erro-bg:rgba(220,38,38,.11);
+}
+[data-theme="dark"]{
+ --bg:#0B1017; --surface:#141B25; --surface-2:#10161F; --surface-3:#1C2632;
+ --border:#222C39; --border-strong:#2E3A48;
+ --text:#EAEFF6; --text-2:#A6B2C2; --text-3:#6E7A8A;
+ --accent:#3B82F6; --accent-fg:#FFFFFF; --accent-soft:rgba(59,130,246,.16); --accent-ring:rgba(59,130,246,.38);
+ --sidebar-bg:#10161F; --sidebar-fg:#9FB1C8; --sidebar-fg-strong:#FFFFFF; --sidebar-muted:#5E7088; --sidebar-active-bg:rgba(59,130,246,.18); --sidebar-active-fg:#FFFFFF; --sidebar-border:rgba(255,255,255,.06); --sidebar-soft:rgba(255,255,255,.05);
+ --shadow-card:0 1px 3px rgba(0,0,0,.45),0 10px 24px -14px rgba(0,0,0,.6);
+ --st-encontrado:#6BA5FF; --st-encontrado-bg:rgba(107,165,255,.14);
+ --st-leitura:#FBBF24; --st-leitura-bg:rgba(251,191,36,.15);
+ --st-tratado:#4ADE80; --st-tratado-bg:rgba(74,222,128,.15);
+ --st-erro:#F87171; --st-erro-bg:rgba(248,113,113,.15);
+}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:7px;border:3px solid var(--bg)}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+
+<div ref="{{ rootRef }}" data-theme="{{ theme }}" style="display:flex;height:100vh;width:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font-ui)">
+
+  <!-- ======================= SIDEBAR ======================= -->
+  <aside style="flex:none;width:250px;height:100%;display:flex;flex-direction:column;background:var(--sidebar-bg);border-right:1px solid var(--sidebar-border);color:var(--sidebar-fg)">
+    <div style="flex:none;display:flex;align-items:center;gap:11px;height:61px;padding:0 18px;border-bottom:1px solid var(--sidebar-border)">
+      <div style="flex:none;width:34px;height:34px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a0 0 0 0 1 0 0H4z"/><path d="M14 4v5h5"/><path d="M8 13h8M8 17h5"/></svg>
+      </div>
+      <div style="line-height:1.15">
+        <div style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--sidebar-fg-strong)">DocWatch</div>
+        <div style="font-size:11px;color:var(--sidebar-muted);font-weight:500">Gestão documental</div>
+      </div>
+    </div>
+
+    <nav style="flex:1;overflow-y:auto;padding:16px 12px;color:var(--sidebar-fg)">
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.9px;color:var(--sidebar-muted);padding:0 8px 8px">OPERAÇÃO</div>
+      <button onClick="{{ goDocs }}" style="position:relative;display:flex;align-items:center;gap:11px;width:100%;padding:9px 11px;margin-bottom:3px;border:0;border-radius:var(--radius-sm);font-size:13.5px;text-align:left;cursor:pointer;font-weight:{{ navWDocs }};color:{{ navFgDocs }};background:{{ navBgDocs }}" style-hover="background:var(--sidebar-active-bg);color:var(--sidebar-fg-strong)">
+        <span style="position:absolute;left:-11px;top:50%;transform:translateY(-50%);width:3px;height:17px;border-radius:0 3px 3px 0;background:var(--accent);opacity:{{ navIndDocs }}"></span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h6"/></svg>
+        <span>Documentos</span>
+      </button>
+
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.9px;color:var(--sidebar-muted);padding:16px 8px 8px">PROCESSAMENTO</div>
+      <button onClick="{{ goTemplates }}" style="position:relative;display:flex;align-items:center;gap:11px;width:100%;padding:9px 11px;margin-bottom:3px;border:0;border-radius:var(--radius-sm);font-size:13.5px;text-align:left;cursor:pointer;font-weight:{{ navWTpl }};color:{{ navFgTpl }};background:{{ navBgTpl }}" style-hover="background:var(--sidebar-active-bg);color:var(--sidebar-fg-strong)">
+        <span style="position:absolute;left:-11px;top:50%;transform:translateY(-50%);width:3px;height:17px;border-radius:0 3px 3px 0;background:var(--accent);opacity:{{ navIndTpl }}"></span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        <span>Templates</span>
+      </button>
+      <button onClick="{{ goAuto }}" style="position:relative;display:flex;align-items:center;gap:11px;width:100%;padding:9px 11px;margin-bottom:3px;border:0;border-radius:var(--radius-sm);font-size:13.5px;text-align:left;cursor:pointer;font-weight:{{ navWAuto }};color:{{ navFgAuto }};background:{{ navBgAuto }}" style-hover="background:var(--sidebar-active-bg);color:var(--sidebar-fg-strong)">
+        <span style="position:absolute;left:-11px;top:50%;transform:translateY(-50%);width:3px;height:17px;border-radius:0 3px 3px 0;background:var(--accent);opacity:{{ navIndAuto }}"></span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+        <span>Automações</span>
+      </button>
+
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.9px;color:var(--sidebar-muted);padding:16px 8px 8px">SISTEMA</div>
+      <button onClick="{{ goConfig }}" style="position:relative;display:flex;align-items:center;gap:11px;width:100%;padding:9px 11px;margin-bottom:3px;border:0;border-radius:var(--radius-sm);font-size:13.5px;text-align:left;cursor:pointer;font-weight:{{ navWCfg }};color:{{ navFgCfg }};background:{{ navBgCfg }}" style-hover="background:var(--sidebar-active-bg);color:var(--sidebar-fg-strong)">
+        <span style="position:absolute;left:-11px;top:50%;transform:translateY(-50%);width:3px;height:17px;border-radius:0 3px 3px 0;background:var(--accent);opacity:{{ navIndCfg }}"></span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11M4 12h16M4 18h9"/><circle cx="18" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg>
+        <span>Configurações</span>
+      </button>
+    </nav>
+
+    <div style="padding:12px;border-top:1px solid var(--sidebar-border)">
+      <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--radius-sm);background:var(--sidebar-soft)">
+        <span style="width:8px;height:8px;border-radius:50%;background:#2FBF71;box-shadow:0 0 0 3px rgba(47,191,113,.18);flex:none"></span>
+        <div style="line-height:1.25">
+          <div style="font-size:12px;font-weight:600;color:var(--sidebar-fg-strong)">Watcher ativo</div>
+          <div style="font-size:10.5px;color:var(--sidebar-muted)">4 pastas · varredura há 2 min</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ======================= MAIN ======================= -->
+  <main style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden">
+
+    <!-- header -->
+    <header style="flex:none;height:61px;display:flex;align-items:center;gap:16px;padding:0 26px;background:var(--surface);border-bottom:1px solid var(--border)">
+      <div style="min-width:0">
+        <h1 style="margin:0;font-size:16px;font-weight:700;letter-spacing:-.2px;color:var(--text)">{{ pageTitle }}</h1>
+        <div style="font-size:12px;color:var(--text-3);margin-top:1px">{{ pageDesc }}</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="position:relative;display:flex;align-items:center">
+        <svg style="position:absolute;left:11px;pointer-events:none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input value="{{ search }}" onInput="{{ onSearch }}" placeholder="Buscar documento, pasta…" style="width:248px;height:36px;padding:0 12px 0 33px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:13px;font-family:inherit;outline:none" style-focus="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)">
+      </div>
+      <button onClick="{{ toggleTheme }}" title="Alternar tema" style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text-2);cursor:pointer" style-hover="color:var(--accent);border-color:var(--accent)">
+        <sc-if value="{{ isDark }}" hint-placeholder-val="{{ false }}">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>
+        </sc-if>
+        <sc-if value="{{ isLight }}" hint-placeholder-val="{{ true }}">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z"/></svg>
+        </sc-if>
+      </button>
+      <button title="Notificações" style="position:relative;display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text-2);cursor:pointer" style-hover="color:var(--accent);border-color:var(--accent)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        <span style="position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:#DC2626;border:1.5px solid var(--surface-2)"></span>
+      </button>
+    </header>
+
+    <!-- scroll area -->
+    <div style="flex:1;overflow-y:auto;padding:24px 26px 40px">
+
+      <!-- =========== DOCUMENTOS =========== -->
+      <sc-if value="{{ isDocs }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <!-- stat row -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:15px 16px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:600;color:var(--text-3)">Encontrados</span><span style="width:8px;height:8px;border-radius:50%;background:var(--st-encontrado)"></span></div>
+              <div style="font-size:27px;font-weight:700;letter-spacing:-.5px;margin-top:8px;font-family:var(--font-mono)">{{ cEncontrado }}</div>
+              <div style="font-size:11.5px;color:var(--text-3);margin-top:2px">aguardando processamento</div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:15px 16px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:600;color:var(--text-3)">Em leitura</span><span style="width:8px;height:8px;border-radius:50%;background:var(--st-leitura)"></span></div>
+              <div style="font-size:27px;font-weight:700;letter-spacing:-.5px;margin-top:8px;font-family:var(--font-mono)">{{ cLeitura }}</div>
+              <div style="font-size:11.5px;color:var(--text-3);margin-top:2px">extração em andamento</div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:15px 16px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:600;color:var(--text-3)">Tratados</span><span style="width:8px;height:8px;border-radius:50%;background:var(--st-tratado)"></span></div>
+              <div style="font-size:27px;font-weight:700;letter-spacing:-.5px;margin-top:8px;font-family:var(--font-mono)">{{ cTratado }}</div>
+              <div style="font-size:11.5px;color:var(--text-3);margin-top:2px">prontos / arquivados</div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:15px 16px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:600;color:var(--text-3)">Erros</span><span style="width:8px;height:8px;border-radius:50%;background:var(--st-erro)"></span></div>
+              <div style="font-size:27px;font-weight:700;letter-spacing:-.5px;margin-top:8px;font-family:var(--font-mono)">{{ cErro }}</div>
+              <div style="font-size:11.5px;color:var(--text-3);margin-top:2px">requerem atenção</div>
+            </div>
+          </div>
+
+          <!-- table card -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);overflow:hidden">
+            <!-- toolbar -->
+            <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <sc-for list="{{ chips }}" as="chip" hint-placeholder-count="5">
+                  <button onClick="{{ chip.onClick }}" style="{{ chip.style }}">
+                    <span>{{ chip.label }}</span>
+                    <span style="{{ chip.countStyle }}">{{ chip.count }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="flex:1"></div>
+              <button style="display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--surface);color:var(--text-2);font-size:13px;font-weight:500;cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18M6 12h12M10 19h4"/></svg>
+                Filtros
+              </button>
+              <button style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:var(--radius-sm);border:1px solid transparent;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:600;cursor:pointer" style-hover="filter:brightness(1.08)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5"/></svg>
+                Forçar varredura
+              </button>
+            </div>
+
+            <!-- table -->
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;min-width:1080px;font-size:13px">
+                <thead>
+                  <tr style="background:var(--surface-2)">
+                    <th style="text-align:left;padding:10px 14px;width:42px;border-bottom:1px solid var(--border)">
+                      <button onClick="{{ onToggleAll }}" style="display:flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:4px;cursor:pointer;{{ selAllStyle }}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:{{ selAllOpacity }}"><path d="M20 6 9 17l-5-5"/></svg></button>
+                    </th>
+                    <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border)">Arquivo</th>
+                    <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border)">Pasta de origem</th>
+                    <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border)">Tipo</th>
+                    <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border)">Template</th>
+                    <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border)">Status</th>
+                    <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border)">Tamanho</th>
+                    <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border)">Data</th>
+                    <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border)">Responsável</th>
+                    <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border)">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{ docs }}" as="d" hint-placeholder-count="8">
+                    <tr style="{{ d.rowStyle }}" style-hover="background:var(--surface-2)">
+                      <td style="padding:var(--row-py) 14px;border-bottom:1px solid var(--border)">
+                        <button onClick="{{ d.onToggle }}" style="display:flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:4px;cursor:pointer;{{ d.checkStyle }}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:{{ d.checkOpacity }}"><path d="M20 6 9 17l-5-5"/></svg></button>
+                      </td>
+                      <td style="padding:var(--row-py) 14px;border-bottom:1px solid var(--border)">
+                        <div style="display:flex;align-items:center;gap:10px">
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>
+                          <span style="font-family:var(--font-mono);font-size:12.5px;font-weight:500;color:var(--text)">{{ d.name }}</span>
+                        </div>
+                      </td>
+                      <td style="padding:var(--row-py) 14px;border-bottom:1px solid var(--border);font-family:var(--font-mono);font-size:12px;color:var(--text-2)">{{ d.folder }}</td>
+                      <td style="padding:var(--row-py) 14px;border-bottom:1px solid var(--border);color:var(--text-2)">{{ d.type }}</td>
+                      <td style="padding:var(--row-py) 14px;border-bottom:1px solid var(--border);color:var(--text-2)">{{ d.tmpl }}</td>
+                      <td style="padding:var(--row-py) 14px;border-bottom:1px solid var(--border)">
+                        <span style="{{ d.stStyle }}"><span style="{{ d.dotStyle }}"></span>{{ d.stLabel }}</span>
+                      </td>
+                      <td style="padding:var(--row-py) 14px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--text-2)">{{ d.size }}</td>
+                      <td style="padding:var(--row-py) 14px;border-bottom:1px solid var(--border);color:var(--text-2);white-space:nowrap">{{ d.date }}</td>
+                      <td style="padding:var(--row-py) 14px;border-bottom:1px solid var(--border)">
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <span style="{{ d.whoChip }}">{{ d.whoInit }}</span>
+                          <span style="color:var(--text-2);white-space:nowrap">{{ d.who }}</span>
+                        </div>
+                      </td>
+                      <td style="padding:var(--row-py) 14px;border-bottom:1px solid var(--border)">
+                        <div style="display:flex;align-items:center;justify-content:flex-end;gap:2px">
+                          <button title="Visualizar" style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:5px;border:0;background:transparent;color:var(--text-3);cursor:pointer" style-hover="background:var(--surface-3);color:var(--accent)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                          <button title="Baixar" style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:5px;border:0;background:transparent;color:var(--text-3);cursor:pointer" style-hover="background:var(--surface-3);color:var(--accent)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></svg></button>
+                          <button title="Mais" style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:5px;border:0;background:transparent;color:var(--text-3);cursor:pointer" style-hover="background:var(--surface-3);color:var(--accent)"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
+                        </div>
+                      </td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- footer -->
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap">
+              <span style="font-size:12.5px;color:var(--text-3)">{{ resultText }}</span>
+              <div style="flex:1"></div>
+              <span style="font-size:12.5px;color:var(--text-3)">Linhas por página: 25</span>
+              <div style="display:flex;gap:4px">
+                <button style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:5px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-3);cursor:not-allowed">‹</button>
+                <button style="display:flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 8px;border-radius:5px;border:1px solid transparent;background:var(--accent);color:#fff;font-weight:600;cursor:pointer">1</button>
+                <button style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:5px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-2);cursor:pointer">›</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- =========== CONFIGURAÇÕES =========== -->
+      <sc-if value="{{ isConfig }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:1000px">
+          <!-- tabs -->
+          <div style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:22px">
+            <sc-for list="{{ configTabs }}" as="t" hint-placeholder-count="4">
+              <button onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button>
+            </sc-for>
+          </div>
+
+          <!-- PASTAS -->
+          <sc-if value="{{ tabPastas }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap">
+                <div style="flex:1;min-width:240px">
+                  <h2 style="margin:0 0 4px;font-size:15px;font-weight:700">Pastas monitoradas</h2>
+                  <p style="margin:0;font-size:13px;color:var(--text-3);max-width:560px">O watcher varre estas pastas em busca de novos PDFs e os envia para a fila de processamento conforme as regras definidas.</p>
+                </div>
+                <button style="display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:var(--radius-sm);border:1px solid transparent;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:600;cursor:pointer" style-hover="filter:brightness(1.08)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Adicionar pasta</button>
+              </div>
+
+              <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);overflow:hidden">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface-2)">
+                  <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#2FBF71"></span><span style="font-size:13px;font-weight:600">Watcher global</span><span style="font-size:12px;color:var(--text-3)">intervalo padrão de varredura: 5 min</span></div>
+                  <button onClick="{{ toggleWatcher }}" style="{{ watcherTrack }}"><span style="{{ watcherKnob }}"></span></button>
+                </div>
+                <sc-for list="{{ folders }}" as="f" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid var(--border)" style-hover="background:var(--surface-2)">
+                    <div style="flex:none;width:36px;height:36px;border-radius:8px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text)">{{ f.path }}</div>
+                      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px;font-size:12px;color:var(--text-3)">
+                        <span>{{ f.recLabel }}</span><span>·</span><span>{{ f.types }}</span><span>·</span><span>{{ f.freq }}</span><span>·</span><span>{{ f.files }} arquivos</span>
+                      </div>
+                    </div>
+                    <div style="text-align:right;font-size:12px;color:var(--text-3);white-space:nowrap">última varredura<br><span style="color:var(--text-2);font-weight:500">{{ f.last }}</span></div>
+                    <button onClick="{{ f.onToggle }}" style="{{ f.swTrack }}"><span style="{{ f.swKnob }}"></span></button>
+                    <button style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:5px;border:0;background:transparent;color:var(--text-3);cursor:pointer" style-hover="background:var(--surface-3);color:var(--accent)"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- REGRAS -->
+          <sc-if value="{{ tabRegras }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap">
+                <div style="flex:1;min-width:240px">
+                  <h2 style="margin:0 0 4px;font-size:15px;font-weight:700">Regras de separação</h2>
+                  <p style="margin:0;font-size:13px;color:var(--text-3);max-width:560px">Definem como um PDF de várias páginas é dividido em documentos individuais antes da leitura. Aplicadas em ordem de prioridade.</p>
+                </div>
+                <button style="display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:var(--radius-sm);border:1px solid transparent;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:600;cursor:pointer" style-hover="filter:brightness(1.08)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Nova regra</button>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:12px">
+                <sc-for list="{{ rules }}" as="r" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:16px;padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card)">
+                    <div style="flex:1;min-width:0">
+                      <div style="display:flex;align-items:center;gap:10px"><span style="font-size:14px;font-weight:600;color:var(--text)">{{ r.name }}</span><span style="font-size:11px;font-family:var(--font-mono);padding:2px 8px;border-radius:999px;background:var(--surface-3);color:var(--text-2)">{{ r.param }}</span></div>
+                      <p style="margin:5px 0 0;font-size:12.5px;color:var(--text-3);max-width:600px">{{ r.desc }}</p>
+                    </div>
+                    <button onClick="{{ r.onToggle }}" style="{{ r.swTrack }}"><span style="{{ r.swKnob }}"></span></button>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- LEITURA -->
+          <sc-if value="{{ tabLeitura }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px;max-width:680px">
+              <h2 style="margin:0;font-size:15px;font-weight:700">Leitura e extração de dados</h2>
+              <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);overflow:hidden">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border-bottom:1px solid var(--border)">
+                  <div><div style="font-size:13.5px;font-weight:600">Motor de OCR</div><div style="font-size:12px;color:var(--text-3);margin-top:2px">Engine usado quando o PDF não possui texto nativo</div></div>
+                  <select style="height:36px;padding:0 30px 0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:13px;font-family:inherit;cursor:pointer"><option>Tesseract 5</option><option>Google Cloud Vision</option><option>AWS Textract</option></select>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border-bottom:1px solid var(--border)">
+                  <div><div style="font-size:13.5px;font-weight:600">Idioma principal</div><div style="font-size:12px;color:var(--text-3);margin-top:2px">Dicionário usado na correção de leitura</div></div>
+                  <select style="height:36px;padding:0 30px 0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:13px;font-family:inherit;cursor:pointer"><option>Português (BR)</option><option>Inglês</option><option>Espanhol</option></select>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border-bottom:1px solid var(--border)">
+                  <div><div style="font-size:13.5px;font-weight:600">Confiança mínima</div><div style="font-size:12px;color:var(--text-3);margin-top:2px">Abaixo deste valor o campo é marcado para revisão manual</div></div>
+                  <div style="display:flex;align-items:center;gap:10px"><div style="width:120px;height:5px;border-radius:3px;background:var(--surface-3);position:relative"><div style="position:absolute;left:0;top:0;height:100%;width:85%;border-radius:3px;background:var(--accent)"></div><div style="position:absolute;left:85%;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--accent)"></div></div><span style="font-family:var(--font-mono);font-size:13px;font-weight:600;width:38px;text-align:right">85%</span></div>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border-bottom:1px solid var(--border)">
+                  <div><div style="font-size:13.5px;font-weight:600">Corrigir inclinação (deskew)</div><div style="font-size:12px;color:var(--text-3);margin-top:2px">Endireita páginas digitalizadas antes do OCR</div></div>
+                  <button onClick="{{ toggleDeskew }}" style="{{ deskewTrack }}"><span style="{{ deskewKnob }}"></span></button>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px">
+                  <div><div style="font-size:13.5px;font-weight:600">Remoção de ruído</div><div style="font-size:12px;color:var(--text-3);margin-top:2px">Limpa manchas e pontos de digitalizações antigas</div></div>
+                  <button onClick="{{ toggleDenoise }}" style="{{ denoiseTrack }}"><span style="{{ denoiseKnob }}"></span></button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- INTEGRAÇÕES -->
+          <sc-if value="{{ tabInteg }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div style="margin-bottom:18px">
+                <h2 style="margin:0 0 4px;font-size:15px;font-weight:700">Integrações</h2>
+                <p style="margin:0;font-size:13px;color:var(--text-3)">Destinos e serviços conectados para onde os documentos tratados são enviados.</p>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">
+                <sc-for list="{{ integrations }}" as="i" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;gap:13px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card)">
+                    <div style="flex:none;width:42px;height:42px;border-radius:9px;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text-2)">{{ i.mono }}</div>
+                    <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600">{{ i.name }}</div><div style="font-size:12px;color:var(--text-3)">{{ i.cat }}</div></div>
+                    <span style="{{ i.badge }}">{{ i.badgeLabel }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- =========== TEMPLATES =========== -->
+      <sc-if value="{{ isTemplates }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap">
+            <div style="flex:1;min-width:240px"><h2 style="margin:0 0 4px;font-size:15px;font-weight:700">Templates de documento</h2><p style="margin:0;font-size:13px;color:var(--text-3);max-width:600px">Cada template define o tipo de documento e os campos extraídos pelo motor de leitura.</p></div>
+            <button style="display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:var(--radius-sm);border:1px solid transparent;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:600;cursor:pointer" style-hover="filter:brightness(1.08)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Novo template</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px">
+            <sc-for list="{{ templates }}" as="t" hint-placeholder-count="6">
+              <div style="display:flex;flex-direction:column;padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card)" style-hover="border-color:var(--accent-ring)">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px">
+                  <div style="display:flex;align-items:center;gap:11px"><div style="flex:none;width:38px;height:38px;border-radius:9px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div><div><div style="font-size:14px;font-weight:600;line-height:1.25">{{ t.name }}</div><div style="font-size:11.5px;color:var(--text-3);margin-top:1px">{{ t.type }}</div></div></div>
+                  <button style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:5px;border:0;background:transparent;color:var(--text-3);cursor:pointer" style-hover="background:var(--surface-3);color:var(--accent)"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
+                </div>
+                <div style="font-size:10.5px;font-weight:700;letter-spacing:.6px;color:var(--text-3);margin-bottom:7px">CAMPOS EXTRAÍDOS</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+                  <sc-for list="{{ t.fields }}" as="fld" hint-placeholder-count="4">
+                    <span style="font-size:11.5px;font-family:var(--font-mono);padding:3px 9px;border-radius:999px;background:var(--surface-3);color:var(--text-2)">{{ fld }}</span>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;gap:14px;padding-top:12px;border-top:1px solid var(--border);margin-top:auto;font-size:12px;color:var(--text-3)">
+                  <span style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M4 9h16"/></svg>{{ t.docs }} docs</span>
+                  <span style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 12 5 5L20 6"/></svg>{{ t.rule }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- =========== AUTOMAÇÕES =========== -->
+      <sc-if value="{{ isAuto }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap">
+            <div style="flex:1;min-width:240px"><h2 style="margin:0 0 4px;font-size:15px;font-weight:700">Automações</h2><p style="margin:0;font-size:13px;color:var(--text-3);max-width:600px">Ações executadas automaticamente após o tratamento de um documento, no modelo <strong style="color:var(--text-2);font-weight:600">gatilho → condição → ação</strong>.</p></div>
+            <button style="display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:var(--radius-sm);border:1px solid transparent;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:600;cursor:pointer" style-hover="filter:brightness(1.08)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Nova automação</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <sc-for list="{{ automations }}" as="a" hint-placeholder-count="5">
+              <div style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card)">
+                <div style="display:flex;align-items:center;gap:14px;margin-bottom:13px">
+                  <div style="flex:none;width:34px;height:34px;border-radius:8px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+                  <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600">{{ a.name }}</div><div style="font-size:11.5px;color:var(--text-3);margin-top:1px">{{ a.runs }}</div></div>
+                  <span style="{{ a.badge }}">{{ a.badgeLabel }}</span>
+                  <button onClick="{{ a.onToggle }}" style="{{ a.swTrack }}"><span style="{{ a.swKnob }}"></span></button>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:13px;border-top:1px solid var(--border)">
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 11px;border-radius:var(--radius-sm);background:var(--surface-3);color:var(--text-2)"><span style="font-size:10px;font-weight:700;letter-spacing:.4px;color:var(--text-3)">QUANDO</span>{{ a.trigger }}</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 11px;border-radius:var(--radius-sm);background:var(--surface-3);color:var(--text-2)"><span style="font-size:10px;font-weight:700;letter-spacing:.4px;color:var(--text-3)">SE</span>{{ a.cond }}</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 11px;border-radius:var(--radius-sm);background:var(--accent-soft);color:var(--accent);font-weight:500"><span style="font-size:10px;font-weight:700;letter-spacing:.4px;opacity:.7">AÇÃO</span>{{ a.action }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1320,&quot;height&quot;:860},&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#1A55A3&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Confortável&quot;,&quot;Compacto&quot;],&quot;default&quot;:&quot;Confortável&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;startTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Claro&quot;,&quot;Escuro&quot;],&quot;default&quot;:&quot;Claro&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  root = React.createRef();
+  state = {
+    theme: 'light',
+    page: 'documentos',
+    configTab: 'pastas',
+    status: 'todos',
+    search: '',
+    selected: [],
+    watcher: true,
+    folderState: { 1:true, 2:true, 3:true, 4:false },
+    ruleState: { 1:true, 2:false, 3:true, 4:true },
+    autoState: { 1:true, 2:true, 3:true, 4:false, 5:true },
+    deskew: true,
+    denoise: true,
+    _themed: false,
+  };
+
+  componentDidMount(){ this._apply(); if(this.props.startTheme==='Escuro' && !this.state._themed){ this.setState({theme:'dark',_themed:true}); } }
+  componentDidUpdate(){ this._apply(); }
+  _apply(){
+    const el = this.root.current; if(!el) return;
+    const a = this.props.accentColor;
+    if(a){ el.style.setProperty('--accent', a); el.style.setProperty('--accent-soft', `color-mix(in srgb, ${a} 12%, transparent)`); el.style.setProperty('--accent-ring', `color-mix(in srgb, ${a} 30%, transparent)`); }
+    const d = this.props.density;
+    if(d) el.style.setProperty('--row-py', d==='Compacto' ? '7px' : '12px');
+  }
+
+  go(page){ this.setState({ page }); }
+  setTab(configTab){ this.setState({ configTab }); }
+  setStatus(status){ this.setState({ status }); }
+  onSearch(e){ this.setState({ search: e.target.value }); }
+  toggleTheme(){ this.setState(s => ({ theme: s.theme==='light'?'dark':'light' })); }
+  toggleSel(id){ this.setState(s => ({ selected: s.selected.includes(id) ? s.selected.filter(x=>x!==id) : [...s.selected, id] })); }
+  toggleAll(ids){ this.setState(s => ({ selected: s.selected.length===ids.length ? [] : ids.slice() })); }
+  toggleWatcher(){ this.setState(s => ({ watcher: !s.watcher })); }
+  toggleFolder(id){ this.setState(s => ({ folderState: {...s.folderState, [id]: !s.folderState[id]} })); }
+  toggleRule(id){ this.setState(s => ({ ruleState: {...s.ruleState, [id]: !s.ruleState[id]} })); }
+  toggleAuto(id){ this.setState(s => ({ autoState: {...s.autoState, [id]: !s.autoState[id]} })); }
+
+  _swTrack(on){ return `display:inline-flex;align-items:center;width:36px;height:21px;border-radius:999px;padding:2px;border:0;cursor:pointer;flex:none;transition:background .15s;background:${on?'var(--accent)':'var(--border-strong)'}`; }
+  _swKnob(on){ return `width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s;transform:translateX(${on?'15px':'0'})`; }
+  _pill(k){ return `display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;color:var(--st-${k});background:var(--st-${k}-bg)`; }
+  _dot(k){ return `width:6px;height:6px;border-radius:50%;flex:none;background:var(--st-${k})`; }
+  _initials(name){ if(!name||name==='—') return ''; return name.split(/[ .]+/).filter(Boolean).map(x=>x[0]).join('').slice(0,2).toUpperCase(); }
+
+  renderVals(){
+    const S = this.state;
+    const navOf = p => { const a = S.page===p; return { bg: a?'var(--sidebar-active-bg)':'transparent', fg: a?'var(--sidebar-active-fg)':'var(--sidebar-fg)', w: a?'600':'500', ind: a?'1':'0' }; };
+    const nd=navOf('documentos'), nt=navOf('templates'), na=navOf('automacoes'), nc=navOf('config');
+
+    const titles = {
+      documentos: ['Documentos', 'Arquivos encontrados e tratados pelo watcher'],
+      templates: ['Templates', 'Modelos de extração de dados por tipo de documento'],
+      automacoes: ['Automações', 'Ações executadas após o tratamento dos documentos'],
+      config: ['Configurações', 'Pastas monitoradas, regras, leitura e integrações'],
+    };
+    const tt = titles[S.page] || titles.documentos;
+
+    // ---- documents ----
+    const D = (id,name,folder,type,tmpl,status,size,date,who)=>({id,name,folder,type,tmpl,status,size,date,who});
+    const raw = [
+      D(1,'NF-2024-00871.pdf','/Financeiro/Entradas','Nota Fiscal','Nota Fiscal Eletrônica','tratado','248 KB','14 jun · 09:32','M. Almeida'),
+      D(2,'contrato-prestacao-acme.pdf','/Jurídico/Contratos','Contrato','Contrato Padrão','leitura','1.2 MB','14 jun · 09:30','—'),
+      D(3,'boleto-energia-05-2026.pdf','/Financeiro/Boletos','Boleto','Boleto Bancário','tratado','96 KB','14 jun · 08:58','R. Costa'),
+      D(4,'holerite-maio-2026.pdf','/RH/Folha','Holerite','Holerite','erro','512 KB','14 jun · 08:40','Sistema'),
+      D(5,'nf-servico-3320.pdf','/Financeiro/Entradas','Nota Fiscal','Nota Fiscal Eletrônica','encontrado','180 KB','14 jun · 08:33','—'),
+      D(6,'apolice-seguro-frota.pdf','/Operações/Seguros','Apólice','Apólice de Seguro','tratado','2.4 MB','13 jun · 18:21','J. Pereira'),
+      D(7,'comprovante-pix-4471.pdf','/Financeiro/Comprovantes','Comprovante','Comprovante de Pagamento','tratado','64 KB','13 jun · 17:05','R. Costa'),
+      D(8,'contrato-locacao-sala12.pdf','/Jurídico/Contratos','Contrato','Contrato Padrão','leitura','880 KB','13 jun · 16:48','—'),
+      D(9,'fatura-cartao-corp-04.pdf','/Financeiro/Cartões','Fatura','Fatura de Cartão','encontrado','320 KB','13 jun · 15:30','—'),
+      D(10,'recibo-3219.pdf','/Financeiro/Recibos','Recibo','—','erro','48 KB','13 jun · 14:12','Sistema'),
+      D(11,'nota-debito-1180.pdf','/Financeiro/Entradas','Nota de Débito','Nota Fiscal Eletrônica','tratado','132 KB','13 jun · 11:44','M. Almeida'),
+      D(12,'termo-aditivo-acme.pdf','/Jurídico/Contratos','Aditivo','Contrato Padrão','tratado','410 KB','13 jun · 10:02','J. Pereira'),
+    ];
+    const counts = {
+      encontrado: raw.filter(d=>d.status==='encontrado').length,
+      leitura: raw.filter(d=>d.status==='leitura').length,
+      tratado: raw.filter(d=>d.status==='tratado').length,
+      erro: raw.filter(d=>d.status==='erro').length,
+      total: raw.length,
+    };
+    const labels = { encontrado:'Encontrado', leitura:'Em leitura', tratado:'Tratado', erro:'Erro' };
+    const q = S.search.trim().toLowerCase();
+    const filtered = raw.filter(d => (S.status==='todos'||d.status===S.status) && (q==='' || (d.name+d.folder+d.type+d.tmpl).toLowerCase().includes(q)));
+    const allIds = filtered.map(d=>d.id);
+    const allSel = filtered.length>0 && S.selected.length===filtered.length;
+    const docs = filtered.map(d => {
+      const sel = S.selected.includes(d.id);
+      const init = this._initials(d.who);
+      return {
+        ...d,
+        stLabel: labels[d.status],
+        stStyle: this._pill(d.status),
+        dotStyle: this._dot(d.status),
+        rowStyle: sel ? 'background:var(--accent-soft)' : '',
+        sel,
+        onToggle: () => this.toggleSel(d.id),
+        checkStyle: sel ? 'background:var(--accent);border:1px solid var(--accent)' : 'background:var(--surface);border:1px solid var(--border-strong)',
+        checkOpacity: sel ? '1' : '0',
+        whoInit: init,
+        whoChip: init ? 'display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:10.5px;font-weight:600;background:var(--surface-3);color:var(--text-2);flex:none' : 'display:none',
+      };
+    });
+
+    // ---- status chips ----
+    const segBase = 'display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s';
+    const mkChip = (key,label,count) => {
+      const a = S.status===key;
+      const ck = key==='todos'?'':key;
+      return {
+        label, count,
+        onClick: () => this.setStatus(key),
+        style: `${segBase};border:1px solid ${a?'transparent':'var(--border)'};background:${a?'var(--accent-soft)':'transparent'};color:${a?'var(--accent)':'var(--text-2)'}`,
+        countStyle: `font-family:var(--font-mono);font-size:11px;font-weight:600;padding:1px 6px;border-radius:999px;background:${a?'var(--accent)':'var(--surface-3)'};color:${a?'#fff':'var(--text-3)'}`,
+      };
+    };
+    const chips = [
+      mkChip('todos','Todos',counts.total),
+      mkChip('encontrado','Encontrado',counts.encontrado),
+      mkChip('leitura','Em leitura',counts.leitura),
+      mkChip('tratado','Tratado',counts.tratado),
+      mkChip('erro','Erro',counts.erro),
+    ];
+
+    // ---- config tabs ----
+    const tabBase = 'padding:11px 16px;border:0;background:transparent;font-family:inherit;font-size:13.5px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px';
+    const mkTab = (key,label) => { const a=S.configTab===key; return { label, onClick:()=>this.setTab(key), style:`${tabBase};color:${a?'var(--accent)':'var(--text-3)'};border-bottom-color:${a?'var(--accent)':'transparent'};font-weight:${a?'600':'500'}` }; };
+    const configTabs = [ mkTab('pastas','Pastas monitoradas'), mkTab('regras','Regras de separação'), mkTab('leitura','Leitura de dados'), mkTab('integracoes','Integrações') ];
+
+    // ---- folders ----
+    const foldersRaw = [
+      {id:1,path:'/Financeiro/Entradas',rec:true,types:'PDF',freq:'A cada 5 min',last:'há 2 min',files:'1.842'},
+      {id:2,path:'/Jurídico/Contratos',rec:true,types:'PDF',freq:'A cada 15 min',last:'há 12 min',files:'514'},
+      {id:3,path:'/RH/Folha',rec:false,types:'PDF',freq:'A cada 1 h',last:'há 40 min',files:'128'},
+      {id:4,path:'/Operações/Seguros',rec:true,types:'PDF, PDF/A',freq:'Diária · 02:00',last:'ontem 02:00',files:'96'},
+    ];
+    const folders = foldersRaw.map(f => { const on = !!S.folderState[f.id]; return { ...f, recLabel: f.rec?'Recursiva':'Não recursiva', swTrack:this._swTrack(on), swKnob:this._swKnob(on), onToggle:()=>this.toggleFolder(f.id) }; });
+
+    // ---- rules ----
+    const rulesRaw = [
+      {id:1,name:'Por marcador QR Code',param:'SEP-DOC',desc:'Divide o lote sempre que detecta um QR Code de separação na página.'},
+      {id:2,name:'Por número de páginas',param:'a cada 1 pág.',desc:'Cria um novo documento a cada N páginas do PDF de origem.'},
+      {id:3,name:'Por texto âncora',param:'“NOTA FISCAL”',desc:'Inicia um novo documento ao encontrar um texto-chave no topo da página.'},
+      {id:4,name:'Por página em branco',param:'sens. 98%',desc:'Usa páginas em branco como separadores entre documentos.'},
+    ];
+    const rules = rulesRaw.map(r => { const on=!!S.ruleState[r.id]; return { ...r, swTrack:this._swTrack(on), swKnob:this._swKnob(on), onToggle:()=>this.toggleRule(r.id) }; });
+
+    // ---- integrations ----
+    const okBadge = 'display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--st-tratado-bg);color:var(--st-tratado)';
+    const offBadge = 'display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--surface-3);color:var(--text-3)';
+    const integRaw = [
+      {id:1,name:'Google Drive',cat:'Armazenamento',mono:'GD',on:true},
+      {id:2,name:'SharePoint',cat:'Armazenamento',mono:'SP',on:true},
+      {id:3,name:'Amazon S3',cat:'Armazenamento',mono:'S3',on:false},
+      {id:4,name:'ERP Omie',cat:'Gestão',mono:'OM',on:true},
+      {id:5,name:'Webhook',cat:'Integração',mono:'{}',on:true},
+      {id:6,name:'E-mail (SMTP)',cat:'Notificação',mono:'@',on:true},
+    ];
+    const integrations = integRaw.map(i => ({ ...i, badge: i.on?okBadge:offBadge, badgeLabel: i.on?'Conectado':'Desconectado' }));
+
+    // ---- templates ----
+    const templates = [
+      {name:'Nota Fiscal Eletrônica',type:'Fiscal',fields:['CNPJ emitente','Número','Valor total','Data de emissão','CFOP'],docs:'1.284',rule:'Texto âncora'},
+      {name:'Contrato Padrão',type:'Jurídico',fields:['Partes','Objeto','Vigência','Valor'],docs:'312',rule:'QR Code'},
+      {name:'Boleto Bancário',type:'Financeiro',fields:['Linha digitável','Vencimento','Valor','Beneficiário'],docs:'906',rule:'Texto âncora'},
+      {name:'Apólice de Seguro',type:'Operações',fields:['Seguradora','Nº apólice','Vigência','Prêmio'],docs:'88',rule:'Por páginas'},
+      {name:'Comprovante de Pagamento',type:'Financeiro',fields:['Valor','Data','ID transação'],docs:'540',rule:'Página em branco'},
+      {name:'Holerite',type:'RH',fields:['Competência','Salário','Descontos','Líquido'],docs:'274',rule:'Por páginas'},
+    ];
+
+    // ---- automations ----
+    const autoRaw = [
+      {id:1,name:'Indexar Nota Fiscal no ERP',trigger:'Documento tratado',cond:'Template = Nota Fiscal',action:'Enviar ao ERP Omie',runs:'1.284 execuções'},
+      {id:2,name:'Arquivar contratos assinados',trigger:'Documento tratado',cond:'Template = Contrato',action:'Mover p/ Jurídico + notificar',runs:'312 execuções'},
+      {id:3,name:'Alerta de falha de leitura',trigger:'Status = Erro',cond:'Qualquer documento',action:'E-mail ao responsável',runs:'47 execuções'},
+      {id:4,name:'Webhook de boletos',trigger:'Documento tratado',cond:'Template = Boleto',action:'POST p/ endpoint financeiro',runs:'Pausada'},
+      {id:5,name:'Renomear pelo padrão',trigger:'Documento tratado',cond:'Qualquer documento',action:'Renomear {tipo}-{nº}-{data}',runs:'3.140 execuções'},
+    ];
+    const automations = autoRaw.map(a => { const on=!!S.autoState[a.id]; return { ...a, swTrack:this._swTrack(on), swKnob:this._swKnob(on), onToggle:()=>this.toggleAuto(a.id), badge: on?okBadge:offBadge, badgeLabel: on?'Ativa':'Pausada' }; });
+
+    return {
+      rootRef: this.root,
+      theme: S.theme,
+      isDark: S.theme==='dark', isLight: S.theme!=='dark',
+      isDocs: S.page==='documentos', isConfig: S.page==='config', isTemplates: S.page==='templates', isAuto: S.page==='automacoes',
+      tabPastas: S.configTab==='pastas', tabRegras: S.configTab==='regras', tabLeitura: S.configTab==='leitura', tabInteg: S.configTab==='integracoes',
+      pageTitle: tt[0], pageDesc: tt[1],
+      goDocs: () => this.go('documentos'), goTemplates: () => this.go('templates'), goAuto: () => this.go('automacoes'), goConfig: () => this.go('config'),
+      toggleTheme: () => this.toggleTheme(),
+      search: S.search, onSearch: (e) => this.onSearch(e),
+      navBgDocs:nd.bg, navFgDocs:nd.fg, navWDocs:nd.w, navIndDocs:nd.ind,
+      navBgTpl:nt.bg, navFgTpl:nt.fg, navWTpl:nt.w, navIndTpl:nt.ind,
+      navBgAuto:na.bg, navFgAuto:na.fg, navWAuto:na.w, navIndAuto:na.ind,
+      navBgCfg:nc.bg, navFgCfg:nc.fg, navWCfg:nc.w, navIndCfg:nc.ind,
+      cEncontrado:counts.encontrado, cLeitura:counts.leitura, cTratado:counts.tratado, cErro:counts.erro,
+      chips, docs, configTabs,
+      resultText: `Mostrando ${filtered.length} de ${counts.total} documentos`,
+      onToggleAll: () => this.toggleAll(allIds),
+      selAllStyle: allSel ? 'background:var(--accent);border:1px solid var(--accent)' : 'background:var(--surface);border:1px solid var(--border-strong)',
+      selAllOpacity: allSel ? '1' : '0',
+      watcherTrack: this._swTrack(S.watcher), watcherKnob: this._swKnob(S.watcher), toggleWatcher: () => this.toggleWatcher(),
+      folders, rules, integrations, templates, automations,
+      deskewTrack:this._swTrack(S.deskew), deskewKnob:this._swKnob(S.deskew), toggleDeskew:()=>this.setState(s=>({deskew:!s.deskew})),
+      denoiseTrack:this._swTrack(S.denoise), denoiseKnob:this._swKnob(S.denoise), toggleDenoise:()=>this.setState(s=>({denoise:!s.denoise})),
+    };
+  }
+}
+</script>
+</body>
+</html>
