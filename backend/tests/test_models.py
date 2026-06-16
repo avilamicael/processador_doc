@@ -12,7 +12,17 @@ import pytest
 from sqlalchemy import Engine, select
 from sqlalchemy.exc import IntegrityError
 
-from app.models import AuditLog, DocState, Document, Page, Usage
+from app.models import (
+    AuditLog,
+    DocState,
+    Document,
+    IngestedOriginal,
+    Job,
+    JobStatus,
+    Page,
+    Usage,
+    WatchedFolder,
+)
 from app.storage.db import Base, get_session
 
 
@@ -131,3 +141,163 @@ def test_audit_log_document_id_eh_nullable(schema_engine: Engine) -> None:
         log = session.scalar(select(AuditLog).where(AuditLog.action == "evento_global"))
         assert log is not None
         assert log.document_id is None
+
+
+# --------------------------------------------------------------------------- #
+# Fase 2 — JobStatus + 3 novos modelos + coluna de vínculo (Plan 02-01 Task 2)
+# --------------------------------------------------------------------------- #
+
+
+def test_jobstatus_tem_quatro_membros_string() -> None:
+    assert {m.name for m in JobStatus} == {"PENDING", "RUNNING", "DONE", "FAILED"}
+    assert JobStatus.PENDING.value == "pending"
+    assert JobStatus.RUNNING.value == "running"
+    assert JobStatus.DONE.value == "done"
+    assert JobStatus.FAILED.value == "failed"
+    # herda de str → comparável diretamente com a string
+    assert JobStatus.PENDING == "pending"
+
+
+def test_watched_folder_defaults() -> None:
+    wf = WatchedFolder(path="/dados/entrada")
+    assert wf.pages_per_block is None  # None = "não separar" (default da UI)
+    assert wf.active is True
+
+
+def test_watched_folder_persiste_com_timestamps(schema_engine: Engine) -> None:
+    with get_session(schema_engine) as session:
+        session.add(WatchedFolder(path="/dados/entrada", pages_per_block=2))
+
+    with get_session(schema_engine) as session:
+        wf = session.scalar(
+            select(WatchedFolder).where(WatchedFolder.path == "/dados/entrada")
+        )
+        assert wf is not None
+        assert wf.pages_per_block == 2
+        assert wf.active is True
+        assert wf.created_at is not None
+        assert wf.updated_at is not None
+
+
+def test_novos_modelos_aparecem_em_metadata() -> None:
+    tabelas = set(Base.metadata.tables.keys())
+    assert {"watched_folders", "ingested_originals", "jobs"}.issubset(tabelas)
+
+
+def test_ingested_original_hash_unico_prova_gate_dedup(schema_engine: Engine) -> None:
+    """D-09: dois originais com o mesmo `original_hash` são rejeitados (o gate)."""
+    with get_session(schema_engine) as session:
+        session.add(
+            IngestedOriginal(original_hash="a" * 64, original_filename="a.pdf")
+        )
+
+    with pytest.raises(IntegrityError):
+        with get_session(schema_engine) as session:
+            session.add(
+                IngestedOriginal(original_hash="a" * 64, original_filename="b.pdf")
+            )
+            session.commit()
+
+
+def test_ingested_original_defaults_de_contagem(schema_engine: Engine) -> None:
+    with get_session(schema_engine) as session:
+        session.add(
+            IngestedOriginal(original_hash="c" * 64, original_filename="c.pdf")
+        )
+
+    with get_session(schema_engine) as session:
+        orig = session.scalar(
+            select(IngestedOriginal).where(IngestedOriginal.original_hash == "c" * 64)
+        )
+        assert orig is not None
+        assert orig.block_count == 0
+        assert orig.duplicate_hits == 0
+        assert orig.source_folder_id is None
+        assert orig.created_at is not None
+
+
+def test_job_par_hash_step_unico_prova_idempotencia(schema_engine: Engine) -> None:
+    """PROC-03: o par (original_hash, step) é a chave de idempotência da fila."""
+    from datetime import UTC, datetime
+
+    agora = datetime.now(UTC)
+    with get_session(schema_engine) as session:
+        session.add(
+            Job(
+                original_hash="d" * 64,
+                step="ingest",
+                payload="{}",
+                next_run_at=agora,
+            )
+        )
+
+    with pytest.raises(IntegrityError):
+        with get_session(schema_engine) as session:
+            session.add(
+                Job(
+                    original_hash="d" * 64,
+                    step="ingest",
+                    payload="{}",
+                    next_run_at=agora,
+                )
+            )
+            session.commit()
+
+
+def test_job_defaults(schema_engine: Engine) -> None:
+    from datetime import UTC, datetime
+
+    with get_session(schema_engine) as session:
+        session.add(
+            Job(
+                original_hash="e" * 64,
+                payload="{}",
+                next_run_at=datetime.now(UTC),
+            )
+        )
+
+    with get_session(schema_engine) as session:
+        job = session.scalar(select(Job).where(Job.original_hash == "e" * 64))
+        assert job is not None
+        assert job.status == JobStatus.PENDING
+        assert job.step == "ingest"
+        assert job.attempts == 0
+        assert job.max_attempts == 5
+        assert job.last_error is None
+        assert job.created_at is not None
+
+
+def test_document_aceita_origin_original_id(schema_engine: Engine) -> None:
+    """Vínculo bloco→original (RESEARCH Open Question 1): FK nullable."""
+    with get_session(schema_engine) as session:
+        orig = IngestedOriginal(original_hash="f" * 64, original_filename="f.pdf")
+        session.add(orig)
+        session.flush()
+        session.add(
+            Document(
+                content_hash="1" * 64,
+                original_filename="bloco.pdf",
+                origin_original_id=orig.id,
+            )
+        )
+
+    with get_session(schema_engine) as session:
+        doc = session.scalar(
+            select(Document).where(Document.content_hash == "1" * 64)
+        )
+        assert doc is not None
+        assert doc.origin_original_id is not None
+
+
+def test_document_origin_original_id_eh_nullable(schema_engine: Engine) -> None:
+    with get_session(schema_engine) as session:
+        session.add(
+            Document(content_hash="2" * 64, original_filename="solto.pdf")
+        )
+
+    with get_session(schema_engine) as session:
+        doc = session.scalar(
+            select(Document).where(Document.content_hash == "2" * 64)
+        )
+        assert doc is not None
+        assert doc.origin_original_id is None

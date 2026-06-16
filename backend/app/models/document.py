@@ -5,13 +5,17 @@ etapa concluída** (`last_completed_step`, D-05) que dá suporte a resume +
 idempotência. Referencia o conteúdo no CAS por `content_hash` (D-07) — base de
 deduplicação; a implementação do CAS é o Plan 04, aqui só a coluna.
 
+`origin_original_id` (FK nullable → `ingested_originals`) vincula cada bloco ao
+**original** do qual foi separado (D-09 / RESEARCH Open Question 1): permite
+saber de qual arquivo de entrada um documento veio, mesmo após o split.
+
 Schema nasce e evolui SOMENTE via Alembic (D-10); nenhum `create_all` em produção.
 """
 
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,6 +62,15 @@ class Document(Base):
     # Marcador interno de "última etapa concluída" (D-05) — nullable; nenhuma
     # etapa concluída ainda quando o documento entra.
     last_completed_step: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Vínculo bloco→original (D-09 / RESEARCH Open Question 1). Nullable + SET
+    # NULL: documentos podem existir sem original registrado, e apagar o original
+    # não apaga os blocos.
+    origin_original_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ingested_originals.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
 
     def __init__(self, **kwargs: object) -> None:
         # Garante o default D-04 já na instância recém-criada (antes do flush),

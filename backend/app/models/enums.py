@@ -27,3 +27,23 @@ class DocState(str, Enum):  # noqa: UP042 — forma explícita do plano (str, En
     CONCLUIDO = "concluido"
     QUARENTENA = "quarentena"
     FALHA = "falha"
+
+
+class JobStatus(str, Enum):  # noqa: UP042 — forma explícita do plano (str, Enum)
+    """Estados de um job na fila durável in-process (PROC-02/PROC-03).
+
+    A fila persistida em SQLite (sem broker externo) move cada job por estes
+    quatro estados: `PENDING` (aguardando claim) → `RUNNING` (em execução por um
+    worker) → `DONE` (concluído) ou `FAILED` (esgotou as tentativas; dead-letter).
+    O par `(original_hash, step)` é a chave de idempotência (PROC-03): um mesmo
+    original não gera trabalho duplicado para a mesma etapa.
+
+    Herda de `str` para que o valor persistido/serializado seja a string do
+    membro (ex.: `JobStatus.PENDING == "pending"`), simplificando a coluna de
+    texto com CHECK constraint e a exposição na API.
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
