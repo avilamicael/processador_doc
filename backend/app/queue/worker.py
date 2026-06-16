@@ -30,8 +30,10 @@ from openai import AuthenticationError
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
+from app.classification.stage import classify_stage
 from app.config import get_settings
-from app.extraction.stage import extract_stage
+from app.extraction.stage import EXTRACTED_STEP, extract_stage
+from app.models.classification import ClassificationResult
 from app.models.document import Document
 from app.models.enums import DocState
 from app.models.extraction import Extraction
@@ -47,6 +49,9 @@ logger = logging.getLogger(__name__)
 # Step do job de extração (a fila enfileira (block.content_hash, EXTRACT_STEP)).
 INGEST_STEP = "ingest"
 EXTRACT_STEP = "extract"
+# Step do job de classificação (Fase 4): a fila enfileira (block.content_hash,
+# CLASSIFY_STEP) após o bloco ficar last_completed_step="extraido".
+CLASSIFY_STEP = "classify"
 
 
 def _process_job_blocking(engine: Engine, *, original_hash: str, payload: str) -> None:
@@ -150,6 +155,13 @@ async def _dispatch(engine: Engine, *, step: str, original_hash: str, payload: s
         # content_hash do bloco == original_hash do job de extract (Pitfall 2).
         with get_session(engine) as session:
             await extract_stage(session, content_hash=original_hash)
+    elif step == CLASSIFY_STEP:
+        # `classify_stage` é uma COROUTINE (chamadas OpenAI async de desempate/
+        # faltantes) → `await` DIRETO no loop, com sessão própria. NUNCA
+        # `asyncio.to_thread` (não há event loop na thread → RuntimeError) nem
+        # `asyncio.run` (já estamos num loop). content_hash do bloco == original_hash.
+        with get_session(engine) as session:
+            await classify_stage(session, content_hash=original_hash)
     else:
         await asyncio.to_thread(
             _process_job_blocking,
@@ -162,10 +174,10 @@ async def _dispatch(engine: Engine, *, step: str, original_hash: str, payload: s
 def _fail_for_step(engine: Engine, *, step: str, original_hash: str) -> None:
     """Roteia a variante de FALHA por step ao esgotar retries (dead-letter→FALHA).
 
-    `ingest`→Documents do original (por `origin_original_id`); `extract`→Document do
-    bloco (por `content_hash`, Pitfall 2).
+    `ingest`→Documents do original (por `origin_original_id`); `extract`/`classify`→
+    Document do bloco (por `content_hash`, Pitfall 2).
     """
-    if step == EXTRACT_STEP:
+    if step in (EXTRACT_STEP, CLASSIFY_STEP):
         _fail_document_for_content_hash(engine, original_hash)
     else:
         _fail_documents_for_original(engine, original_hash)
@@ -276,6 +288,49 @@ def enqueue_pending_extractions(session: Session) -> int:
     return created
 
 
+def enqueue_pending_classifications(session: Session) -> int:
+    """Enfileira um job de classify para cada bloco extraído que ainda não foi classificado.
+
+    Espelha `enqueue_pending_extractions`, um passo adiante no pipeline: varremos
+    no STARTUP do worker (UMA vez, idempotente) todos os Documents em `state ==
+    PROCESSANDO` e `last_completed_step == "extraido"` (EXTRACTED_STEP) que ainda
+    NÃO têm um `ClassificationResult` persistido, e enfileiramos
+    `(block.content_hash, "classify")` para cada um.
+
+    NÃO enfileiramos dentro do `extract_stage` (quebraria o commit único —
+    `repo.enqueue` comita por si, Pitfall 4); o sweep no startup + a re-execução do
+    sweep cobrem o fluxo, inclusive os Documents LEGADOS já extraídos antes desta
+    fase. Idempotente: a chave do job é o `content_hash` e a UNIQUE
+    `uq_jobs_hash_step` garante 1 job por (hash, "classify"); `repo.enqueue` é no-op
+    quando já existe. Rodar 2x não duplica. Documents já classificados (com
+    `ClassificationResult`) são excluídos — não re-cobramos a IA.
+
+    Retorna quantos jobs NOVOS foram criados (no-ops não contam).
+    """
+    docs = session.scalars(
+        select(Document)
+        .where(
+            Document.state == DocState.PROCESSANDO,
+            Document.last_completed_step == EXTRACTED_STEP,
+            ~Document.content_hash.in_(
+                select(Document.content_hash).join(ClassificationResult)
+            ),
+        )
+    ).all()
+
+    created = 0
+    for doc in docs:
+        job = repo.enqueue(
+            session,
+            original_hash=doc.content_hash,
+            step=CLASSIFY_STEP,
+            payload=json.dumps({"content_hash": doc.content_hash}),
+        )
+        if job is not None:
+            created += 1
+    return created
+
+
 async def run_worker(engine: Engine, stop: asyncio.Event) -> None:
     """Loop do worker: resume no startup, então poll→claim→processa até `stop`.
 
@@ -294,6 +349,16 @@ async def run_worker(engine: Engine, stop: asyncio.Event) -> None:
         enqueued = enqueue_pending_extractions(session)
     if enqueued:
         logger.info("Sweep: %s job(s) de extract enfileirados (blocos pendentes)", enqueued)
+
+    # Sweep idempotente da classificação (Fase 4): enfileira classify para todos os
+    # blocos já extraídos sem ClassificationResult — inclusive os legados.
+    with get_session(engine) as session:
+        enqueued_cls = enqueue_pending_classifications(session)
+    if enqueued_cls:
+        logger.info(
+            "Sweep: %s job(s) de classify enfileirados (blocos extraídos pendentes)",
+            enqueued_cls,
+        )
 
     poll = get_settings().queue_poll_interval_seconds
     while not stop.is_set():
