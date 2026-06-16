@@ -21,9 +21,11 @@ with warnings.catch_warnings():
     from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
 from app.models.enums import DocState
 from app.models.ingested_original import IngestedOriginal
+from app.models.template import Template
 from app.models.watched_folder import WatchedFolder
 from app.pipeline.ingest_stage import AWAITING_EXTRACTION_STEP
 from app.pipeline.state_machine import transition
@@ -163,3 +165,119 @@ def test_rescan_enqueues_present_file(
     assert resp.json()["enqueued"] == 1
 
     config.get_settings.cache_clear()
+
+
+# --- GET /documents/{id} — detalhe de classificação (somente leitura, S4) ---
+#
+# NOTA: este plano (Wave 2) roda ANTES do classify_stage (04-05, Wave 3); os testes
+# POPULAM ClassificationResult/FilledField diretamente no banco via fixtures, SEM
+# depender do stage. Só o endpoint de leitura é exercitado aqui.
+
+
+def test_detail_classified_document(client: TestClient, schema_engine: Engine) -> None:
+    """Doc classificado → template casado + campos com bruto/normalizado/marca."""
+    with get_session(schema_engine) as session:
+        template = Template(name="Nota Fiscal", doc_type="Fiscal", signals_json="[]")
+        session.add(template)
+        doc = Document(content_hash="a" * 64, original_filename="nf.pdf")
+        session.add(doc)
+        session.flush()
+        result = ClassificationResult(
+            document_id=doc.id, template_id=template.id, confidence=0.92
+        )
+        session.add(result)
+        session.flush()
+        session.add_all(
+            [
+                FilledField(
+                    classification_result_id=result.id,
+                    field_name="CNPJ emitente",
+                    raw_value="12.345.678/0001-99",
+                    normalized_value="12345678000199",
+                    valid=True,
+                ),
+                FilledField(
+                    classification_result_id=result.id,
+                    field_name="Data de emissão",
+                    raw_value="32/13/2026",
+                    normalized_value=None,
+                    valid=False,
+                    invalid_reason="data inválida",
+                ),
+            ]
+        )
+        session.commit()
+        doc_id = doc.id
+        template_id = template.id
+
+    resp = client.get(f"/documents/{doc_id}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["id"] == doc_id
+    assert body["original_filename"] == "nf.pdf"
+    cls = body["classification"]
+    assert cls is not None
+    assert cls["template_id"] == template_id
+    assert cls["template_name"] == "Nota Fiscal"
+    assert cls["confidence"] == 0.92
+    assert len(cls["fields"]) == 2
+    cnpj = next(f for f in cls["fields"] if f["field_name"] == "CNPJ emitente")
+    assert cnpj["raw_value"] == "12.345.678/0001-99"
+    assert cnpj["normalized_value"] == "12345678000199"
+    assert cnpj["valid"] is True
+    data = next(f for f in cls["fields"] if f["field_name"] == "Data de emissão")
+    assert data["valid"] is False
+    assert data["invalid_reason"] == "data inválida"
+
+
+def test_detail_quarantine_document(client: TestClient, schema_engine: Engine) -> None:
+    """Doc em quarentena (template_id null) → classification com template null."""
+    with get_session(schema_engine) as session:
+        doc = Document(content_hash="b" * 64, original_filename="scan.png")
+        session.add(doc)
+        session.flush()
+        transition(session, doc, DocState.QUARENTENA)
+        result = ClassificationResult(
+            document_id=doc.id, template_id=None, confidence=None
+        )
+        session.add(result)
+        session.commit()
+        doc_id = doc.id
+
+    resp = client.get(f"/documents/{doc_id}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["state"] == "quarentena"
+    cls = body["classification"]
+    assert cls is not None
+    assert cls["template_id"] is None
+    assert cls["template_name"] is None
+    assert cls["fields"] == []
+
+
+def test_detail_unclassified_document(client: TestClient, schema_engine: Engine) -> None:
+    """Doc sem ClassificationResult → classification null ("Aguardando classificação")."""
+    with get_session(schema_engine) as session:
+        doc = Document(content_hash="c" * 64, original_filename="pend.pdf")
+        session.add(doc)
+        session.commit()
+        doc_id = doc.id
+
+    resp = client.get(f"/documents/{doc_id}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["classification"] is None
+
+
+def test_detail_nonexistent_returns_404(client: TestClient) -> None:
+    resp = client.get("/documents/999999")
+    assert resp.status_code == 404
+
+
+def test_list_does_not_include_classification(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """A lista GET /documents permanece LEVE — sem o bloco classification."""
+    _seed(schema_engine)
+    body = client.get("/documents").json()
+    assert body["items"]
+    assert all("classification" not in item for item in body["items"])
