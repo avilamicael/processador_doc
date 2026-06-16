@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Fundação de Estado e Storage** - Máquina de estados persistida, CAS por hash, migrações Alembic e base Windows single-tenant (completed 2026-06-15)
 - [x] **Phase 2: Ingestão e Fila Assíncrona** - Pasta(s) monitorada(s) com separação por pasta, dedup por hash e fila in-process idempotente com retry (completed 2026-06-16)
 - [x] **Phase 3: Extração Genérica via IA e Medição de Tokens** - Núcleo do motor: extração por IA dirigida pelo template (qualquer tipo) + texto nativo + medição de uso (completed 2026-06-16)
-- [ ] **Phase 4: Templates, Sub-templates e Classificação** - Construtor schema-first de templates e classificação automática contra eles
+- [x] **Phase 4: Templates, Sub-templates e Classificação** - Construtor schema-first de templates e classificação automática contra eles (completed 2026-06-16)
 - [ ] **Phase 5: Confiança, Revisão Humana e Quarentena** - Score de confiança determinístico, limiar, fila de revisão lado-a-lado e quarentena visível
 - [ ] **Phase 6: Automações de Arquivo (Renomear/Mover)** - Renomear/mover por tokens com dry-run, audit log write-ahead, anti-colisão e undo
 - [ ] **Phase 7: Módulo Determinístico Opcional e Roteamento de Custo** - Parsing plugável de tipos conhecidos (boleto/NF-e) e cascata determinístico→nativo→IA
@@ -154,7 +154,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 04-06-PLAN.md — Frontend: tipos/api/hooks + TemplatesPage real (S1/S2/S3) substituindo o mock + DocumentsPage S4 (classificação somente leitura) + verificação visual
+- [x] 04-06-PLAN.md — Frontend: tipos/api/hooks + TemplatesPage real (S1/S2/S3) substituindo o mock + DocumentsPage S4 (classificação somente leitura) + verificação visual
 
 ### Phase 5: Confiança, Revisão Humana e Quarentena
 
@@ -228,7 +228,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Fundação de Estado e Storage | 4/4 | Complete    | 2026-06-15 |
 | 2. Ingestão e Fila Assíncrona | 5/5 | Complete    | 2026-06-16 |
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
-| 4. Templates, Sub-templates e Classificação | 5/6 | In Progress|  |
+| 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
 | 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |
 | 6. Automações de Arquivo (Renomear/Mover) | 0/TBD | Not started | - |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |

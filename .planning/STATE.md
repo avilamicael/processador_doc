@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-06-16T21:37:48.711Z"
+last_updated: "2026-06-16T21:44:47.776Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 19
-  completed_plans: 18
-  percent: 38
+  completed_plans: 19
+  percent: 50
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 
 Phase: 04 (templates-sub-templates-e-classifica-o) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-16
 
 Progress: [█░░░░░░░░░] 13%
@@ -68,6 +68,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 04 P03 | 8 | 2 tasks | 7 files |
 | Phase 04 P04 | 7 | 2 tasks | 5 files |
 | Phase 04 P05 | 6 | 2 tasks | 4 files |
+| Phase 04 P06 | 12 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [04-03]: decide(matches, threshold) separada de match_templates preserva o seam D-03; MissingFieldsResult REUSA ExtractedField (list-of-pairs strict-safe, Pitfall 1); matcher/filler puros (sem IA/DB).
 - [Phase ?]: [04-04]: API fina /templates espelha watched_folders.py (In/Patch/Out, 409 duplicado, 422 inválido, 204 DELETE); GET /documents/{id} de detalhe somente leitura expõe a classificação (template casado/campos bruto+normalizado/marca/quarentena, TPL-03/TPL-04) enquanto a lista de polling permanece leve.
 - [Phase ?]: [04-05]: classify_stage espelha extract_stage (idempotencia por checagem previa de ClassificationResult ANTES de qualquer chamada paga, commit atomico unico, marcador classificado em memoria, recusa propaga ao worker); quarentena via transition(QUARENTENA) com add(ClassificationResult template_id=None)+Usage ANTES (transition comita junto); merge D-06 por field_name normalizado; campo invalido marca FilledField.valid=False sem bloquear (D-10); worker despacha classify como coroutine (await, nunca to_thread) + sweep idempotente enqueue_pending_classifications cobre legados; pipeline ingest->extract->classify completo end-to-end.
+- [Phase ?]: [04-06]: Frontend de templates fiado à API real (TemplatesPage substitui mock por useTemplates espelhando useWatchedFolders); construtor schema-first inline com 6 tipos de campo D-08/Switch/regex/dica/sinais; CTAs contextuais sem 'Cancelar' conforme 04-UI-SPEC.
+- [Phase ?]: [04-06]: Classificacao S4 somente leitura via modal sob demanda (GET /documents/{id}); badge do template/tabela Campo-Valor-Normalizado com marca valido-invalido/pilula Quarentena reusando --st-leitura sem alterar StatusPill; valores como texto puro (T-04-12).
 
 ### Pending Todos
 
@@ -128,6 +131,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T21:37:48.705Z
+Last session: 2026-06-16T21:44:30.639Z
 Stopped at: Completed 04-05-PLAN.md
 Resume file: None
