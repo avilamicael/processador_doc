@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine
 
-from app.storage.db import create_db_engine
+# Importar o pacote de modelos registra TODAS as tabelas em Base.metadata —
+# necessário para a fixture `schema_engine` (create_all) ver todos os modelos.
+import app.models  # noqa: F401
+from app.storage.db import Base, create_db_engine
 
 
 @pytest.fixture
@@ -23,3 +26,18 @@ def engine(sqlite_url: str) -> Iterator[Engine]:
         yield eng
     finally:
         eng.dispose()
+
+
+@pytest.fixture
+def schema_engine(engine: Engine) -> Iterator[Engine]:
+    """Engine com o schema criado via `Base.metadata.create_all` — SOMENTE em
+    teste (D-10 proíbe `create_all` no código de aplicação, não nas fixtures).
+
+    Disponibiliza a fixture de forma compartilhada para os testes da Fase 2
+    (queue/dedup/ingest_stage) sem cada arquivo redefini-la localmente.
+    """
+    Base.metadata.create_all(engine)
+    try:
+        yield engine
+    finally:
+        Base.metadata.drop_all(engine)

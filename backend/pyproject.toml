@@ -11,6 +11,8 @@ dependencies = [
     "pydantic-settings",
     "sqlalchemy==2.0.*",
     "alembic==1.18.4",
+    "watchfiles==1.2.0",
+    "pikepdf==10.8.0",
 ]
 
 [dependency-groups]
