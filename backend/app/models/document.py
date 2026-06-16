@@ -24,6 +24,7 @@ from app.storage.db import Base
 
 if TYPE_CHECKING:
     from app.models.audit_log import AuditLog
+    from app.models.extraction import Extraction
     from app.models.page import Page
     from app.models.usage import Usage
 
@@ -96,4 +97,8 @@ class Document(Base):
     )
     audit_logs: Mapped[list["AuditLog"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
+    )
+    # 1:1 (UNIQUE em extractions.document_id): no máximo uma extração por bloco.
+    extraction: Mapped["Extraction | None"] = relationship(
+        back_populates="document", cascade="all, delete-orphan", uselist=False
     )

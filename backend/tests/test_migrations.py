@@ -29,6 +29,8 @@ ESPERADAS = {
     "watched_folders",
     "ingested_originals",
     "jobs",
+    # Fase 3 (migração 0003) — resultado da extração genérica por bloco.
+    "extractions",
 }
 
 
@@ -107,12 +109,53 @@ def test_jobs_tem_indice_unico_hash_step(db_url: str) -> None:
     assert "uq_jobs_hash_step" in (nomes_uc | nomes_idx)
 
 
-def test_downgrade_um_passo_remove_so_a_fase_2(db_url: str) -> None:
-    """downgrade -1 remove as 3 tabelas da Fase 2 e a coluna de vínculo,
-    preservando o schema da Fase 1 (documents/pages/audit_log/usage)."""
+def test_0003_cria_extractions_com_unique_em_document_id(db_url: str) -> None:
+    """Fase 3 (0003): a tabela `extractions` existe após upgrade e seu índice em
+    `document_id` é UNIQUE (1 extração por bloco = idempotência)."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+
+    engine = create_engine(db_url)
+    try:
+        insp = inspect(engine)
+        tabelas = set(insp.get_table_names())
+        indices = {ix["name"]: ix for ix in insp.get_indexes("extractions")}
+    finally:
+        engine.dispose()
+
+    assert "extractions" in tabelas
+    idx = indices.get("ix_extractions_document_id")
+    assert idx is not None, "índice de document_id ausente"
+    # SQLite via inspector retorna unique como 1/0 (int), não bool — checar truthy.
+    assert idx["unique"], "índice de document_id deve ser UNIQUE"
+
+
+def test_downgrade_um_passo_remove_so_a_fase_3(db_url: str) -> None:
+    """downgrade -1 (de head=0003) remove a tabela `extractions` da Fase 3,
+    preservando intactos os schemas das Fases 1 e 2."""
     cfg = _make_config(db_url)
     command.upgrade(cfg, "head")
     command.downgrade(cfg, "-1")
+
+    engine = create_engine(db_url)
+    try:
+        tabelas = set(inspect(engine).get_table_names())
+    finally:
+        engine.dispose()
+
+    fase12 = {
+        "documents", "pages", "audit_log", "usage",
+        "watched_folders", "ingested_originals", "jobs",
+    }
+    assert "extractions" not in tabelas, "tabela da Fase 3 não removida no downgrade -1"
+    assert fase12.issubset(tabelas), "schema das Fases 1/2 não preservado no downgrade -1"
+
+
+def test_downgrade_dois_passos_remove_fase_2(db_url: str) -> None:
+    """downgrade -2 (de head=0003) remove Fase 3 + Fase 2, preservando a Fase 1."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "-2")
 
     engine = create_engine(db_url)
     try:
@@ -122,10 +165,10 @@ def test_downgrade_um_passo_remove_so_a_fase_2(db_url: str) -> None:
     finally:
         engine.dispose()
 
-    fase2 = {"watched_folders", "ingested_originals", "jobs"}
+    fase23 = {"extractions", "watched_folders", "ingested_originals", "jobs"}
     fase1 = {"documents", "pages", "audit_log", "usage"}
-    assert not (fase2 & tabelas), f"tabelas da Fase 2 não removidas: {fase2 & tabelas}"
-    assert fase1.issubset(tabelas), "schema da Fase 1 não preservado no downgrade -1"
+    assert not (fase23 & tabelas), f"tabelas das Fases 2/3 não removidas: {fase23 & tabelas}"
+    assert fase1.issubset(tabelas), "schema da Fase 1 não preservado no downgrade -2"
     assert "origin_original_id" not in colunas_doc
 
 
