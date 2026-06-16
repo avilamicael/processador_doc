@@ -11,10 +11,14 @@
 
 import type {
   Doc,
+  DocumentDetail,
   DocumentList,
   Folder,
   FolderCreate,
   FolderPatch,
+  Template,
+  TemplateCreate,
+  TemplatePatch,
 } from '../types'
 
 class ApiError extends Error {
@@ -56,6 +60,11 @@ export function getDuplicatesCount(): Promise<{ count: number }> {
   return request<{ count: number }>('/documents/duplicates-count')
 }
 
+// Detalhe de classificação (S4, somente leitura — TPL-03/04).
+export function getDocumentDetail(id: number): Promise<DocumentDetail> {
+  return request<DocumentDetail>(`/documents/${id}`)
+}
+
 export function postRescan(): Promise<{ enqueued: number }> {
   return request<{ enqueued: number }>('/rescan', { method: 'POST' })
 }
@@ -82,6 +91,30 @@ export function updateWatchedFolder(id: number, body: FolderPatch): Promise<Fold
 
 export function deleteWatchedFolder(id: number): Promise<void> {
   return request<void>(`/watched-folders/${id}`, { method: 'DELETE' })
+}
+
+// --- Templates (CRUD schema-first — TPL-01) ---
+
+export function getTemplates(): Promise<Template[]> {
+  return request<Template[]>('/templates')
+}
+
+export function createTemplate(body: TemplateCreate): Promise<Template> {
+  return request<Template>('/templates', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateTemplate(id: number, body: TemplatePatch): Promise<Template> {
+  return request<Template>(`/templates/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteTemplate(id: number): Promise<void> {
+  return request<void>(`/templates/${id}`, { method: 'DELETE' })
 }
 
 export { ApiError }

@@ -2,7 +2,9 @@
 // Fase 2 (02-05): DOCS/FOLDERS/STATUS_LABELS removidos — Documentos e Pastas usam
 // dados reais via TanStack Query (src/hooks/*). Os arrays abaixo pertencem a telas
 // de fases futuras (Templates/Automações/Integrações/Regras) ainda não fiadas.
-import type { Automation, Integration, Rule, Template } from '../types'
+// TEMPLATES mock removido na Fase 4 (04-06): a TemplatesPage agora lê templates
+// reais via TanStack Query (useTemplates) — o tipo Template passou a refletir a API.
+import type { Automation, Integration, Rule } from '../types'
 
 export const RULES: Rule[] = [
   { id: 1, name: 'Por marcador QR Code', param: 'SEP-DOC', desc: 'Divide o lote sempre que detecta um QR Code de separação na página.' },
@@ -18,15 +20,6 @@ export const INTEGRATIONS: Integration[] = [
   { id: 4, name: 'ERP Omie', cat: 'Gestão', mono: 'OM', on: true },
   { id: 5, name: 'Webhook', cat: 'Integração', mono: '{}', on: true },
   { id: 6, name: 'E-mail (SMTP)', cat: 'Notificação', mono: '@', on: true },
-]
-
-export const TEMPLATES: Template[] = [
-  { name: 'Nota Fiscal Eletrônica', type: 'Fiscal', fields: ['CNPJ emitente', 'Número', 'Valor total', 'Data de emissão', 'CFOP'], docs: '1.284', rule: 'Texto âncora' },
-  { name: 'Contrato Padrão', type: 'Jurídico', fields: ['Partes', 'Objeto', 'Vigência', 'Valor'], docs: '312', rule: 'QR Code' },
-  { name: 'Boleto Bancário', type: 'Financeiro', fields: ['Linha digitável', 'Vencimento', 'Valor', 'Beneficiário'], docs: '906', rule: 'Texto âncora' },
-  { name: 'Apólice de Seguro', type: 'Operações', fields: ['Seguradora', 'Nº apólice', 'Vigência', 'Prêmio'], docs: '88', rule: 'Por páginas' },
-  { name: 'Comprovante de Pagamento', type: 'Financeiro', fields: ['Valor', 'Data', 'ID transação'], docs: '540', rule: 'Página em branco' },
-  { name: 'Holerite', type: 'RH', fields: ['Competência', 'Salário', 'Descontos', 'Líquido'], docs: '274', rule: 'Por páginas' },
 ]
 
 export const AUTOMATIONS: Automation[] = [
