@@ -27,7 +27,6 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 ### Templates & Classificação (TPL)
 
 - [ ] **TPL-01**: Usuário cria templates de documento no app declarando campos (nome, tipo, validação, dica) — editor schema-first, sem desenhar zonas visuais
-- [ ] **TPL-02**: Usuário cria sub-templates por cliente/emissor com campos e automações próprias
 - [ ] **TPL-03**: Sistema classifica automaticamente cada documento contra os templates disponíveis (usando IA para contexto)
 - [ ] **TPL-04**: Documento que não casa com nenhum template vai para quarentena (não some)
 
@@ -47,6 +46,7 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 - [ ] **AUT-04**: Sistema registra a intenção em log de auditoria ANTES de agir e protege contra colisão (nunca sobrescreve silenciosamente)
 - [ ] **AUT-05**: Usuário pode desfazer (undo) operações por documento e por lote/execução
 - [ ] **AUT-06**: Operação de mover entre discos diferentes é segura (copia, verifica e só então remove a origem)
+- [ ] **TPL-02**: Usuário cria regras condicionais de tratativa por tipo/cliente/emissor/valor (condição sobre os campos extraídos → qual automação aplicar) — permite tratativas diferentes para o mesmo tipo de documento. _(Re-escopado de "sub-templates" da Fase 4 → Fase 6 em 2026-06-16; o que variava não era a extração/campos e sim a automação.)_
 
 ### Processamento (PROC)
 
@@ -136,7 +136,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | EXT-04 | Phase 4 | Pending (re-escopado da Fase 3 → Fase 4 em 2026-06-16) |
 | EXT-05 | Phase 7 | Pending |
 | TPL-01 | Phase 4 | Pending |
-| TPL-02 | Phase 4 | Pending |
+| TPL-02 | Phase 6 | Pending (re-escopado Fase 4 → Fase 6 em 2026-06-16) |
 | TPL-03 | Phase 4 | Pending |
 | TPL-04 | Phase 4 | Pending |
 | REV-01 | Phase 5 | Pending |
@@ -175,3 +175,4 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 *Requirements defined: 2026-06-15*
 *Last updated: 2026-06-15 — Phase 2 discuss: ING-01/ING-03 removidos do v1 (ingestão só por pasta monitorada)*
 *Last updated: 2026-06-16 — Phase 3 discuss: EXT-04 (schema derivado de template + validações de campo) re-escopado Fase 3 → Fase 4 (depende de campos de template)*
+*Last updated: 2026-06-16 — Phase 4 discuss: TPL-02 re-escopado Fase 4 → Fase 6 (sub-templates viram regras condicionais de automação; o que variava era a automação, não a extração/campos)*

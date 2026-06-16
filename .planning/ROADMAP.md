@@ -123,16 +123,17 @@ Plans:
 
 ### Phase 4: Templates, Sub-templates e Classificação
 
-**Goal**: O usuário consegue criar, no app, templates schema-first por tipo de documento e sub-templates por cliente/emissor, e o sistema classifica automaticamente cada documento contra eles — mandando para quarentena o que não casa.
+**Goal**: O usuário consegue criar, no app, templates schema-first por tipo de documento, e o sistema classifica automaticamente cada documento contra eles — preenchendo e validando os campos do template e mandando para quarentena o que não casa.
 **Depends on**: Phase 3
-**Requirements**: TPL-01, TPL-02, TPL-03, TPL-04, EXT-04
+**Requirements**: TPL-01, TPL-03, TPL-04, EXT-04
 **Success Criteria** (what must be TRUE):
 
   1. O usuário cria um template declarando campos (nome, tipo, validação, dica) por um editor schema-first, sem desenhar zonas visuais
-  2. O usuário cria sub-templates por cliente/emissor com campos e automações próprias
-  3. Cada documento é classificado automaticamente contra os templates disponíveis (usando IA para contexto)
-  4. Um documento que não casa com nenhum template vai para quarentena e nunca some
-  5. A IA retorna dados em formato estruturado conforme um JSON Schema **derivado do template**, com validações de campo configuráveis aplicadas ao resultado (EXT-04, re-escopado da Fase 3 em 2026-06-16)
+  2. Cada documento é classificado automaticamente contra os templates disponíveis (híbrido: regras por sinais declarados → IA para desempate)
+  3. Um documento que não casa com nenhum template vai para quarentena e nunca some
+  4. A IA retorna dados em formato estruturado conforme um JSON Schema **derivado do template**, com validações de campo configuráveis aplicadas ao resultado (EXT-04, re-escopado da Fase 3 em 2026-06-16)
+
+**Nota de escopo (2026-06-16):** sub-templates (TPL-02) re-escopados para a Fase 6 como **regras condicionais de automação** — o que variava entre "sub-templates" não era a extração/campos e sim qual automação aplicar (ver `phases/04-templates-sub-templates-e-classifica-o/04-CONTEXT.md`).
 
 **Plans**: TBD
 **UI hint**: yes
@@ -155,9 +156,9 @@ Plans:
 
 ### Phase 6: Automações de Arquivo (Renomear/Mover)
 
-**Goal**: O sistema renomeia e move arquivos do cliente com base nos campos extraídos de forma reversível e segura — dry-run obrigatório, log de auditoria antes de agir, proteção contra colisão e undo — de modo que nenhum arquivo jamais se perde.
+**Goal**: O sistema renomeia e move arquivos do cliente com base nos campos extraídos de forma reversível e segura — dry-run obrigatório, log de auditoria antes de agir, proteção contra colisão e undo — de modo que nenhum arquivo jamais se perde. Inclui **regras condicionais de tratativa** por tipo/cliente/valor (ex.: nota fiscal do cliente Y → pasta Documentos; holerite > R$ 3.000 → pasta análise) que decidem qual automação aplicar.
 **Depends on**: Phase 5
-**Requirements**: AUT-01, AUT-02, AUT-03, AUT-04, AUT-05, AUT-06
+**Requirements**: AUT-01, AUT-02, AUT-03, AUT-04, AUT-05, AUT-06, TPL-02
 **Success Criteria** (what must be TRUE):
 
   1. O usuário define padrões de renomeação e de pasta de destino usando os campos extraídos (ex.: `{cliente}_{numero}_{data}.pdf`, `Documentos/{cliente}/{ano-mes}/`)
@@ -165,6 +166,7 @@ Plans:
   3. O sistema registra a intenção em log de auditoria ANTES de agir e nunca sobrescreve um destino existente silenciosamente
   4. O usuário consegue desfazer operações por documento e por lote/execução
   5. Mover entre discos diferentes é seguro (copia, verifica e só então remove a origem)
+  6. O usuário define **regras condicionais de tratativa** (condição sobre os campos extraídos → qual automação aplicar), permitindo tratativas diferentes para o mesmo tipo de documento por cliente/emissor/valor (TPL-02, re-escopado da Fase 4 em 2026-06-16)
 
 **Plans**: TBD
 **UI hint**: yes
