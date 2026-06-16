@@ -41,7 +41,7 @@ def _normalize_path(raw: str) -> str:
     """
     if raw is None or not str(raw).strip():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="path da pasta não pode ser vazio",
         )
     try:
@@ -49,7 +49,7 @@ def _normalize_path(raw: str) -> str:
         return str(Path(str(raw).strip()).resolve())
     except (OSError, ValueError) as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"path da pasta inválido: {raw!r}",
         ) from exc
 
