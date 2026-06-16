@@ -115,7 +115,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 03-03-PLAN.md — extract_stage async idempotente (commit atômico: Extraction + full_text + Usage + marcador "extraido"); testes de tokens/estado/idempotência
+- [x] 03-03-PLAN.md — extract_stage async idempotente (commit atômico: Extraction + full_text + Usage + marcador "extraido"); testes de tokens/estado/idempotência
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -207,7 +207,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Fundação de Estado e Storage | 4/4 | Complete    | 2026-06-15 |
 | 2. Ingestão e Fila Assíncrona | 5/5 | Complete    | 2026-06-16 |
-| 3. Extração Genérica via IA e Medição de Tokens | 2/4 | In Progress|  |
+| 3. Extração Genérica via IA e Medição de Tokens | 3/4 | In Progress|  |
 | 4. Templates, Sub-templates e Classificação | 0/TBD | Not started | - |
 | 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |
 | 6. Automações de Arquivo (Renomear/Mover) | 0/TBD | Not started | - |
