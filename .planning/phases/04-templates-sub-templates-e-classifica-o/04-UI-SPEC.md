@@ -28,6 +28,13 @@ A Fase 4 entrega/altera estas superfícies de UI. O resto (fila de revisão lado
 
 > S4 é **somente leitura** nesta fase: mostra o resultado da classificação e o estado de quarentena (TPL-04). A fila de revisão, edição de campos e resolução de quarentena são Fase 5.
 
+### Focal point por superfície (hierarquia visual)
+
+- **S1 (`TemplatesPage`):** quando a lista está **vazia**, o focal point é o empty state centralizado + a CTA **"Novo template"** no `.sec-head`. Quando **populada**, o focal point é o **grid `.tpl-grid`** de `.tpl-card`, com a `.tpl-name` (14px) como âncora de cada card e o `.tpl-icon` (em `--accent-soft`) como gancho visual. A CTA primária permanece o único elemento com cor de accent sólida no topo.
+- **S2 (construtor):** o focal point é o **campo "Nome do template"** (primeiro do form) seguido da lista de campos; a CTA de salvar (accent) fecha a hierarquia no rodapé do form.
+- **S3 (modal):** o focal point é o título "Remover template" + o nome em mono; o botão destrutivo é o único elemento vermelho sólido.
+- **S4 (no documento):** o focal point é o **badge do template casado** no topo da seção "Classificação"; abaixo dele, a tabela campo→valor→normalizado.
+
 ---
 
 ## Design System
@@ -70,10 +77,10 @@ Tamanhos e pesos TRAVADOS em `index.css`. Esta fase usa exatamente 4 papéis (se
 |------|------|--------|-------------|---------------------|
 | Body | 13px | 400 (regular) | 1.5 | texto de tabela/`.sec-desc` (`.docs` td = 13px; descrições 13px) |
 | Label | 12px | 600 (semibold) | 1.4 | rótulos de campo do form (`fontSize: 12, fontWeight: 600, color: var(--text-2)`), `.stat-label`, `.tpl-fields-label` (10.5px uppercase para títulos de grupo) |
-| Heading | 15px | 700 (bold) | 1.25 | `.sec-title` / `.tpl-name` (14px) — títulos de seção e de card |
+| Heading | 15px | 600 (semibold) | 1.25 | `.sec-title` / `.tpl-name` (14px) — títulos de seção e de card |
 | Display | 16px | 700 (bold) | 1.2 | `.page-title` (cabeçalho da página) |
 
-Pesos: **2 pesos** em uso — regular **400** e semibold/bold **600/700** (o bundle usa 600 e 700 conforme ênfase; tratar como o par "regular vs forte"). Fonte mono (`--font-mono`, JetBrains Mono) reservada a: valores de campo extraído (bruto e normalizado), caminhos de pasta, nomes de arquivo, regex, e os chips `.tag` de campos de template.
+**Pesos: exatamente 2 — regular `400` e forte (semibold/bold).** Regra prescritiva para os componentes novos da Fase 4 (`.field-row` e similares): usar **600** para rótulos, títulos de seção e headings, e **700** apenas no `.page-title` (Display) e no `.btn-primary`. Não escolher arbitrariamente entre 600 e 700 em elementos novos. (O `index.css` herdado aplica 600 e 700 em produção — isso é o sistema travado, não uma terceira opção introduzida aqui.) Fonte mono (`--font-mono`, JetBrains Mono) reservada a: valores de campo extraído (bruto e normalizado), caminhos de pasta, nomes de arquivo, regex, e os chips `.tag` de campos de template.
 
 ---
 
@@ -112,8 +119,10 @@ Todo texto em **pt-BR**. Termos técnicos (CNPJ, CPF, regex, ISO) mantidos.
 | CTA primária (S1) | **"Novo template"** (com ícone `plus`) — mantém o label já no mock |
 | CTA salvar (S2, criar) | **"Salvar template"** / salvando: **"Salvando…"** |
 | CTA salvar (S2, editar) | **"Salvar alterações"** / salvando: **"Salvando…"** |
-| CTA cancelar (S2) | **"Cancelar"** (`.btn-ghost`) |
+| CTA descartar (S2, criar) | **"Descartar template"** (`.btn-ghost`) — fecha o form sem salvar |
+| CTA descartar (S2, editar) | **"Descartar alterações"** (`.btn-ghost`) — fecha o form sem salvar |
 | CTA adicionar campo (S2) | **"Adicionar campo"** (com ícone `plus`, `.btn-ghost`) |
+| CTA remover campo (S2) | botão-ícone `.row-action` com `aria-label="Remover campo {nome}"` |
 | Empty state heading (S1) | **"Nenhum template ainda"** |
 | Empty state body (S1) | **"Crie um template declarando os campos a extrair de um tipo de documento. O sistema usa os templates para classificar e preencher cada documento automaticamente."** |
 | Error state (S1) | Heading: **"Não foi possível carregar os templates."** Body: **"Verifique se o serviço está em execução e tente novamente."** + botão **"Tentar novamente"** (padrão `DocumentsPage`) |
@@ -121,6 +130,8 @@ Todo texto em **pt-BR**. Termos técnicos (CNPJ, CPF, regex, ISO) mantidos.
 | Confirmação destrutiva (S3) | Título: **"Remover template"**. Corpo: **"Remover o template «{nome}»? Os documentos já classificados por ele permanecem; novos documentos deixarão de casar com este template."** Botões: **"Manter template"** (`.btn-ghost`) / **"Remover"** (primário com `background: var(--st-erro)`) / removendo: **"Removendo…"** |
 | Quarentena (S4) | Pílula **"Quarentena"** (já existente). Texto auxiliar: **"Nenhum template casou com este documento. Ele fica em quarentena e nunca é descartado."** (resolução é Fase 5) |
 | Resultado de classificação (S4) | Cabeçalho da seção: **"Classificação"**. Rótulos: **"Template"**, **"Campos extraídos"**, com colunas **"Campo"**, **"Valor"** (bruto) e **"Normalizado"**, e marca **"válido"** / **"inválido"** por campo |
+
+> Nota sobre CTAs de cancelar: nesta fase **não** se usa o label genérico "Cancelar". O botão de fechar o form é contextual — **"Descartar template"** (criação) / **"Descartar alterações"** (edição) — e a saída do modal destrutivo é **"Manter template"**. Isso evita single-word genérico e deixa explícito o efeito da ação.
 
 ### Microcopy do construtor (S2 — campos e dicas)
 
@@ -144,7 +155,7 @@ Todo texto em **pt-BR**. Termos técnicos (CNPJ, CPF, regex, ISO) mantidos.
 
 **Reusar sem alteração:** `.card`, `.btn-primary`, `.btn-ghost`, `.sec-head`/`.sec-head-col`/`.sec-title`/`.sec-desc`, `.tpl-grid`, `.tpl-card`, `.tpl-head`, `.tpl-icon`, `.tpl-name`, `.tpl-type`, `.tpl-fields-label`, `.tags`/`.tag`, `.tpl-foot`, `.row-action`, `.search-input`, `.select`, `.tabs`/`.tab`, `.stack`, `.list-head`, `.badge`/`.badge-ok`/`.badge-off`, `.pill`/`.pill-dot`, `Switch`, `Icon`, `StatusPill`. Estados loading/erro/vazio e o modal de confirmação: copiar os padrões já implementados em `DocumentsPage.tsx` e `ConfigPage.tsx`.
 
-**Novas classes permitidas (apenas se necessário; prefixo coerente, mesma estética):** linha de campo do construtor (ex.: `.field-row` — espelhar `.read-row`/`.folder-row`), coluna de valor normalizado em S4 (reusar `.cell-mono`/`table.docs`). Qualquer cor via `var(--…)`; qualquer raio via `var(--radius)`/`var(--radius-sm)`.
+**Novas classes permitidas (apenas se necessário; prefixo coerente, mesma estética):** linha de campo do construtor (ex.: `.field-row` — espelhar `.read-row`/`.folder-row`), coluna de valor normalizado em S4 (reusar `.cell-mono`/`table.docs`). Qualquer cor via `var(--…)`; qualquer raio via `var(--radius)`/`var(--radius-sm)`; pesos só 600 ou 700 conforme a seção Typography.
 
 **Hooks/dados:** novos hooks TanStack Query (`useTemplates`, `useCreateTemplate`, `useUpdateTemplate`, `useDeleteTemplate`) seguindo exatamente o padrão de `useWatchedFolders.ts` (queryKey, invalidate em onSuccess, fonte de verdade = API). Cliente fetch tipado em `lib/api.ts`; tipos em `types.ts` (substituir o `Template` mock atual pela forma real da API). Estados de tela: `isInitialLoading` (skeleton), `isError` (retry), `isEmpty` (empty state), `isRefetching` (indicador "Atualizando…").
 
@@ -175,11 +186,11 @@ Nenhum registro de componente externo. Toda UI é construída com as classes/com
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-06-16 (3 flags do checker resolvidos: CTA contextual no lugar de "Cancelar"; pesos fixados em 600/700; focal point declarado por superfície)
