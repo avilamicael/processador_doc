@@ -144,7 +144,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 04-02-PLAN.md — Módulo de validação determinística reutilizável (Módulo 11 CNPJ/CPF próprio + parsers pt-BR data/moeda + validate_field bruto/normalizado)
+- [x] 04-02-PLAN.md — Módulo de validação determinística reutilizável (Módulo 11 CNPJ/CPF próprio + parsers pt-BR data/moeda + validate_field bruto/normalizado)
 - [ ] 04-03-PLAN.md — Blocos de classificação: schema list-of-pairs (desempate/faltantes) + matcher local por sinais + filler de campos + cliente OpenAI
 - [ ] 04-04-PLAN.md — API fina: CRUD /templates + GET /documents/{id} de detalhe (classificação somente leitura) + registro no main
 
@@ -228,7 +228,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Fundação de Estado e Storage | 4/4 | Complete    | 2026-06-15 |
 | 2. Ingestão e Fila Assíncrona | 5/5 | Complete    | 2026-06-16 |
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
-| 4. Templates, Sub-templates e Classificação | 1/6 | In Progress|  |
+| 4. Templates, Sub-templates e Classificação | 2/6 | In Progress|  |
 | 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |
 | 6. Automações de Arquivo (Renomear/Mover) | 0/TBD | Not started | - |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
