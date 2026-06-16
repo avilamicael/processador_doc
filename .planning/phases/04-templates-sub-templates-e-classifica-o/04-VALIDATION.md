@@ -21,7 +21,7 @@ created: 2026-06-16
 | **Config file** | backend/pyproject.toml |
 | **Quick run command** | `cd backend && uv run pytest -q` |
 | **Full suite command** | `cd backend && uv run pytest` |
-| **Estimated runtime** | ~{N} seconds (preencher na Wave 0) |
+| **Estimated runtime** | ~15-30 seconds (suíte backend completa, sem token gasto — confirmar na Wave 0) |
 
 ---
 
@@ -30,7 +30,7 @@ created: 2026-06-16
 - **After every task commit:** Run `cd backend && uv run pytest -q`
 - **After every plan wave:** Run `cd backend && uv run pytest`
 - **Before `/gsd:verify-work`:** Full suite must be green
-- **Max feedback latency:** {N} seconds (preencher na Wave 0)
+- **Max feedback latency:** ~30 seconds (suíte completa; quick run por task `-q` é mais rápido — confirmar na Wave 0)
 
 ---
 
