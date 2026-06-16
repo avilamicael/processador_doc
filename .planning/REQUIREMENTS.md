@@ -28,7 +28,7 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 - [x] **TPL-01**: Usuário cria templates de documento no app declarando campos (nome, tipo, validação, dica) — editor schema-first, sem desenhar zonas visuais
 - [x] **TPL-03**: Sistema classifica automaticamente cada documento contra os templates disponíveis (usando IA para contexto)
-- [ ] **TPL-04**: Documento que não casa com nenhum template vai para quarentena (não some)
+- [x] **TPL-04**: Documento que não casa com nenhum template vai para quarentena (não some)
 
 ### Confiança & Revisão (REV)
 
@@ -138,7 +138,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | TPL-01 | Phase 4 | Complete |
 | TPL-02 | Phase 6 | Pending (re-escopado Fase 4 → Fase 6 em 2026-06-16) |
 | TPL-03 | Phase 4 | Complete |
-| TPL-04 | Phase 4 | Pending |
+| TPL-04 | Phase 4 | Complete |
 | REV-01 | Phase 5 | Pending |
 | REV-02 | Phase 5 | Pending |
 | REV-03 | Phase 5 | Pending |
