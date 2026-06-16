@@ -15,6 +15,7 @@ export default defineConfig({
       '/documents': 'http://127.0.0.1:8000',
       '/watched-folders': 'http://127.0.0.1:8000',
       '/rescan': 'http://127.0.0.1:8000',
+      '/templates': 'http://127.0.0.1:8000',
     },
   },
 })
