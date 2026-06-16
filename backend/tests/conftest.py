@@ -9,7 +9,25 @@ from sqlalchemy import Engine
 # Importar o pacote de modelos registra TODAS as tabelas em Base.metadata —
 # necessário para a fixture `schema_engine` (create_all) ver todos os modelos.
 import app.models  # noqa: F401
+from app import config
 from app.storage.db import Base, create_db_engine
+
+
+@pytest.fixture
+def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """Aponta a pasta de dados única (logo o CAS) para um dir temporário isolado.
+
+    Compartilhada pelos testes que exercitam `cas.store` indiretamente (ingest
+    stage, worker). Define `DATA_DIR` e limpa o cache de `get_settings` para que
+    o CAS derive a raiz (`data_dir/cas`) do diretório do teste — sem tocar a
+    pasta real do usuário.
+    """
+    d = tmp_path / "datadir"
+    d.mkdir()
+    monkeypatch.setenv("DATA_DIR", str(d))
+    config.get_settings.cache_clear()
+    yield d
+    config.get_settings.cache_clear()
 
 
 @pytest.fixture

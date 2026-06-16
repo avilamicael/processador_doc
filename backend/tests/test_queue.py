@@ -38,10 +38,13 @@ def _payload(source_path: Path) -> str:
 
 
 def _make_pdf(path: Path, pages: int) -> Path:
-    """Cria um PDF mínimo com `pages` páginas em `path`."""
+    """Cria um PDF com `pages` páginas byte-distintas em `path`."""
     pdf = pikepdf.Pdf.new()
-    for _ in range(pages):
-        pdf.add_blank_page(page_size=(200, 200))
+    for i in range(pages):
+        page = pdf.add_blank_page(page_size=(200, 200))
+        page.Contents = pikepdf.Stream(
+            pdf, f"BT /F1 12 Tf 20 100 Td (pagina {i}) Tj ET".encode()
+        )
     pdf.save(path)
     pdf.close()
     return path
