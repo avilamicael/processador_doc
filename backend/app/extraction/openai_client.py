@@ -87,6 +87,14 @@ def _unwrap(response) -> ExtractionResult:
     `response.output_parsed` é `None` quando o modelo recusou (Pitfall 2). Recupera
     o motivo do bloco `refusal` (se houver) para o log/exceção — SÓ o motivo,
     NUNCA a chave nem o conteúdo do documento (CFM 5).
+
+    LIMITAÇÃO ACEITA (v1, CR-01 — decisão humana 2026-06-16): quando o teto
+    `OPENAI_EXTRACT_MAX_OUTPUT_TOKENS` é atingido a Responses API também devolve
+    `output_parsed=None` (com `status="incomplete"`), hoje tratado como recusa →
+    retry → FALHA, sem persistir dados parciais. Para documentos muito longos,
+    o operador deve aumentar `OPENAI_EXTRACT_MAX_OUTPUT_TOKENS` via env. A
+    distinção `status="incomplete"` → `ExtractionIncomplete` fica como follow-up
+    (ver 03-REVIEW.md CR-01 / 03-HUMAN-UAT.md).
     """
     parsed = response.output_parsed
     if parsed is None:

@@ -1,7 +1,8 @@
 ---
 phase: 03-extra-o-gen-rica-via-ia-e-medi-o-de-tokens
 verified: 2026-06-16T00:00:00Z
-status: human_needed
+status: passed
+human_resolution: "CR-01 aceito para v1 (decisão humana 2026-06-16, Opção A) — limitação documentada em openai_client.py:_unwrap; follow-up registrado em 03-HUMAN-UAT.md"
 score: 4/4 must-haves verificados
 overrides_applied: 0
 human_verification:
