@@ -15,6 +15,7 @@ import math
 from pathlib import Path
 
 import pikepdf
+import pytest
 from sqlalchemy import Engine, select
 
 from app.ingest.hashing import sha256_file
@@ -131,6 +132,126 @@ def test_split_multipagina_cria_n_documentos(
         assert len(hashes) == expected
         assert all(d.origin_original_id == ing.id for d in docs)
         assert ing.block_count == expected
+
+
+class _CrashAfterFirstBlock(Exception):
+    """Sinaliza um crash simulado no meio do loop de blocos."""
+
+
+def test_resume_apos_crash_no_meio_dos_blocos_nao_perde_nem_duplica(
+    schema_engine: Engine, data_dir: Path, tmp_path: Path, monkeypatch
+) -> None:
+    """CR-02: crash após o 1º bloco não pode perder os blocos restantes.
+
+    Simula um crash no meio do loop de criação de blocos (após o 1º `_store_block`).
+    Como a ingestão é atômica, o crash deve fazer rollback total: NENHUM
+    `IngestedOriginal` nem `Document` parcial deve ser persistido. No reprocesso do
+    mesmo hash, TODOS os blocos devem existir exatamente uma vez (sem perda do gate
+    de dedup, sem duplicata).
+    """
+    src = _make_pdf(tmp_path / "big.pdf", pages=4)
+    original_hash = sha256_file(src)
+
+    real_store_block = ingest_stage._store_block
+    calls = {"n": 0}
+
+    def _store_block_crashing(block_bytes, data_dir):  # noqa: ANN001
+        calls["n"] += 1
+        result = real_store_block(block_bytes, data_dir)
+        if calls["n"] >= 2:
+            # Já armazenamos o 1º bloco e estamos no 2º — simula o crash do processo.
+            raise _CrashAfterFirstBlock("crash simulado no meio dos blocos")
+        return result
+
+    monkeypatch.setattr(ingest_stage, "_store_block", _store_block_crashing)
+
+    # `pytest.raises` envolve o `get_session` INTEIRO: a exceção precisa propagar
+    # PARA FORA do context manager para que o rollback de `get_session` rode — é
+    # exatamente o que acontece no worker real (a thread crasha e a sessão é
+    # descartada com rollback). Capturar dentro do `with` mascararia o rollback.
+    with pytest.raises(_CrashAfterFirstBlock):
+        with get_session(schema_engine) as s:
+            ingest_stage.process_ingest(
+                s,
+                source_path=src,
+                folder_id=None,
+                pages_per_block=1,
+                original_hash=original_hash,
+            )
+
+    # Pós-crash: NADA deve ter sido persistido — nem o gate (IngestedOriginal),
+    # nem blocos parciais. Senão o resume trataria como duplicado e perderia blocos.
+    with get_session(schema_engine) as s:
+        assert s.scalars(select(IngestedOriginal)).all() == []
+        assert s.scalars(select(Document)).all() == []
+
+    # Reprocessa o MESMO hash (resume): agora sem crash, todos os blocos devem nascer.
+    monkeypatch.setattr(ingest_stage, "_store_block", real_store_block)
+    with get_session(schema_engine) as s:
+        r = ingest_stage.process_ingest(
+            s,
+            source_path=src,
+            folder_id=None,
+            pages_per_block=1,
+            original_hash=original_hash,
+        )
+    assert r.status == "ingested"
+    assert r.block_count == 4
+
+    with get_session(schema_engine) as s:
+        ing = s.scalar(
+            select(IngestedOriginal).where(
+                IngestedOriginal.original_hash == original_hash
+            )
+        )
+        assert ing is not None
+        assert ing.block_count == 4
+        docs = s.scalars(select(Document)).all()
+        # Exatamente 4 documentos, content_hash único cada (sem duplicata).
+        assert len(docs) == 4
+        assert len({d.content_hash for d in docs}) == 4
+        assert all(d.origin_original_id == ing.id for d in docs)
+
+
+def test_reprocesso_sem_crash_nao_duplica(
+    schema_engine: Engine, data_dir: Path, tmp_path: Path
+) -> None:
+    """CR-02: o caso normal (sem crash) continua sendo no-op no reprocesso."""
+    src = _make_pdf(tmp_path / "twice.pdf", pages=3)
+    original_hash = sha256_file(src)
+
+    with get_session(schema_engine) as s:
+        first = ingest_stage.process_ingest(
+            s,
+            source_path=src,
+            folder_id=None,
+            pages_per_block=1,
+            original_hash=original_hash,
+        )
+    assert first.status == "ingested"
+    assert first.block_count == 3
+
+    with get_session(schema_engine) as s:
+        second = ingest_stage.process_ingest(
+            s,
+            source_path=src,
+            folder_id=None,
+            pages_per_block=1,
+            original_hash=original_hash,
+        )
+    # Reprocesso do mesmo hash = duplicado (gate), sem recriar blocos.
+    assert second.status == "duplicate"
+    assert second.block_count == 3
+
+    with get_session(schema_engine) as s:
+        docs = s.scalars(select(Document)).all()
+        assert len(docs) == 3
+        ing = s.scalar(
+            select(IngestedOriginal).where(
+                IngestedOriginal.original_hash == original_hash
+            )
+        )
+        assert ing.duplicate_hits == 1
 
 
 def test_imagem_gera_um_documento_sem_split(

@@ -9,9 +9,13 @@ orquestração (sem HTTP, mesmo papel de `state_machine.py`). Materializa:
 - ING-06 / D-09 / D-10: gate de dedup PRÉ-split sobre `ingested_originals`. Um
   original já visto (mesmo `original_hash`) é no-op — NÃO re-separa, NÃO cria
   blocos; só incrementa `duplicate_hits` e retorna "duplicate".
-- PROC-03: reprocessar (resume após crash) é idempotente — o gate pega o original;
-  e mesmo que não pegasse, o `content_hash` único dos blocos torna re-criar um
-  Document um no-op (checagem prévia).
+- PROC-03 / CR-02: reprocessar (resume após crash) é idempotente E atômico. A
+  ingestão de um original — registro do `IngestedOriginal` (gate) + criação de
+  TODOS os `Document`s dos blocos — acontece numa ÚNICA transação, com um único
+  `session.commit()` ao final. Um crash no meio do loop de blocos faz ROLLBACK
+  TOTAL: o gate de dedup nunca enxerga um original "meio-criado", então o resume
+  recria todos os blocos do zero. Sem perda silenciosa (constraint da CLAUDE.md:
+  "nunca pode causar perda"), sem duplicata (gate + `content_hash` único).
 - Estado terminal da fase (Pitfall 6): cada bloco vira um Document INDEPENDENTE
   (seu próprio `content_hash`, ligado ao original por `origin_original_id`), que
   termina em PROCESSANDO com `last_completed_step = "aguardando_extracao"`. NUNCA
@@ -39,7 +43,7 @@ from app.ingest.splitter import is_supported_ext, split_pdf
 from app.models.document import Document
 from app.models.enums import DocState
 from app.models.ingested_original import IngestedOriginal
-from app.pipeline.state_machine import transition
+from app.pipeline.states import InvalidTransition, is_valid_transition
 from app.storage import cas
 
 logger = logging.getLogger(__name__)
@@ -82,6 +86,12 @@ def process_ingest(
       5. Separa: PDF → `split_pdf`; imagem → 1 bloco = o próprio arquivo.
       6. Cada bloco → `cas.store` → `Document` em PROCESSANDO +
          `last_completed_step="aguardando_extracao"` (NUNCA CONCLUIDO).
+
+    Atomicidade (CR-02): os passos 4–6 são UMA transação com um único
+    `session.commit()` no final. Não há commit por bloco — um crash no meio do
+    loop faz rollback total e o gate jamais vê um original parcial, garantindo que
+    o resume recrie todos os blocos (sem perda) e o `content_hash` único evite
+    duplicatas.
 
     Retorna `IngestResult(status, block_count)`.
     """
@@ -128,6 +138,13 @@ def process_ingest(
         blocks = [source_path.read_bytes()]
 
     # (6) Por bloco: store no CAS + cria Document terminal "aguardando extração".
+    # Cada bloco nasce em RECEBIDO e vai a PROCESSANDO. Validamos a aresta da
+    # allowlist UMA vez (todos os blocos seguem o mesmo caminho RECEBIDO→
+    # PROCESSANDO) e setamos o estado em memória — sem `transition` (que commita
+    # por chamada e quebraria a atomicidade do CR-02). O commit único é no fim.
+    if not is_valid_transition(DocState.RECEBIDO, DocState.PROCESSANDO):
+        raise InvalidTransition(DocState.RECEBIDO, DocState.PROCESSANDO)
+
     created = 0
     data_dir = get_settings().data_dir
     for block_bytes in blocks:
@@ -142,24 +159,20 @@ def process_ingest(
             created += 1
             continue
 
+        # Estado terminal da fase em memória; NUNCA CONCLUIDO (Pitfall 6) — a
+        # extração é fase posterior. Persistido no commit único do passo (7).
         doc = Document(
             content_hash=block_hash,
             original_filename=source_path.name,
             origin_original_id=original.id,
+            state=DocState.PROCESSANDO,
+            last_completed_step=AWAITING_EXTRACTION_STEP,
         )
         session.add(doc)
-        session.flush()
-        # RECEBIDO→PROCESSANDO está na allowlist; marca o estado terminal da fase.
-        # NUNCA transiciona para CONCLUIDO (Pitfall 6) — extração é fase posterior.
-        transition(
-            session,
-            doc,
-            DocState.PROCESSANDO,
-            completed_step=AWAITING_EXTRACTION_STEP,
-        )
         created += 1
 
-    # (7) Registra quantos blocos o original gerou e commita.
+    # (7) Registra quantos blocos o original gerou e commita TUDO atomicamente
+    # (IngestedOriginal + todos os Documents). Crash antes daqui = rollback total.
     original.block_count = len(blocks)
     session.commit()
 
