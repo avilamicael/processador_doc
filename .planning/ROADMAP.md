@@ -66,8 +66,28 @@ Plans:
 
 **Note de escopo (2026-06-15)**: ING-01 (upload manual) e ING-03 (lote CLI) removidos do v1 → v2. Ingestão folder-only. Ver `phases/02-ingest-o-e-fila-ass-ncrona/02-CONTEXT.md`.
 
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
+Plans:
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Schema da fila/dedup/pastas (3 tabelas + origin_original_id) via Alembic 0002 + deps (watchfiles/pikepdf) + esqueletos Wave 0
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 02-02-PLAN.md — Utilidades de ingestão: estabilizador (quiescência+lock-test) + separador de PDF (pikepdf) + config de janela global
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 02-03-PLAN.md — Núcleo idempotente: fila SQLite (claim atômico/backoff/resume) + worker + ingest_stage (dedup gate + estado terminal "aguardando extração")
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 02-04-PLAN.md — Watcher (awatch→estabiliza→gate→enqueue) + lifespan (watcher+worker) + API fina (CRUD pastas, lista docs, duplicados, rescan)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 02-05-PLAN.md — Frontend: TanStack Query + hooks/cliente + telas Documentos (polling) e Pastas monitoradas (CRUD) + verificação visual
 
 ### Phase 3: Extração Genérica via IA e Medição de Tokens
 
@@ -167,7 +187,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fundação de Estado e Storage | 4/4 | Complete    | 2026-06-15 |
-| 2. Ingestão e Fila Assíncrona | 0/TBD | Not started | - |
+| 2. Ingestão e Fila Assíncrona | 0/5 | Not started | - |
 | 3. Extração Genérica via IA e Medição de Tokens | 0/TBD | Not started | - |
 | 4. Templates, Sub-templates e Classificação | 0/TBD | Not started | - |
 | 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |
