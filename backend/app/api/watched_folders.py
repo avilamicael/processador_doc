@@ -5,13 +5,21 @@ folders: criar/listar/editar/remover pastas com `path`, `pages_per_block` (D-05,
 `None` = "não separar") e `active`. As pastas vivem no banco (D-02); o watcher
 (`ingest.watcher`) relê esta tabela.
 
-VALIDAÇÃO DE PATH (Security V5/V12 — T-02-10): no create/edit o `path` é
-**normalizado** com `Path(path).resolve()` e rejeitado (HTTP 422) se vazio/em
-branco. Armazena-se a forma RESOLVIDA — barra path traversal acidental
-(`..\\..\\Windows`) e quebras de parsing por caminhos relativos. No v1
-single-tenant local a pasta é escolha do operador (não há allowlist de raízes),
-mas o formato é sempre validado/normalizado. A UNIQUE de `path` no modelo impede
-duplicatas → `IntegrityError` vira HTTP 409.
+VALIDAÇÃO DE PATH (T-02-10): no create/edit o `path` é **normalizado** com
+`Path(path).resolve()` e rejeitado (HTTP 422) se vazio/em branco. `resolve()`
+apenas canoniza o FORMATO (absolutiza, colapsa `..`/`.`) — NÃO confina a nenhuma
+raiz permitida e, portanto, NÃO impede path traversal: um operador pode cadastrar
+qualquer diretório do host. No v1 single-tenant local isso é por design — a pasta
+monitorada é escolha do operador e não há allowlist de raízes; o confinamento de
+raiz fica para um eventual modo servidor (multiusuário). Não confunda normalização
+de formato com controle de acesso.
+
+Endurecimento básico viável agora (T-02-10): se o path JÁ existe, ele precisa ser
+um DIRETÓRIO (arquivo → 422) e NÃO pode ser um symlink (→ 422), para não seguir
+um link como pasta monitorada (reduz a superfície de leitura fora da pasta —
+relacionado a WR-03). Se o path ainda NÃO existe, o cadastro é permitido (a pasta
+pode ser criada depois), sem alegação de segurança. A UNIQUE de `path` no modelo
+impede duplicatas → `IntegrityError` vira HTTP 409.
 
 DELETE remove só o monitoramento — NÃO apaga Documents (D-03): a FK
 `ingested_originals.source_folder_id` é `ON DELETE SET NULL`, então o histórico
@@ -33,21 +41,40 @@ router = APIRouter(prefix="/watched-folders", tags=["watched-folders"])
 
 
 def _normalize_path(raw: str) -> str:
-    """Normaliza/valida um path de pasta (V5/V12 — T-02-10).
+    """Normaliza/valida um path de pasta (T-02-10).
 
-    Rejeita vazio/branco (HTTP 422) e retorna a forma resolvida (absoluta,
-    sem `..`). Não toca o filesystem além de resolver — a pasta pode ainda não
-    existir no momento do cadastro.
+    Rejeita (HTTP 422): vazio/branco; path que já existe e NÃO é diretório (ex.:
+    arquivo); e symlinks (não seguimos um link como pasta monitorada). `resolve()`
+    apenas canoniza o formato (absolutiza, colapsa `..`) — NÃO confina raiz nem
+    barra path traversal; no v1 single-tenant a pasta é escolha do operador.
+    Retorna a forma resolvida. Um path AINDA inexistente é aceito (a pasta pode
+    ser criada depois) — sem alegação de segurança.
     """
     if raw is None or not str(raw).strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="path da pasta não pode ser vazio",
         )
+
+    source = Path(str(raw).strip())
+
+    # Checagens no path NÃO-resolvido (antes do resolve, que seguiria o symlink):
+    # rejeitar symlink reduz a superfície de leitura fora da pasta (WR-03). Se o
+    # alvo existe e não é diretório (ex.: arquivo), também rejeitar.
     try:
+        if source.is_symlink():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="path da pasta não pode ser um symlink",
+            )
+        if source.exists() and not source.is_dir():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="path da pasta precisa ser um diretório",
+            )
         # strict=False: não exige que a pasta exista já; só normaliza o formato.
-        return str(Path(str(raw).strip()).resolve())
-    except (OSError, ValueError) as exc:
+        return str(source.resolve())
+    except OSError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"path da pasta inválido: {raw!r}",

@@ -96,6 +96,42 @@ def test_relative_path_is_normalized(client: TestClient) -> None:
     assert ".." not in resp.json()["path"]
 
 
+def test_path_that_is_a_file_returns_422(client: TestClient, tmp_path: Path) -> None:
+    """CR-01: um path que existe mas é ARQUIVO (não diretório) é rejeitado."""
+    f = tmp_path / "nota.pdf"
+    f.write_text("não sou uma pasta")
+    resp = client.post("/watched-folders", json={"path": str(f)})
+    assert resp.status_code == 422, resp.text
+
+
+def test_symlink_path_returns_422(client: TestClient, tmp_path: Path) -> None:
+    """CR-01: um symlink (mesmo apontando para um dir) é rejeitado — reduz a
+    superfície de leitura fora da pasta monitorada (relacionado a WR-03)."""
+    target = tmp_path / "real_dir"
+    target.mkdir()
+    link = tmp_path / "link_dir"
+    link.symlink_to(target, target_is_directory=True)
+    resp = client.post("/watched-folders", json={"path": str(link)})
+    assert resp.status_code == 422, resp.text
+
+
+def test_existing_directory_is_accepted(client: TestClient, tmp_path: Path) -> None:
+    """CR-01: um diretório real e existente é aceito (caso normal)."""
+    d = tmp_path / "hot_real"
+    d.mkdir()
+    resp = client.post("/watched-folders", json={"path": str(d)})
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["path"] == str(d.resolve())
+
+
+def test_nonexistent_path_is_accepted(client: TestClient, tmp_path: Path) -> None:
+    """CR-01: um path ainda inexistente é aceito (a pasta pode ser criada depois)
+    — comportamento mantido do v1; sem alegação de segurança."""
+    d = tmp_path / "ainda_nao_existe"
+    resp = client.post("/watched-folders", json={"path": str(d)})
+    assert resp.status_code == 201, resp.text
+
+
 def test_delete_folder_preserves_documents(
     client: TestClient, schema_engine: Engine, tmp_path: Path
 ) -> None:
