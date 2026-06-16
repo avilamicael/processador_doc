@@ -131,6 +131,46 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Tunables da CLASSIFICAÇÃO (Fase 4) — mesmo padrão dos extract_*/queue_*
+    # (lidos de env sem deploy). Governam o matcher local custo-zero e o desempate
+    # pago por IA contra os templates do cliente.
+    #
+    # `classify_match_threshold`: limiar GLOBAL de confiança do matcher local
+    # (discretion D-03; um limiar por-template é v2/INT2-05). Score do matcher ACIMA
+    # do limiar → casa o template sem custo de IA; zona cinzenta abaixo → a IA
+    # desempata (chamada paga); zero sinais → quarentena (template_id null).
+    classify_match_threshold: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices(
+            "CLASSIFY_MATCH_THRESHOLD", "classify_match_threshold"
+        ),
+    )
+    # `openai_classify_model`: modelo das chamadas PAGAS de desempate/classificação
+    # (D-01/D-06). Modelos giram rápido (CLAUDE.md) → tunável por env; o default
+    # reusa o modelo de extract para uma instância só precisar definir um modelo.
+    openai_classify_model: str = Field(
+        default="gpt-4o-2024-08-06",
+        validation_alias=AliasChoices(
+            "OPENAI_CLASSIFY_MODEL", "openai_classify_model"
+        ),
+    )
+    # Classificação é determinística (mesma decisão para o mesmo documento) →
+    # temperatura 0.0, espelhando o equivalente de extract.
+    openai_classify_temperature: float = Field(
+        default=0.0,
+        validation_alias=AliasChoices(
+            "OPENAI_CLASSIFY_TEMPERATURE", "openai_classify_temperature"
+        ),
+    )
+    # Teto de tokens de saída do desempate por IA (a saída é compacta:
+    # template casado + confiança + razão), espelhando o de extract.
+    openai_classify_max_output_tokens: int = Field(
+        default=1024,
+        validation_alias=AliasChoices(
+            "OPENAI_CLASSIFY_MAX_OUTPUT_TOKENS", "openai_classify_max_output_tokens"
+        ),
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_dir(self) -> Path:
