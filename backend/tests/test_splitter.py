@@ -82,9 +82,9 @@ def test_blocos_sao_pdfs_validos(tmp_path: Path) -> None:
 def test_pdf_malformado_levanta_excecao_controlada(tmp_path: Path) -> None:
     bad = tmp_path / "ruim.pdf"
     bad.write_bytes(b"isto nao e um PDF valido")
-    # T-02-04: split sobre PDF malformado levanta exceção (não trava o processo);
-    # o worker do Plano 03 a converte em retry/FALHA.
-    with pytest.raises(Exception):
+    # T-02-04: split sobre PDF malformado levanta exceção controlada (não trava o
+    # processo); o worker do Plano 03 a converte em retry/FALHA.
+    with pytest.raises(ValueError):
         split_pdf(bad, pages_per_block=1)
 
 
