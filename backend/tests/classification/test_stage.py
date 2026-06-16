@@ -32,7 +32,6 @@ em cada par do payload de faltantes (ExtractedField exige — contrato do Plan 0
 """
 
 import json
-from pathlib import Path
 
 import pytest
 import respx
@@ -130,7 +129,7 @@ def _pairs_json(pairs: list[tuple[str, str]]) -> str:
 
 async def test_casa_sem_ia_preenche_e_valida(schema_engine: Engine) -> None:
     """Sinais fortes p/ 1 template → casa sem IA; FilledFields; PROCESSANDO+classificado."""
-    with respx.mock(base_url="https://api.openai.com/v1") as router:
+    with respx.mock(base_url="https://api.openai.com/v1", assert_all_called=False) as router:
         route = router.post("/responses")
         with get_session(schema_engine) as s:
             tpl = _template(
@@ -190,7 +189,7 @@ async def test_quarentena_persiste_classification_result_sem_filled(
     schema_engine: Engine,
 ) -> None:
     """Nenhum template casa → QUARENTENA via transition; CR(template_id=None) persistido."""
-    with respx.mock(base_url="https://api.openai.com/v1") as router:
+    with respx.mock(base_url="https://api.openai.com/v1", assert_all_called=False) as router:
         route = router.post("/responses")
         with get_session(schema_engine) as s:
             # template existe mas seus sinais NÃO estão no documento → quarentena
@@ -242,7 +241,7 @@ async def test_quarentena_persiste_classification_result_sem_filled(
 
 async def test_idempotencia_nao_re_chama_ia(schema_engine: Engine) -> None:
     """2ª execução com ClassificationResult existente → no-op, called_ai=False, 0 nova IA."""
-    with respx.mock(base_url="https://api.openai.com/v1") as router:
+    with respx.mock(base_url="https://api.openai.com/v1", assert_all_called=False) as router:
         route = router.post("/responses")
         with get_session(schema_engine) as s:
             tpl = _template(
@@ -286,7 +285,7 @@ async def test_idempotencia_nao_re_chama_ia(schema_engine: Engine) -> None:
 
 async def test_desempate_chama_ia_e_grava_usage(schema_engine: Engine) -> None:
     """Zona cinzenta (2 templates empatados) → disambiguate (respx); 1 Usage(classify)."""
-    with respx.mock(base_url="https://api.openai.com/v1") as router:
+    with respx.mock(base_url="https://api.openai.com/v1", assert_all_called=False) as router:
         # A IA desempata escolhendo o template 1 (matched_template_id apontará p/ ele).
         with get_session(schema_engine) as s:
             tpl_a = _template(
@@ -345,7 +344,7 @@ async def test_desempate_chama_ia_e_grava_usage(schema_engine: Engine) -> None:
 
 async def test_faltantes_chama_ia_e_merge_por_nome(schema_engine: Engine) -> None:
     """Obrigatório sem par → fill_missing_fields (respx); merge pelo field_name do template."""
-    with respx.mock(base_url="https://api.openai.com/v1") as router:
+    with respx.mock(base_url="https://api.openai.com/v1", assert_all_called=False) as router:
         with get_session(schema_engine) as s:
             tpl = _template(
                 s,
@@ -412,7 +411,7 @@ async def test_faltantes_chama_ia_e_merge_por_nome(schema_engine: Engine) -> Non
 
 async def test_campo_invalido_marca_sem_quarentena(schema_engine: Engine) -> None:
     """DV de CNPJ falho → FilledField.valid=False; documento SEGUE (D-10), não quarentena."""
-    with respx.mock(base_url="https://api.openai.com/v1") as router:
+    with respx.mock(base_url="https://api.openai.com/v1", assert_all_called=False) as router:
         route = router.post("/responses")
         with get_session(schema_engine) as s:
             tpl = _template(
