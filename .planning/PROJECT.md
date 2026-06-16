@@ -21,6 +21,13 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 - [x] **Deduplicar por hash** — não reprocessa nem cobra o mesmo arquivo duas vezes, idempotente mesmo após retry/crash (ING-06, PROC-03)
 - [x] **Fila assíncrona com retry/backoff** (worker in-process SQLite, claim atômico) (PROC-02)
 
+**Leitura/Extração & Medição — validados na Fase 3 (2026-06-16)**
+- [x] Extrair **texto nativo de PDF localmente** (sem custo de IA quando o PDF tem texto), com heurística texto-vs-visão (EXT-01)
+- [x] Extrair dados de **imagens e PDFs escaneados via IA da OpenAI** (Responses API + visão) (EXT-01)
+- [x] **Extração genérica via IA para qualquer tipo de documento** — schema `ExtractionResult` strict-safe (list-of-pairs), Structured Outputs; *binding por template fica na Fase 4* (EXT-02)
+- [x] **Medição de uso por tokens** por documento (`Usage(step="extract")` no mesmo commit atômico da extração — não cobra duas vezes) (USE-02)
+- _Roteamento determinístico de tipos conhecidos (boleto/NF-e) e revisão por confiança permanecem nas Fases 7 e 5._
+
 ### Active
 
 <!-- Current scope. Building toward these (v1). Hypotheses until shipped. -->
@@ -33,11 +40,11 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 - _(v2)_ ~~Upload manual na interface~~ e ~~lote/linha de comando~~ — removidos do v1 em 2026-06-15 (ingestão folder-only)
 
 **Leitura/Extração**
-- [ ] Extrair **texto nativo de PDF localmente** (sem custo de IA quando o PDF tem texto)
-- [ ] Extrair dados de **imagens e PDFs escaneados via IA da OpenAI** (OCR + contexto)
-- [ ] **Extração genérica via IA para qualquer tipo de documento** (caminho principal, dirigido pelo template)
-- [ ] Roteamento de extração: determinístico (quando aplicável) → texto nativo local → IA
-- [ ] **Saída estruturada (JSON Schema)** da IA conforme o template + validações de campo configuráveis
+- [x] Extrair **texto nativo de PDF localmente** (sem custo de IA quando o PDF tem texto) — _Fase 3_
+- [x] Extrair dados de **imagens e PDFs escaneados via IA da OpenAI** (OCR + contexto) — _Fase 3_
+- [x] **Extração genérica via IA para qualquer tipo de documento** (caminho principal; _binding por template na Fase 4_) — _Fase 3_
+- [~] Roteamento de extração: determinístico (quando aplicável) → texto nativo local → IA — _seam pronto na Fase 3; ramo determinístico na Fase 7_
+- [~] **Saída estruturada (JSON Schema)** da IA — _schema genérico pronto na Fase 3; conforme template + validações configuráveis na Fase 4/5_
 - [ ] **(Otimização) Parsing determinístico de tipos conhecidos** (ex.: boleto via linha digitável, NF-e via chave/XML) para reduzir custo de IA quando o cliente tiver esses tipos
 
 **Templates & Classificação**
@@ -61,7 +68,7 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 
 **IA & Cobrança**
 - [ ] **Chave OpenAI por cliente** (provisionada pelo fornecedor); o cliente é responsável pelo consumo
-- [ ] **Medição de uso por tokens / chamadas de API** para apoiar a cobrança por consumo
+- [x] **Medição de uso por tokens / chamadas de API** para apoiar a cobrança por consumo — _Fase 3_
 
 **Distribuição & Atualização**
 - [ ] **Versionamento de releases** do produto (instalável por cliente, com versão visível)
@@ -140,4 +147,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-16 — Phase 2 complete: ingestão folder-only + fila idempotente (ING-02/04/05/06, PROC-02/03 validados). Próxima: Phase 3 (extração via IA).*
+*Last updated: 2026-06-16 — Phase 3 complete: motor de extração genérica via IA (Responses API + Structured Outputs), texto nativo local e medição de tokens por documento (EXT-01/02, USE-02 validados; CR-01 aceito p/ v1). Próxima: Phase 4 (templates, sub-templates e classificação).*
