@@ -28,13 +28,16 @@ from pathlib import Path
 
 from openai import AuthenticationError
 from sqlalchemy import Engine, select
+from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.extraction.stage import extract_stage
 from app.models.document import Document
 from app.models.enums import DocState
+from app.models.extraction import Extraction
 from app.models.ingested_original import IngestedOriginal
 from app.pipeline import ingest_stage
+from app.pipeline.ingest_stage import AWAITING_EXTRACTION_STEP
 from app.pipeline.state_machine import transition
 from app.queue import repo
 from app.storage.db import get_session
@@ -233,6 +236,46 @@ async def _run_once(engine: Engine) -> bool:
     return True
 
 
+def enqueue_pending_extractions(session: Session) -> int:
+    """Enfileira um job de extract para cada bloco pronto que ainda não tem job.
+
+    Resolve a Open Question 1 (enqueue inline no ingest quebraria o commit único —
+    `repo.enqueue` comita por si): em vez disso, varremos no STARTUP do worker (UMA
+    vez, análogo a `requeue_running`) todos os Documents em estado terminal da Fase 2
+    — `state == PROCESSANDO` e `last_completed_step == "aguardando_extracao"` — que
+    ainda NÃO têm uma `Extraction` persistida, e enfileiramos
+    `(block.content_hash, "extract")` para cada um.
+
+    Idempotente por desenho: a chave do job é o `content_hash` do bloco e a UNIQUE
+    `uq_jobs_hash_step` garante 1 job por (hash, "extract"); `repo.enqueue` é no-op
+    (retorna None) quando o job já existe. Rodar o sweep 2x não duplica. Cobre os
+    Documents LEGADOS deixados pela Fase 2 antes desta fase (Runtime State Inventory).
+    Documents já extraídos (com `Extraction`) são excluídos — não re-cobramos a IA.
+
+    Retorna quantos jobs NOVOS foram criados (no-ops não contam).
+    """
+    docs = session.scalars(
+        select(Document)
+        .where(
+            Document.state == DocState.PROCESSANDO,
+            Document.last_completed_step == AWAITING_EXTRACTION_STEP,
+            ~Document.content_hash.in_(select(Document.content_hash).join(Extraction)),
+        )
+    ).all()
+
+    created = 0
+    for doc in docs:
+        job = repo.enqueue(
+            session,
+            original_hash=doc.content_hash,
+            step=EXTRACT_STEP,
+            payload=json.dumps({"content_hash": doc.content_hash}),
+        )
+        if job is not None:
+            created += 1
+    return created
+
+
 async def run_worker(engine: Engine, stop: asyncio.Event) -> None:
     """Loop do worker: resume no startup, então poll→claim→processa até `stop`.
 
@@ -244,6 +287,13 @@ async def run_worker(engine: Engine, stop: asyncio.Event) -> None:
         requeued = repo.requeue_running(session)
     if requeued:
         logger.info("Resume: %s job(s) running re-enfileirados como pending", requeued)
+
+    # Sweep idempotente (UMA vez no startup, análogo ao resume): enfileira extract
+    # para todos os blocos prontos sem job — inclusive os legados da Fase 2.
+    with get_session(engine) as session:
+        enqueued = enqueue_pending_extractions(session)
+    if enqueued:
+        logger.info("Sweep: %s job(s) de extract enfileirados (blocos pendentes)", enqueued)
 
     poll = get_settings().queue_poll_interval_seconds
     while not stop.is_set():
