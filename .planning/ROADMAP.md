@@ -14,7 +14,7 @@ O produto transforma pilhas de documentos heterogêneos (PDFs e imagens, de tipo
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Fundação de Estado e Storage** - Máquina de estados persistida, CAS por hash, migrações Alembic e base Windows single-tenant (completed 2026-06-15)
-- [ ] **Phase 2: Ingestão e Fila Assíncrona** - Pasta(s) monitorada(s) com separação por pasta, dedup por hash e fila in-process idempotente com retry
+- [x] **Phase 2: Ingestão e Fila Assíncrona** - Pasta(s) monitorada(s) com separação por pasta, dedup por hash e fila in-process idempotente com retry (completed 2026-06-16)
 - [ ] **Phase 3: Extração Genérica via IA e Medição de Tokens** - Núcleo do motor: extração por IA dirigida pelo template (qualquer tipo) + texto nativo + medição de uso
 - [ ] **Phase 4: Templates, Sub-templates e Classificação** - Construtor schema-first de templates e classificação automática contra eles
 - [ ] **Phase 5: Confiança, Revisão Humana e Quarentena** - Score de confiança determinístico, limiar, fila de revisão lado-a-lado e quarentena visível
@@ -87,7 +87,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 02-05-PLAN.md — Frontend: TanStack Query + hooks/cliente + telas Documentos (polling) e Pastas monitoradas (CRUD) + verificação visual
+- [x] 02-05-PLAN.md — Frontend: TanStack Query + hooks/cliente + telas Documentos (polling) e Pastas monitoradas (CRUD) + verificação visual
 
 ### Phase 3: Extração Genérica via IA e Medição de Tokens
 
@@ -187,7 +187,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fundação de Estado e Storage | 4/4 | Complete    | 2026-06-15 |
-| 2. Ingestão e Fila Assíncrona | 4/5 | In Progress|  |
+| 2. Ingestão e Fila Assíncrona | 5/5 | Complete   | 2026-06-16 |
 | 3. Extração Genérica via IA e Medição de Tokens | 0/TBD | Not started | - |
 | 4. Templates, Sub-templates e Classificação | 0/TBD | Not started | - |
 | 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |

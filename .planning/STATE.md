@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-06-16T01:23:03.132Z"
+status: verifying
+stopped_at: Completed 02-05-PLAN.md (Phase 02 ready for verification)
+last_updated: "2026-06-16T04:00:14.076Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 9
-  completed_plans: 8
-  percent: 13
+  completed_plans: 9
+  percent: 25
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 
 Phase: 02 (ingest-o-e-fila-ass-ncrona) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-16
 
 Progress: [█░░░░░░░░░] 13%
@@ -56,6 +56,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 02 P02 | 3 | 2 tasks | 7 files |
 | Phase 02 P03 | 18 | 3 tasks | 9 files |
 | Phase 02 P04 | 5 | 3 tasks | 8 files |
+| Phase 02 P05 | 8 | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [02-03]: ingest_stage — gate de dedup pré-split (D-09/D-10) + 1 Document/bloco ligado ao original; estado terminal PROCESSANDO+'aguardando_extracao' (nunca CONCLUIDO); worker despacha split em asyncio.to_thread com sessão própria por thread.
 - [Phase ?]: [02-04]: Watcher com supervisor que relê pastas ativas do DB (polling 5s) e reinicia awatch quando o conjunto muda (reconfiguração runtime A5); scan_and_enqueue (estabiliza→hash→gate→enqueue) compartilhado por startup, /rescan e watcher.
 - [Phase ?]: [02-04]: Lifespan sobe watcher+worker como asyncio.Task e encerra limpo (stop→cancel→gather) preservando check WAL; requer uvicorn --workers 1 (T-02-12). API de pastas valida path com Path.resolve (T-02-10); DELETE preserva Documents (D-03).
+- [Phase ?]: [02-05]: Frontend fiado à API real — TanStack Query 5.101 + cliente fetch tipado; polling 4s com placeholderData=prev (sem flicker); StatusPill mapeia estados de domínio reais (Aguardando extração, nunca Tratado nesta fase).
+- [Phase ?]: [02-05]: Cadastro de pasta mantido por caminho absoluto via texto (decisão do usuário na verificação visual); seletor visual/normalização de aspas/validação de existência adiados para a fase desktop — fora de escopo.
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T01:20:37.480Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-06-16T04:00:02.773Z
+Stopped at: Completed 02-05-PLAN.md (Phase 02 complete — ready for verification)
 Resume file: None
