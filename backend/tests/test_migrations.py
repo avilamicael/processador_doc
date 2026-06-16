@@ -20,7 +20,16 @@ from alembic import command
 # Raiz do projeto backend (onde vivem alembic.ini e o pacote app).
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
-ESPERADAS = {"documents", "pages", "audit_log", "usage"}
+ESPERADAS = {
+    "documents",
+    "pages",
+    "audit_log",
+    "usage",
+    # Fase 2 (migração 0002) — fila, gate de dedup e pastas monitoradas.
+    "watched_folders",
+    "ingested_originals",
+    "jobs",
+}
 
 
 def _make_config(db_url: str) -> Config:
@@ -66,6 +75,58 @@ def test_documents_tem_state_e_last_completed_step(db_url: str) -> None:
     assert "state" in colunas
     assert "last_completed_step" in colunas
     assert "content_hash" in colunas
+
+
+def test_documents_ganha_origin_original_id_apos_upgrade(db_url: str) -> None:
+    """Fase 2: a coluna de vínculo bloco→original (D-09) chega via migração 0002."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+
+    engine = create_engine(db_url)
+    try:
+        colunas = {col["name"] for col in inspect(engine).get_columns("documents")}
+    finally:
+        engine.dispose()
+
+    assert "origin_original_id" in colunas
+
+
+def test_jobs_tem_indice_unico_hash_step(db_url: str) -> None:
+    """PROC-03: o índice/constraint único `uq_jobs_hash_step` existe após upgrade."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+
+    engine = create_engine(db_url)
+    try:
+        insp = inspect(engine)
+        nomes_uc = {uc["name"] for uc in insp.get_unique_constraints("jobs")}
+        nomes_idx = {ix["name"] for ix in insp.get_indexes("jobs")}
+    finally:
+        engine.dispose()
+
+    assert "uq_jobs_hash_step" in (nomes_uc | nomes_idx)
+
+
+def test_downgrade_um_passo_remove_so_a_fase_2(db_url: str) -> None:
+    """downgrade -1 remove as 3 tabelas da Fase 2 e a coluna de vínculo,
+    preservando o schema da Fase 1 (documents/pages/audit_log/usage)."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "-1")
+
+    engine = create_engine(db_url)
+    try:
+        insp = inspect(engine)
+        tabelas = set(insp.get_table_names())
+        colunas_doc = {col["name"] for col in insp.get_columns("documents")}
+    finally:
+        engine.dispose()
+
+    fase2 = {"watched_folders", "ingested_originals", "jobs"}
+    fase1 = {"documents", "pages", "audit_log", "usage"}
+    assert not (fase2 & tabelas), f"tabelas da Fase 2 não removidas: {fase2 & tabelas}"
+    assert fase1.issubset(tabelas), "schema da Fase 1 não preservado no downgrade -1"
+    assert "origin_original_id" not in colunas_doc
 
 
 def test_downgrade_base_remove_as_tabelas(db_url: str) -> None:
