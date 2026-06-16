@@ -128,6 +128,7 @@ Transformar uma pilha de documentos heterogêneos (PDFs e imagens) em arquivos *
 | Documentação tratada como entregável de v1 (instalação, atualização, uso/exemplos, operação) | Produto vendido e instalado por cliente exige docs claras de instalar/usar/atualizar | — Pending |
 | Atualizações publicadas pelo fornecedor com migração segura de dados | Cliente roda a própria instância; updates não podem quebrar templates/config/dados | — Pending |
 | Ingestão folder-only no v1 (sem upload manual nem CLI) | Usuário trabalha por pastas; cada pasta tem sua regra de separação; upload/CLI viram v2 | — Pending (Phase 2 discuss, 2026-06-15) |
+| Web é gestão/triagem, não manuseio de documento; sem visualizador de documento na web | Usuário gerencia config/templates e tria problemas na web, mas lida com os arquivos pelo Windows Explorer; corrigir campo = corrigir o dado que a automação usará | — Pending (Phase 5 discuss, 2026-06-16) |
 
 ## Evolution
 

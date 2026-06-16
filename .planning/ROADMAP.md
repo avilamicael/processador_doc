@@ -158,16 +158,18 @@ Plans:
 
 ### Phase 5: Confiança, Revisão Humana e Quarentena
 
-**Goal**: O usuário nunca confia cegamente na IA — documentos com baixa confiança ou que falham validação param numa fila de revisão com o documento ao lado dos campos editáveis, e a quarentena é visível e resolúvel.
+**Goal**: O usuário nunca confia cegamente na IA — documentos com baixa confiança ou que falham validação param numa visão de triagem na web ("Precisam de atenção") que mostra o motivo e os campos editáveis, e a quarentena é visível e resolúvel. A web é gestão/triagem (corrige o **dado** que a automação usará); o arquivo em si é manuseado no Windows Explorer — sem visualizador de documento na web.
 **Depends on**: Phase 4
 **Requirements**: REV-01, REV-02, REV-03, REV-04, REV-05
 **Success Criteria** (what must be TRUE):
 
   1. O sistema calcula um indicador de confiança por documento baseado em validação determinística pós-extração (não apenas no auto-relato da IA)
-  2. O usuário define um limiar de confiança que decide o que vai para revisão manual
-  3. Documentos abaixo do limiar ou que falham validação aparecem numa fila de revisão com visualizador do documento lado-a-lado com campos editáveis
-  4. O usuário consegue aprovar/corrigir os campos antes de qualquer automação ser aplicada
-  5. A quarentena é visível, mostra o motivo de cada documento e permite resolver/reprocessar
+  2. O usuário define um limiar de confiança (global, na config) que decide o que vai para revisão manual
+  3. Documentos abaixo do limiar OU com campo obrigatório inválido/faltante aparecem numa visão de triagem na web que mostra o motivo e os valores dos campos editáveis — sem visualizador de documento na web
+  4. O usuário consegue aprovar/corrigir os valores dos campos na web antes de qualquer automação (aprovar → CONCLUIDO; correção marcada como manual)
+  5. A quarentena é visível, mostra o motivo de cada documento e permite resolver (atribuir template + reclassificar) / reprocessar
+
+**Nota de escopo (2026-06-16):** modelo "web ativa, leve" — uma visão única "Precisam de atenção" com 3 baldes (FALHA → tentar de novo; QUARENTENA → atribuir template + reclassificar; EM_REVISAO → corrigir campos + aprovar). Visualizador de documento na web removido por decisão de visão (web = gestão; arquivos via Windows Explorer). Ver `phases/05-confian-a-revis-o-humana-e-quarentena/05-CONTEXT.md`.
 
 **Plans**: TBD
 **UI hint**: yes

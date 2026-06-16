@@ -34,8 +34,8 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 - [ ] **REV-01**: Sistema calcula um indicador de confiança por documento, baseado em validação determinística pós-extração (não apenas no auto-relato da IA)
 - [ ] **REV-02**: Usuário define um limiar de confiança que decide o que vai para revisão manual
-- [ ] **REV-03**: Documentos abaixo do limiar ou que falham validação entram numa fila de revisão humana com visualização do documento ao lado dos campos editáveis
-- [ ] **REV-04**: Usuário pode aprovar/corrigir os campos antes de qualquer automação ser aplicada
+- [ ] **REV-03**: Documentos abaixo do limiar ou que falham validação aparecem numa visão de triagem na web ("Precisam de atenção") que mostra o motivo e os valores dos campos editáveis — sem visualizador do documento na web (o arquivo é conferido no Windows Explorer; a web corrige o **dado** que a automação usará) *(re-escopado 2026-06-16: visualizador de documento removido — ver 05-CONTEXT.md D-06)*
+- [ ] **REV-04**: Usuário pode aprovar/corrigir os valores dos campos na web antes de qualquer automação ser aplicada (aprovar leva o documento a CONCLUIDO; correção é marcada como manual)
 - [ ] **REV-05**: Quarentena é visível, mostra o motivo e permite o usuário resolver/reprocessar
 
 ### Automações de Arquivo (AUT)
