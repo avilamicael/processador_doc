@@ -24,7 +24,6 @@ with warnings.catch_warnings():
 from app.main import app
 from app.models.document import Document
 from app.models.ingested_original import IngestedOriginal
-from app.models.watched_folder import WatchedFolder
 from app.storage.db import get_session
 
 
@@ -61,7 +60,10 @@ def test_crud_lifecycle(client: TestClient, tmp_path: Path) -> None:
     assert any(f["id"] == folder_id for f in resp.json())
 
     # PATCH edita
-    resp = client.patch(f"/watched-folders/{folder_id}", json={"pages_per_block": 5, "active": False})
+    resp = client.patch(
+        f"/watched-folders/{folder_id}",
+        json={"pages_per_block": 5, "active": False},
+    )
     assert resp.status_code == 200
     patched = resp.json()
     assert patched["pages_per_block"] == 5

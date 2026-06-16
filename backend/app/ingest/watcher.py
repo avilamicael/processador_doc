@@ -41,7 +41,6 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 from watchfiles import Change, awatch
 
-from app.config import get_settings
 from app.ingest.hashing import sha256_file
 from app.ingest.splitter import is_supported_ext
 from app.ingest.stabilizer import wait_stable
