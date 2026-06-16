@@ -83,7 +83,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 02-04-PLAN.md — Watcher (awatch→estabiliza→gate→enqueue) + lifespan (watcher+worker) + API fina (CRUD pastas, lista docs, duplicados, rescan)
+- [x] 02-04-PLAN.md — Watcher (awatch→estabiliza→gate→enqueue) + lifespan (watcher+worker) + API fina (CRUD pastas, lista docs, duplicados, rescan)
 
 **Wave 5** *(blocked on Wave 4)*
 
@@ -187,7 +187,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fundação de Estado e Storage | 4/4 | Complete    | 2026-06-15 |
-| 2. Ingestão e Fila Assíncrona | 3/5 | In Progress|  |
+| 2. Ingestão e Fila Assíncrona | 4/5 | In Progress|  |
 | 3. Extração Genérica via IA e Medição de Tokens | 0/TBD | Not started | - |
 | 4. Templates, Sub-templates e Classificação | 0/TBD | Not started | - |
 | 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |

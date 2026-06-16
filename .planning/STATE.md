@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-06-16T01:12:26.568Z"
+last_updated: "2026-06-16T01:23:03.132Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 ## Current Position
 
 Phase: 02 (ingest-o-e-fila-ass-ncrona) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-06-16
 
@@ -55,6 +55,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 02 P01 | 12 | 3 tasks | 17 files |
 | Phase 02 P02 | 3 | 2 tasks | 7 files |
 | Phase 02 P03 | 18 | 3 tasks | 9 files |
+| Phase 02 P04 | 5 | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [02-02]: Estabilizador por quiescência size/mtime + lock-test Windows (wait_stable) e separador de PDF por N páginas via pikepdf (MPL, não PyMuPDF AGPL); 'não separar' (None/0) = 1 bloco (D-05); PDF malformado vira ValueError controlado (T-02-04); janela de estabilização global default 4.0s configurável (D-04).
 - [Phase ?]: [02-03]: Fila SQLite com claim atômico via UPDATE...RETURNING (single-writer D-11); claim compara next_run_at contra :now bind-ado em Python para evitar mismatch tz-aware vs segundos; backoff exponencial+jitter + dead-letter→FALHA (PROC-02).
 - [Phase ?]: [02-03]: ingest_stage — gate de dedup pré-split (D-09/D-10) + 1 Document/bloco ligado ao original; estado terminal PROCESSANDO+'aguardando_extracao' (nunca CONCLUIDO); worker despacha split em asyncio.to_thread com sessão própria por thread.
+- [Phase ?]: [02-04]: Watcher com supervisor que relê pastas ativas do DB (polling 5s) e reinicia awatch quando o conjunto muda (reconfiguração runtime A5); scan_and_enqueue (estabiliza→hash→gate→enqueue) compartilhado por startup, /rescan e watcher.
+- [Phase ?]: [02-04]: Lifespan sobe watcher+worker como asyncio.Task e encerra limpo (stop→cancel→gather) preservando check WAL; requer uvicorn --workers 1 (T-02-12). API de pastas valida path com Path.resolve (T-02-10); DELETE preserva Documents (D-03).
 
 ### Pending Todos
 
@@ -101,6 +104,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T01:12:26.562Z
+Last session: 2026-06-16T01:20:37.480Z
 Stopped at: Completed 02-03-PLAN.md
 Resume file: None
