@@ -25,10 +25,11 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 
 ## Current Position
 
-Phase: 04 (templates-sub-templates-e-classifica-o) — EXECUTING
+Phase: 04 (templates-sub-templates-e-classifica-o) — VERIFIED (4/4 critérios; 1 WARNING)
 Plan: 6 of 6
-Status: Phase complete — ready for verification
+Status: Phase 4 completa e verificada — próximo: planejar Phase 5
 Last activity: 2026-06-16
+Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
 
@@ -120,6 +121,7 @@ None yet.
 - Modelo de confiança: OpenAI não expõe score por campo; usar validação determinística pós-extração (Phase 5). (research/SUMMARY.md)
 - Fila in-process SQLite sem lib consagrada: validar polling de tabela próprio (Phase 2). (research/SUMMARY.md)
 - Parser de boleto Python: sem lib madura; portar lógica + fixtures reais (Phase 7). (research/SUMMARY.md)
+- [04-VERIFICATION, WARNING] Encadeamento da fila: ingest_stage/extract_stage NÃO enfileiram o próximo step; os sweeps (enqueue_pending_extractions/classifications) rodam só no startup do worker. Doc ingerido em runtime não avança ingest→extract→classify sem reiniciar o worker. Fix recomendado (pequeno, idempotente): após mark_done de um job extract bem-sucedido em _run_once, enfileirar job classify do mesmo content_hash. Decidir se vira fix rápido avulso ou entra no escopo da Phase 5.
 
 ## Deferred Items
 
