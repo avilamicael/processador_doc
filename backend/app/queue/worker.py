@@ -331,6 +331,33 @@ def enqueue_pending_classifications(session: Session) -> int:
     return created
 
 
+def _sweep_pending(engine: Engine) -> int:
+    """Roda os dois sweeps idempotentes (extract + classify) e loga o que criou.
+
+    Reusado no STARTUP e a cada ciclo OCIOSO do worker. Rodá-lo quando a fila
+    esvazia é o que faz documentos avançarem ingest→extract→classify EM RUNTIME
+    (não só os legados varridos no startup): após o ingest marcar blocos como
+    `aguardando_extracao`, o próximo ciclo ocioso enfileira o extract; após o
+    extract marcar `extraido`, o ciclo ocioso seguinte enfileira o classify.
+    Idempotente por desenho (UNIQUE(content_hash, step) + os sweeps excluem blocos
+    já adiantados), então rodá-lo repetidamente não duplica trabalho nem re-cobra IA.
+    Retorna quantos jobs NOVOS foram criados (0 = nada pendente).
+    """
+    with get_session(engine) as session:
+        enqueued = enqueue_pending_extractions(session)
+    if enqueued:
+        logger.info("Sweep: %s job(s) de extract enfileirados (blocos pendentes)", enqueued)
+
+    with get_session(engine) as session:
+        enqueued_cls = enqueue_pending_classifications(session)
+    if enqueued_cls:
+        logger.info(
+            "Sweep: %s job(s) de classify enfileirados (blocos extraídos pendentes)",
+            enqueued_cls,
+        )
+    return enqueued + enqueued_cls
+
+
 async def run_worker(engine: Engine, stop: asyncio.Event) -> None:
     """Loop do worker: resume no startup, então poll→claim→processa até `stop`.
 
@@ -343,22 +370,9 @@ async def run_worker(engine: Engine, stop: asyncio.Event) -> None:
     if requeued:
         logger.info("Resume: %s job(s) running re-enfileirados como pending", requeued)
 
-    # Sweep idempotente (UMA vez no startup, análogo ao resume): enfileira extract
-    # para todos os blocos prontos sem job — inclusive os legados da Fase 2.
-    with get_session(engine) as session:
-        enqueued = enqueue_pending_extractions(session)
-    if enqueued:
-        logger.info("Sweep: %s job(s) de extract enfileirados (blocos pendentes)", enqueued)
-
-    # Sweep idempotente da classificação (Fase 4): enfileira classify para todos os
-    # blocos já extraídos sem ClassificationResult — inclusive os legados.
-    with get_session(engine) as session:
-        enqueued_cls = enqueue_pending_classifications(session)
-    if enqueued_cls:
-        logger.info(
-            "Sweep: %s job(s) de classify enfileirados (blocos extraídos pendentes)",
-            enqueued_cls,
-        )
+    # Sweep no startup (cobre legados sem job — Fases 2/3/4). A MESMA rotina roda
+    # a cada ciclo ocioso abaixo, encadeando os estágios para docs processados ao vivo.
+    _sweep_pending(engine)
 
     poll = get_settings().queue_poll_interval_seconds
     while not stop.is_set():
@@ -366,7 +380,12 @@ async def run_worker(engine: Engine, stop: asyncio.Event) -> None:
         if processed:
             # Há trabalho — não dorme; tenta o próximo imediatamente.
             continue
-        # Sem job devido: dorme o intervalo de poll, mas acorda cedo se `stop`.
+        # Fila vazia: re-roda os sweeps para encadear ingest→extract→classify dos
+        # docs adiantados NESTA sessão (não só legados do startup). Se enfileirou
+        # algo, NÃO dorme — processa já no próximo ciclo.
+        if _sweep_pending(engine) > 0:
+            continue
+        # Nada pendente: dorme o intervalo de poll, mas acorda cedo se `stop`.
         try:
             await asyncio.wait_for(stop.wait(), timeout=poll)
         except TimeoutError:
