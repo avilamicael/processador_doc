@@ -107,3 +107,32 @@ def test_openai_key_optional_defaults_to_none(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     settings = _make_settings()
     assert settings.openai_api_key is None
+
+
+def test_stabilization_window_default_in_3_5s_range(monkeypatch):
+    # D-04 / A2: default sensível ~3-5s para cópias lentas em rede.
+    monkeypatch.delenv("STABILIZATION_WINDOW_SECONDS", raising=False)
+    settings = _make_settings()
+    assert 3.0 <= settings.stabilization_window_seconds <= 5.0
+
+
+def test_stabilization_window_overridden_by_env(monkeypatch):
+    monkeypatch.setenv("STABILIZATION_WINDOW_SECONDS", "12.5")
+    settings = _make_settings()
+    assert settings.stabilization_window_seconds == 12.5
+
+
+def test_queue_tunables_have_sensible_defaults(monkeypatch):
+    # Tunables consumidos pelo Plano 03 (worker/fila) — defaults globais.
+    for var in (
+        "QUEUE_POLL_INTERVAL_SECONDS",
+        "QUEUE_MAX_ATTEMPTS",
+        "QUEUE_BACKOFF_BASE_SECONDS",
+        "QUEUE_BACKOFF_MAX_SECONDS",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    settings = _make_settings()
+    assert settings.queue_poll_interval_seconds > 0
+    assert settings.queue_max_attempts >= 1
+    assert settings.queue_backoff_base_seconds > 1.0
+    assert settings.queue_backoff_max_seconds >= settings.queue_backoff_base_seconds
