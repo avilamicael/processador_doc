@@ -23,6 +23,7 @@ from sqlalchemy import text
 
 from app import __version__
 from app.api import documents as documents_api
+from app.api import templates as templates_api
 from app.api import watched_folders as watched_folders_api
 from app.config import ensure_data_dir, get_settings
 from app.ingest.watcher import run_watcher
@@ -77,6 +78,7 @@ app = FastAPI(
 # API fina consumida pela UI (Plano 05): CRUD de pastas + documentos/rescan.
 app.include_router(watched_folders_api.router)
 app.include_router(documents_api.router)
+app.include_router(templates_api.router)
 
 
 @app.get("/health")
