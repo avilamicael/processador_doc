@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Phase 5 context gathered
-last_updated: "2026-06-16T23:20:32.684Z"
+stopped_at: Phase 5 UI-SPEC approved
+last_updated: "2026-06-16T23:31:12.740Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 8
@@ -133,6 +133,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T23:20:32.675Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-confian-a-revis-o-humana-e-quarentena/05-CONTEXT.md
+Last session: 2026-06-16T23:31:12.733Z
+Stopped at: Phase 5 UI-SPEC approved
+Resume file: .planning/phases/05-confian-a-revis-o-humana-e-quarentena/05-UI-SPEC.md
