@@ -1,7 +1,7 @@
 ---
 phase: 2
 slug: ingest-o-e-fila-ass-ncrona
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-15
@@ -25,6 +25,11 @@ Only TWO screens are in scope for this phase. Everything else in the mock (Templ
 | 2 | **Configurações → Pastas monitoradas** | `frontend/src/pages/ConfigPage.tsx` (`PastasTab`) | CRUD of watched folders (path + per-folder page-split rule), persisted to DB. |
 
 The shell (sidebar, header, theme toggle, watcher status box) already exists and is **locked** — do not redesign it.
+
+### Focal point per screen
+
+- **Documentos:** the **`table.docs` document list (inside its `.card`) is the primary visual anchor and focal point** — it is where the user watches documents enter the queue and change state. The four `.stat-card` counters and the toolbar status chips are secondary supporting elements (overview + filter), never competing with the table for attention. Loading, empty, and error states all render *inside* this table card so the focal point stays constant.
+- **Configurações → Pastas monitoradas:** the **watched-folders list (`.folder-row` items inside the `.card`) is the focal point**; the "Adicionar pasta" primary button is the single dominant action.
 
 ---
 
@@ -62,16 +67,17 @@ Exceptions (inherited from locked design — keep, do not "fix"): `--row-py: 13p
 
 ## Typography
 
-Transcribed from existing classes. The design uses several sizes; the four canonical roles below cover all NEW Phase-2 content. Existing classes already encode these — reuse the class, do not restyle.
+Transcribed from existing classes. The canonical roles below cover all NEW Phase-2 content. Existing classes already encode these — reuse the class, do not restyle. Each role maps to one explicit size (the locked design has two distinct heading sizes, listed separately to avoid ambiguity).
 
 | Role | Size | Weight | Line Height | Existing class / token |
 |------|------|--------|-------------|------------------------|
 | Body | 13px | 500 (medium) | 1.5 | table cells, `.btn-*`, `.search-input`, `.sec-desc` (13px) |
 | Label | 11px | 600–700 | 1.3 | `table.docs th` (11px/600 uppercase), `.stat-label` (12px/600), `.nav-group` (10.5px/700) |
-| Heading | 15–16px | 700 | 1.2 | `.page-title` (16px/700), `.sec-title` (15px/700) |
-| Display | 27px | 700 | 1.1 | `.stat-num` (27px/700, mono) — used for stat-card counts |
+| Heading (page title) | 16px | 700 | 1.2 | `.page-title` (16px/700) — header bar page title |
+| Heading (section title) | 15px | 700 | 1.2 | `.sec-title` (15px/700) — in-page section/card titles |
+| Display | 27px | 700 | 1.1 | `.stat-num` (27px/700, mono) — stat-card counts |
 
-Weights in use: **500 (medium)** and **600–700 (semibold/bold)**. Body line-height 1.5; heading/display tighter (1.1–1.25). Mono font (`--font-mono`) for: file names (`.file-name` 12.5px), paths (`.folder-path` 13px), counts (`.chip-count`, `.stat-num`), file sizes (`.cell-mono`).
+Weights in use: **500 (medium)** and **600–700 (semibold/bold)** — two weight bands only. Body line-height 1.5; headings/display tighter (1.1–1.2). Mono font (`--font-mono`) for: file names (`.file-name` 12.5px), paths (`.folder-path` 13px), counts (`.chip-count`, `.stat-num`), file sizes (`.cell-mono`).
 
 ---
 
@@ -135,7 +141,9 @@ All copy in **Portuguese (pt-BR)**, matching the existing UI.
 | Error state — documents | **Não foi possível carregar os documentos.** Verifique se o serviço está em execução e tente novamente. [**Tentar novamente**] |
 | Error state — folder save | **Não foi possível salvar a pasta.** Confira o caminho e tente novamente. (inline, near the form) |
 | Duplicate indicator | **{n} duplicado{s} ignorado{s}** (e.g. "3 duplicados ignorados") with `title`/tooltip: "Arquivos com conteúdo idêntico a documentos já ingeridos não são reprocessados." |
-| Destructive confirmation — remove folder | Remover pasta: **Remover "{caminho}" do monitoramento? Os documentos já ingeridos permanecem; apenas o monitoramento desta pasta para.** [Cancelar] [**Remover**] |
+| Destructive confirmation — remove folder | Remover pasta: **Remover "{caminho}" do monitoramento? Os documentos já ingeridos permanecem; apenas o monitoramento desta pasta para.** [Manter pasta] [**Remover**] |
+
+> Destructive-confirm button labels are intentionally specific (no bare "Cancelar"/"OK"): the dismiss action is **"Manter pasta"** (states the safe outcome) and the confirm action is **"Remover"** (states the destructive verb), rendered with `--st-erro`.
 
 ### Field labels & helper text — Folder add/edit form
 
@@ -159,7 +167,7 @@ All copy in **Portuguese (pt-BR)**, matching the existing UI.
 - **Columns in scope (v1):** Arquivo (mono name + `docMini` icon), Pasta de origem (mono path), Status (pill, real domain state), Tamanho (mono), Data. **Remove/hide:** Tipo, Template, Responsável (later phases / removed from v1 — README). Row actions: keep visual but only wire what exists this phase (no extraction/automation actions); a non-functional action must be hidden, not shown disabled with no purpose.
 - **Status chips/filters:** relabel chip set to real domain states (Na fila / Processando / Aguardando extração / Falha). Counts come from the backend. "Forçar varredura" triggers a manual rescan endpoint; show it as `.btn-primary` with `refresh` icon (existing).
 - **Duplicate indicator placement:** a single, unobtrusive element — recommended in the `.table-foot` or as a `.badge`-style chip near the toolbar — using `--text-3` neutral treatment (NOT accent, NOT error; ignored duplicates are normal/routine per D-03/D-10). Must not be styled as an alert.
-- **Empty state:** when zero documents, render the empty-state copy centered inside the table card body (replace `<tbody>` rows), not a blank table.
+- **Empty state:** when zero documents, render the empty-state copy centered inside the table card body (replace `<tbody>` rows), not a blank table — keeping the table card as the constant focal point.
 
 ### Configurações → Pastas monitoradas (CRUD)
 
@@ -188,11 +196,11 @@ No component registries are used. No third-party blocks enter the codebase this 
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-06-15
