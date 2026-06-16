@@ -74,9 +74,7 @@ async def test_escrita_incremental_reinicia_contagem(tmp_path: Path) -> None:
     assert p.stat().st_size == 1 + 4
 
 
-async def test_usa_janela_da_config_quando_window_none(
-    tmp_path: Path, monkeypatch
-) -> None:
+async def test_usa_janela_da_config_quando_window_none(tmp_path: Path, monkeypatch) -> None:
     # window_s=None deve ler de get_settings().stabilization_window_seconds.
     import app.ingest.stabilizer as stab
 
