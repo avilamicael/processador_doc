@@ -11,8 +11,8 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 - [ ] **ING-02**: Sistema processa automaticamente arquivos colocados em pasta(s) monitorada(s) (hot folder) — único caminho de ingestão no v1 — só após o arquivo estar estável (não processar arquivo parcialmente escrito); o usuário pode configurar múltiplas pastas pela interface
 - [ ] **ING-04**: Sistema aceita PDF e formatos de imagem comuns (JPG, PNG) como entrada
-- [ ] **ING-05**: Sistema separa um documento multi-página em blocos pela quantidade de páginas configurada pelo usuário, por pasta monitorada (cada bloco vira um documento independente)
-- [ ] **ING-06**: Sistema deduplica por hash, evitando reprocessar e cobrar o mesmo arquivo duas vezes
+- [x] **ING-05**: Sistema separa um documento multi-página em blocos pela quantidade de páginas configurada pelo usuário, por pasta monitorada (cada bloco vira um documento independente)
+- [x] **ING-06**: Sistema deduplica por hash, evitando reprocessar e cobrar o mesmo arquivo duas vezes
 
 > **Nota de escopo (2026-06-15):** ING-01 (upload manual) e ING-03 (lote por linha de comando) foram removidos do v1 — ingestão é exclusivamente por pasta monitorada. Movidos para v2 (ver ING2). Decisão capturada em `phases/02-ingest-o-e-fila-ass-ncrona/02-CONTEXT.md`.
 
@@ -51,8 +51,8 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 ### Processamento (PROC)
 
 - [x] **PROC-01**: Cada documento percorre uma máquina de estados explícita persistida (recebido → … → aplicado, com estados de revisão/quarentena/falha)
-- [ ] **PROC-02**: Processamento roda numa fila assíncrona com worker em background, com retry e backoff (lida com lotes e rate limit da OpenAI)
-- [ ] **PROC-03**: Fila é idempotente (chave por hash + etapa), impedindo reexecução de etapa concluída e cobrança dupla
+- [x] **PROC-02**: Processamento roda numa fila assíncrona com worker em background, com retry e backoff (lida com lotes e rate limit da OpenAI)
+- [x] **PROC-03**: Fila é idempotente (chave por hash + etapa), impedindo reexecução de etapa concluída e cobrança dupla
 
 ### IA & Cobrança (USE)
 
@@ -128,8 +128,8 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | ING-02 | Phase 2 | Pending |
 | ING-03 | — | Removido do v1 → v2 (ING2-02) |
 | ING-04 | Phase 2 | Pending |
-| ING-05 | Phase 2 | Pending |
-| ING-06 | Phase 2 | Pending |
+| ING-05 | Phase 2 | Complete |
+| ING-06 | Phase 2 | Complete |
 | EXT-01 | Phase 3 | Pending |
 | EXT-02 | Phase 3 | Pending |
 | EXT-03 | Phase 7 | Pending |
@@ -151,8 +151,8 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | AUT-05 | Phase 6 | Pending |
 | AUT-06 | Phase 6 | Pending |
 | PROC-01 | Phase 1 | Complete |
-| PROC-02 | Phase 2 | Pending |
-| PROC-03 | Phase 2 | Pending |
+| PROC-02 | Phase 2 | Complete |
+| PROC-03 | Phase 2 | Complete |
 | USE-01 | Phase 1 | Complete (01-01) |
 | USE-02 | Phase 3 | Pending |
 | DIST-01 | Phase 1 | Complete |

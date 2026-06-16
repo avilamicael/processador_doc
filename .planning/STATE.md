@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
+status: executing
 stopped_at: Phase 2 planned (5 plans, verified)
-last_updated: "2026-06-16T00:45:39.834Z"
-last_activity: 2026-06-15
+last_updated: "2026-06-16T00:55:29.266Z"
+last_activity: 2026-06-16
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 9
-  completed_plans: 4
+  completed_plans: 5
   percent: 13
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-15)
 
 **Core value:** Transformar uma pilha de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados corretamente de forma automática e confiável — sem o usuário perder arquivos nem confiar cegamente na IA.
-**Current focus:** Phase 2 — Ingestão e Fila Assíncrona (a planejar)
+**Current focus:** Phase 02 — ingest-o-e-fila-ass-ncrona
 
 ## Current Position
 
-Phase: 2 of 8 (Ingestão e Fila Assíncrona)
-Plan: Not started
-Status: Fase 1 concluída e verificada — pronta para planejar a Fase 2
-Last activity: 2026-06-15
+Phase: 02 (ingest-o-e-fila-ass-ncrona) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-06-16
 
 Progress: [█░░░░░░░░░] 13%
 
@@ -52,6 +52,7 @@ Progress: [█░░░░░░░░░] 13%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 02 P01 | 12 | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,7 @@ Recent decisions affecting current work:
 - [01-02]: Alembic desde o dia 1 — schema versionado (0001_initial), URL/metadata da app, render_as_batch; nenhum create_all em produção (D-10).
 - [01-03]: CAS imutável endereçado por SHA-256 dentro da pasta de dados única (data_dir/cas) — store copia preservando o original (D-07), recuperável por hash para sempre (D-08), idempotente por conteúdo; escrita atômica via temporário + os.replace, sem delete/update.
 - [Phase ?]: [01-04]: Máquina de estados explícita — TRANSITIONS allowlist (D-04) + transition() valida antes de atribuir e faz rollback em transição inválida, mantendo o estado persistido intacto (D-06); mark_step avança só o marcador interno (D-05). Auto-laços X->X inválidos por desenho.
+- [Phase ?]: [02-01]: Substrato de schema da Fase 2 — jobs (fila durável, UNIQUE(original_hash, step) = idempotência PROC-03), ingested_originals (original_hash unique = gate de dedup D-09), watched_folders (D-02); coluna documents.origin_original_id; migração 0002 recria o trigger updated_at após batch recreate.
 
 ### Pending Todos
 
@@ -94,6 +96,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T00:45:39.826Z
+Last session: 2026-06-16T00:55:24.499Z
 Stopped at: Phase 2 planned (5 plans, verified)
-Resume file: .planning/phases/02-ingest-o-e-fila-ass-ncrona/02-01-PLAN.md
+Resume file: None

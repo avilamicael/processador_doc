@@ -71,7 +71,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Schema da fila/dedup/pastas (3 tabelas + origin_original_id) via Alembic 0002 + deps (watchfiles/pikepdf) + esqueletos Wave 0
+- [x] 02-01-PLAN.md — Schema da fila/dedup/pastas (3 tabelas + origin_original_id) via Alembic 0002 + deps (watchfiles/pikepdf) + esqueletos Wave 0
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -187,7 +187,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fundação de Estado e Storage | 4/4 | Complete    | 2026-06-15 |
-| 2. Ingestão e Fila Assíncrona | 0/5 | Not started | - |
+| 2. Ingestão e Fila Assíncrona | 1/5 | In Progress|  |
 | 3. Extração Genérica via IA e Medição de Tokens | 0/TBD | Not started | - |
 | 4. Templates, Sub-templates e Classificação | 0/TBD | Not started | - |
 | 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |
