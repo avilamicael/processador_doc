@@ -8,7 +8,6 @@
 
 from app.validation.fields import FieldValidation, validate_field
 
-
 # --- despacho por tipo + normalização (D-11 guarda bruto + normalizado) ---
 
 
