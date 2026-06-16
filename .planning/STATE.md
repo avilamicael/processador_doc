@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: Phase 3 context gathered
-last_updated: "2026-06-16T16:20:35.229Z"
+last_updated: "2026-06-16T16:28:18.581Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 13
-  completed_plans: 12
-  percent: 25
+  completed_plans: 13
+  percent: 38
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 
 Phase: 03 (extra-o-gen-rica-via-ia-e-medi-o-de-tokens) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-16
 
 Progress: [█░░░░░░░░░] 13%
@@ -61,6 +61,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 03 P01 | 18 | 3 tasks | 14 files |
 | Phase 03 P02 | 9 | 3 tasks | 6 files |
 | Phase 03 P03 | 14 | 2 tasks | 5 files |
+| Phase 03 P04 | 12 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,7 @@ Recent decisions affecting current work:
 - [03-01]: Scaffold de testes da extração mocka a OpenAI via respx em POST /v1/responses com JSON real da Responses API (output_parsed válido + variante de recusa output_parsed is None), sem gastar token — base reusável dos Plans 02-04.
 - [Phase ?]: [03-02]: Três primitivas de extração como funções de módulo atrás de interface — pdf_io (magic bytes + heurística texto-vs-visão + render PNG), router.choose (seam D-03 plugável: Fases 4/7 plugam atalho local custo-zero), openai_client (Responses API + Structured Outputs, recusa→ExtractionRefused, ExtractionUsage mapeia input→prompt/output→completion). Chave nunca logada (testado).
 - [Phase ?]: [03-03]: extract_stage liga CAS→router(D-03)→pdf_io→openai_client→persistência num commit ÚNICO (Extraction+Usage(step=extract)+marcador 'extraido'); idempotência checa Extraction existente ANTES da chamada paga (called_ai=False=no-op, não re-cobra); estado via set-em-memória do marcador (NÃO mark_step/transition) mantendo state=PROCESSANDO (D-07); só PyMuPDF em asyncio.to_thread, OpenAI await direto; recusa/PDF malformado propagam ao worker sem corromper estado.
+- [Phase ?]: [03-04]: Worker bifurca dispatch por step — extract roda como coroutine (await extract_stage no loop, Pitfall 1 async-vs-thread), ingest segue em to_thread; FALHA roteada por content_hash do bloco (Pitfall 2); AuthenticationError não-retryável (dead-letter imediato, T-03-14); sweep idempotente no startup (enqueue_pending_extractions) enfileira extract p/ blocos aguardando_extracao sem job, cobrindo legados da Fase 2 sem quebrar a atomicidade do ingest. Pipeline ingest→extract completo end-to-end.
 
 ### Pending Todos
 
@@ -116,6 +118,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T16:17:53.775Z
+Last session: 2026-06-16T16:28:03.795Z
 Stopped at: Phase 3 context gathered
 Resume file: None

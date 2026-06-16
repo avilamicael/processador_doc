@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Fundação de Estado e Storage** - Máquina de estados persistida, CAS por hash, migrações Alembic e base Windows single-tenant (completed 2026-06-15)
 - [x] **Phase 2: Ingestão e Fila Assíncrona** - Pasta(s) monitorada(s) com separação por pasta, dedup por hash e fila in-process idempotente com retry (completed 2026-06-16)
-- [ ] **Phase 3: Extração Genérica via IA e Medição de Tokens** - Núcleo do motor: extração por IA dirigida pelo template (qualquer tipo) + texto nativo + medição de uso
+- [x] **Phase 3: Extração Genérica via IA e Medição de Tokens** - Núcleo do motor: extração por IA dirigida pelo template (qualquer tipo) + texto nativo + medição de uso (completed 2026-06-16)
 - [ ] **Phase 4: Templates, Sub-templates e Classificação** - Construtor schema-first de templates e classificação automática contra eles
 - [ ] **Phase 5: Confiança, Revisão Humana e Quarentena** - Score de confiança determinístico, limiar, fila de revisão lado-a-lado e quarentena visível
 - [ ] **Phase 6: Automações de Arquivo (Renomear/Mover)** - Renomear/mover por tokens com dry-run, audit log write-ahead, anti-colisão e undo
@@ -119,7 +119,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 03-04-PLAN.md — Wiring na fila: dispatch por step (extract no loop, ingest em thread) + FALHA por content_hash + sweep idempotente de enqueue de extract
+- [x] 03-04-PLAN.md — Wiring na fila: dispatch por step (extract no loop, ingest em thread) + FALHA por content_hash + sweep idempotente de enqueue de extract
 
 ### Phase 4: Templates, Sub-templates e Classificação
 
@@ -207,7 +207,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Fundação de Estado e Storage | 4/4 | Complete    | 2026-06-15 |
 | 2. Ingestão e Fila Assíncrona | 5/5 | Complete    | 2026-06-16 |
-| 3. Extração Genérica via IA e Medição de Tokens | 3/4 | In Progress|  |
+| 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete   | 2026-06-16 |
 | 4. Templates, Sub-templates e Classificação | 0/TBD | Not started | - |
 | 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |
 | 6. Automações de Arquivo (Renomear/Mover) | 0/TBD | Not started | - |
