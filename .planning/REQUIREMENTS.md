@@ -19,7 +19,7 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 ### Extração (EXT)
 
 - [ ] **EXT-01**: Sistema extrai texto nativo de PDFs localmente, sem custo de IA, quando o PDF tem texto
-- [ ] **EXT-02**: Sistema extrai dados de qualquer tipo de documento via IA (OpenAI), dirigido pelos campos do template (caminho principal, inclui imagens e PDFs escaneados)
+- [x] **EXT-02**: Sistema extrai dados de qualquer tipo de documento via IA (OpenAI), dirigido pelos campos do template (caminho principal, inclui imagens e PDFs escaneados)
 - [ ] **EXT-03**: Sistema roteia a extração na ordem: determinístico (quando aplicável) → texto nativo local → IA, mandando à IA só o que não foi resolvido localmente
 - [ ] **EXT-04**: IA retorna dados em formato estruturado (JSON Schema derivado do template), com validações de campo configuráveis
 - [ ] **EXT-05**: (Módulo opcional) Sistema extrai dados de tipos conhecidos sem IA quando presentes — boleto via linha digitável/código de barras e NF-e via chave de 44 dígitos/XML — com validação de dígito verificador
@@ -57,7 +57,7 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 ### IA & Cobrança (USE)
 
 - [x] **USE-01**: Cada instância usa uma chave OpenAI por cliente (provisionada pelo fornecedor); o cliente é responsável pelo consumo
-- [ ] **USE-02**: Sistema mede e registra o uso de tokens/chamadas por documento, para apoiar a cobrança por consumo
+- [x] **USE-02**: Sistema mede e registra o uso de tokens/chamadas por documento, para apoiar a cobrança por consumo
 
 ### Distribuição & Atualização (DIST)
 
@@ -131,7 +131,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | ING-05 | Phase 2 | Complete |
 | ING-06 | Phase 2 | Complete |
 | EXT-01 | Phase 3 | Pending |
-| EXT-02 | Phase 3 | Pending |
+| EXT-02 | Phase 3 | Complete |
 | EXT-03 | Phase 7 | Pending |
 | EXT-04 | Phase 4 | Pending (re-escopado da Fase 3 → Fase 4 em 2026-06-16) |
 | EXT-05 | Phase 7 | Pending |
@@ -154,7 +154,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | PROC-02 | Phase 2 | Complete |
 | PROC-03 | Phase 2 | Complete |
 | USE-01 | Phase 1 | Complete (01-01) |
-| USE-02 | Phase 3 | Pending |
+| USE-02 | Phase 3 | Complete |
 | DIST-01 | Phase 1 | Complete |
 | DIST-02 | Phase 1 | Complete |
 | DIST-03 | Phase 8 | Pending |

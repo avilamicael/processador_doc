@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-06-16T15:51:32.581Z"
-last_activity: 2026-06-16 -- Phase 3 planning complete
+last_updated: "2026-06-16T16:01:53.998Z"
+last_activity: 2026-06-16
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 13
-  completed_plans: 9
+  completed_plans: 10
   percent: 25
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-15)
 
 **Core value:** Transformar uma pilha de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados corretamente de forma automática e confiável — sem o usuário perder arquivos nem confiar cegamente na IA.
-**Current focus:** Phase 02 — ingest-o-e-fila-ass-ncrona
+**Current focus:** Phase 03 — extra-o-gen-rica-via-ia-e-medi-o-de-tokens
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
+Phase: 03 (extra-o-gen-rica-via-ia-e-medi-o-de-tokens) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-06-16 -- Phase 3 planning complete
+Last activity: 2026-06-16
 
 Progress: [█░░░░░░░░░] 13%
 
@@ -58,6 +58,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 02 P03 | 18 | 3 tasks | 9 files |
 | Phase 02 P04 | 5 | 3 tasks | 8 files |
 | Phase 02 P05 | 8 | 3 tasks | 10 files |
+| Phase 03 P01 | 18 | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [02-04]: Lifespan sobe watcher+worker como asyncio.Task e encerra limpo (stop→cancel→gather) preservando check WAL; requer uvicorn --workers 1 (T-02-12). API de pastas valida path com Path.resolve (T-02-10); DELETE preserva Documents (D-03).
 - [Phase ?]: [02-05]: Frontend fiado à API real — TanStack Query 5.101 + cliente fetch tipado; polling 4s com placeholderData=prev (sem flicker); StatusPill mapeia estados de domínio reais (Aguardando extração, nunca Tratado nesta fase).
 - [Phase ?]: [02-05]: Cadastro de pasta mantido por caminho absoluto via texto (decisão do usuário na verificação visual); seletor visual/normalização de aspas/validação de existência adiados para a fase desktop — fora de escopo.
+- [03-01]: Schema genérico de extração modelado como list-of-pairs (ExtractionResult.fields: list[ExtractedField]), NUNCA dict aberto — strict mode dos Structured Outputs rejeita additionalProperties:true; descriptions Pydantic guiam o modelo, sem validação de domínio (Fase 4).
+- [03-01]: Tabela extractions (Alembic 0003) com UNIQUE(document_id) = 1 extração por bloco = idempotência (não re-chamar/re-cobrar a IA); migração só cria a tabela e não toca documents, logo não recria o trigger trg_documents_updated_at.
+- [03-01]: Scaffold de testes da extração mocka a OpenAI via respx em POST /v1/responses com JSON real da Responses API (output_parsed válido + variante de recusa output_parsed is None), sem gastar token — base reusável dos Plans 02-04.
 
 ### Pending Todos
 
@@ -108,6 +112,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T14:51:51.316Z
+Last session: 2026-06-16T16:01:34.616Z
 Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-extra-o-gen-rica-via-ia-e-medi-o-de-tokens/03-CONTEXT.md
+Resume file: None
