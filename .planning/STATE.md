@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 2 planned (5 plans, verified)
-last_updated: "2026-06-16T00:55:29.266Z"
+last_updated: "2026-06-16T01:01:21.414Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 9
-  completed_plans: 5
+  completed_plans: 6
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 ## Current Position
 
 Phase: 02 (ingest-o-e-fila-ass-ncrona) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-06-16
 
@@ -53,6 +53,7 @@ Progress: [█░░░░░░░░░] 13%
 
 *Updated after each plan completion*
 | Phase 02 P01 | 12 | 3 tasks | 17 files |
+| Phase 02 P02 | 3 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,7 @@ Recent decisions affecting current work:
 - [01-03]: CAS imutável endereçado por SHA-256 dentro da pasta de dados única (data_dir/cas) — store copia preservando o original (D-07), recuperável por hash para sempre (D-08), idempotente por conteúdo; escrita atômica via temporário + os.replace, sem delete/update.
 - [Phase ?]: [01-04]: Máquina de estados explícita — TRANSITIONS allowlist (D-04) + transition() valida antes de atribuir e faz rollback em transição inválida, mantendo o estado persistido intacto (D-06); mark_step avança só o marcador interno (D-05). Auto-laços X->X inválidos por desenho.
 - [Phase ?]: [02-01]: Substrato de schema da Fase 2 — jobs (fila durável, UNIQUE(original_hash, step) = idempotência PROC-03), ingested_originals (original_hash unique = gate de dedup D-09), watched_folders (D-02); coluna documents.origin_original_id; migração 0002 recria o trigger updated_at após batch recreate.
+- [Phase ?]: [02-02]: Estabilizador por quiescência size/mtime + lock-test Windows (wait_stable) e separador de PDF por N páginas via pikepdf (MPL, não PyMuPDF AGPL); 'não separar' (None/0) = 1 bloco (D-05); PDF malformado vira ValueError controlado (T-02-04); janela de estabilização global default 4.0s configurável (D-04).
 
 ### Pending Todos
 
@@ -96,6 +98,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T00:55:24.499Z
+Last session: 2026-06-16T01:01:05.315Z
 Stopped at: Phase 2 planned (5 plans, verified)
 Resume file: None

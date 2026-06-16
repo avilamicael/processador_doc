@@ -9,8 +9,8 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 ### Ingestão (ING)
 
-- [ ] **ING-02**: Sistema processa automaticamente arquivos colocados em pasta(s) monitorada(s) (hot folder) — único caminho de ingestão no v1 — só após o arquivo estar estável (não processar arquivo parcialmente escrito); o usuário pode configurar múltiplas pastas pela interface
-- [ ] **ING-04**: Sistema aceita PDF e formatos de imagem comuns (JPG, PNG) como entrada
+- [x] **ING-02**: Sistema processa automaticamente arquivos colocados em pasta(s) monitorada(s) (hot folder) — único caminho de ingestão no v1 — só após o arquivo estar estável (não processar arquivo parcialmente escrito); o usuário pode configurar múltiplas pastas pela interface
+- [x] **ING-04**: Sistema aceita PDF e formatos de imagem comuns (JPG, PNG) como entrada
 - [x] **ING-05**: Sistema separa um documento multi-página em blocos pela quantidade de páginas configurada pelo usuário, por pasta monitorada (cada bloco vira um documento independente)
 - [x] **ING-06**: Sistema deduplica por hash, evitando reprocessar e cobrar o mesmo arquivo duas vezes
 
@@ -125,9 +125,9 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | ING-01 | — | Removido do v1 → v2 (ING2-01) |
-| ING-02 | Phase 2 | Pending |
+| ING-02 | Phase 2 | Complete |
 | ING-03 | — | Removido do v1 → v2 (ING2-02) |
-| ING-04 | Phase 2 | Pending |
+| ING-04 | Phase 2 | Complete |
 | ING-05 | Phase 2 | Complete |
 | ING-06 | Phase 2 | Complete |
 | EXT-01 | Phase 3 | Pending |
