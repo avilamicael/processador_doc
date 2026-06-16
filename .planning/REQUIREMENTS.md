@@ -18,7 +18,7 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 ### Extração (EXT)
 
-- [ ] **EXT-01**: Sistema extrai texto nativo de PDFs localmente, sem custo de IA, quando o PDF tem texto
+- [x] **EXT-01**: Sistema extrai texto nativo de PDFs localmente, sem custo de IA, quando o PDF tem texto
 - [x] **EXT-02**: Sistema extrai dados de qualquer tipo de documento via IA (OpenAI), dirigido pelos campos do template (caminho principal, inclui imagens e PDFs escaneados)
 - [ ] **EXT-03**: Sistema roteia a extração na ordem: determinístico (quando aplicável) → texto nativo local → IA, mandando à IA só o que não foi resolvido localmente
 - [ ] **EXT-04**: IA retorna dados em formato estruturado (JSON Schema derivado do template), com validações de campo configuráveis
@@ -130,7 +130,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | ING-04 | Phase 2 | Complete |
 | ING-05 | Phase 2 | Complete |
 | ING-06 | Phase 2 | Complete |
-| EXT-01 | Phase 3 | Pending |
+| EXT-01 | Phase 3 | Complete |
 | EXT-02 | Phase 3 | Complete |
 | EXT-03 | Phase 7 | Pending |
 | EXT-04 | Phase 4 | Pending (re-escopado da Fase 3 → Fase 4 em 2026-06-16) |

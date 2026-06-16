@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-06-16T16:01:53.998Z"
+last_updated: "2026-06-16T16:08:38.457Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 25
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 ## Current Position
 
 Phase: 03 (extra-o-gen-rica-via-ia-e-medi-o-de-tokens) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-06-16
 
@@ -59,6 +59,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 02 P04 | 5 | 3 tasks | 8 files |
 | Phase 02 P05 | 8 | 3 tasks | 10 files |
 | Phase 03 P01 | 18 | 3 tasks | 14 files |
+| Phase 03 P02 | 9 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,7 @@ Recent decisions affecting current work:
 - [03-01]: Schema genérico de extração modelado como list-of-pairs (ExtractionResult.fields: list[ExtractedField]), NUNCA dict aberto — strict mode dos Structured Outputs rejeita additionalProperties:true; descriptions Pydantic guiam o modelo, sem validação de domínio (Fase 4).
 - [03-01]: Tabela extractions (Alembic 0003) com UNIQUE(document_id) = 1 extração por bloco = idempotência (não re-chamar/re-cobrar a IA); migração só cria a tabela e não toca documents, logo não recria o trigger trg_documents_updated_at.
 - [03-01]: Scaffold de testes da extração mocka a OpenAI via respx em POST /v1/responses com JSON real da Responses API (output_parsed válido + variante de recusa output_parsed is None), sem gastar token — base reusável dos Plans 02-04.
+- [Phase ?]: [03-02]: Três primitivas de extração como funções de módulo atrás de interface — pdf_io (magic bytes + heurística texto-vs-visão + render PNG), router.choose (seam D-03 plugável: Fases 4/7 plugam atalho local custo-zero), openai_client (Responses API + Structured Outputs, recusa→ExtractionRefused, ExtractionUsage mapeia input→prompt/output→completion). Chave nunca logada (testado).
 
 ### Pending Todos
 
@@ -112,6 +114,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-16T16:01:34.616Z
+Last session: 2026-06-16T16:08:33.813Z
 Stopped at: Phase 3 context gathered
 Resume file: None
