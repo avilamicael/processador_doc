@@ -24,6 +24,7 @@ from app.storage.db import Base
 
 if TYPE_CHECKING:
     from app.models.audit_log import AuditLog
+    from app.models.classification import ClassificationResult
     from app.models.extraction import Extraction
     from app.models.page import Page
     from app.models.usage import Usage
@@ -100,5 +101,10 @@ class Document(Base):
     )
     # 1:1 (UNIQUE em extractions.document_id): no máximo uma extração por bloco.
     extraction: Mapped["Extraction | None"] = relationship(
+        back_populates="document", cascade="all, delete-orphan", uselist=False
+    )
+    # 1:1 (UNIQUE em classification_results.document_id): no máximo uma
+    # classificação por bloco (Fase 4) — rede contra double-charge (Pitfall 2).
+    classification: Mapped["ClassificationResult | None"] = relationship(
         back_populates="document", cascade="all, delete-orphan", uselist=False
     )
