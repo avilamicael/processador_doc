@@ -13,6 +13,8 @@ dependencies = [
     "alembic==1.18.4",
     "watchfiles==1.2.0",
     "pikepdf==10.8.0",
+    "openai==2.41.*",
+    "pymupdf==1.27.*",
 ]
 
 [dependency-groups]
@@ -21,6 +23,7 @@ dev = [
     "pytest-asyncio",
     "ruff",
     "httpx",
+    "respx>=0.23.1",
 ]
 
 [build-system]

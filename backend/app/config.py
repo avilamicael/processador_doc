@@ -85,6 +85,52 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("QUEUE_BACKOFF_MAX_SECONDS", "queue_backoff_max_seconds"),
     )
 
+    # Tunables da extração via IA (Fase 3) — mesmo padrão dos queue_* (lidos de env
+    # sem deploy). A chave OpenAI continua em `openai_api_key` (SecretStr) acima;
+    # estes são parâmetros NÃO-secretos do motor de extração.
+    #
+    # `openai_extract_model`: o IMPLEMENTADOR deve CONFIRMAR o modelo vigente na
+    # conta no momento da implementação (modelos giram rápido, D-04). Precisa
+    # suportar visão (input_image) + Structured Outputs (text_format Pydantic).
+    openai_extract_model: str = Field(
+        default="gpt-4o-2024-08-06",
+        validation_alias=AliasChoices("OPENAI_EXTRACT_MODEL", "openai_extract_model"),
+    )
+    # Extração é determinística (queremos os MESMOS dados, não criatividade) →
+    # temperatura 0.0 reduz variância entre execuções (base estável p/ Fases 4/7, D-06).
+    openai_extract_temperature: float = Field(
+        default=0.0,
+        validation_alias=AliasChoices(
+            "OPENAI_EXTRACT_TEMPERATURE", "openai_extract_temperature"
+        ),
+    )
+    # Teto explícito de tokens de saída (Pitfall 3/6): sem limite, uma extração que
+    # "viaja" gasta milhares de tokens — e a saída inclui o full_text. Dimensionar
+    # com folga; ajustar por observação dos `usage` reais.
+    openai_extract_max_output_tokens: int = Field(
+        default=4096,
+        validation_alias=AliasChoices(
+            "OPENAI_EXTRACT_MAX_OUTPUT_TOKENS", "openai_extract_max_output_tokens"
+        ),
+    )
+    # Alavanca de custo do caminho visão (Pitfall 4 / D-04): "high" lê dígitos finos
+    # de scans ruins de forma confiável mas custa mais; "low" é ~85 tokens fixos.
+    openai_extract_image_detail: str = Field(
+        default="high",
+        validation_alias=AliasChoices(
+            "OPENAI_EXTRACT_IMAGE_DETAIL", "openai_extract_image_detail"
+        ),
+    )
+    # Limiar da heurística texto-vs-visão: mínimo de caracteres nativos por página
+    # para considerar o PDF "tem texto suficiente" (caminho barato). ~16 é um ponto
+    # de partida razoável; calibrar por observação dos documentos reais do cliente.
+    openai_extract_min_chars_per_page: int = Field(
+        default=16,
+        validation_alias=AliasChoices(
+            "OPENAI_EXTRACT_MIN_CHARS_PER_PAGE", "openai_extract_min_chars_per_page"
+        ),
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_dir(self) -> Path:
