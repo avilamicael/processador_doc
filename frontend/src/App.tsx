@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from 'react'
 import { useEffect, useState } from 'react'
 import type { ConfigTab, Page, StatusFilter } from './types'
 import { Sidebar } from './components/Sidebar'
@@ -29,7 +30,6 @@ export default function App() {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<number[]>([])
   const [watcher, setWatcher] = useState(true)
-  const [folderState, setFolderState] = useState<Record<number, boolean>>({ 1: true, 2: true, 3: true, 4: false })
   const [ruleState, setRuleState] = useState<Record<number, boolean>>({ 1: true, 2: false, 3: true, 4: true })
   const [autoState, setAutoState] = useState<Record<number, boolean>>({ 1: true, 2: true, 3: true, 4: false, 5: true })
   const [deskew, setDeskew] = useState(true)
@@ -45,8 +45,10 @@ export default function App() {
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
   const toggleAll = (ids: number[]) =>
     setSelected((s) => (s.length === ids.length ? [] : ids.slice()))
-  const toggleIn = (set: typeof setFolderState, id: number) =>
-    set((s) => ({ ...s, [id]: !s[id] }))
+  const toggleIn = (
+    set: Dispatch<SetStateAction<Record<number, boolean>>>,
+    id: number,
+  ) => set((s) => ({ ...s, [id]: !s[id] }))
 
   const [title, desc] = PAGE_META[page]
 
@@ -79,8 +81,6 @@ export default function App() {
               onTab={setConfigTab}
               watcher={watcher}
               onToggleWatcher={() => setWatcher((w) => !w)}
-              folderState={folderState}
-              onToggleFolder={(id) => toggleIn(setFolderState, id)}
               ruleState={ruleState}
               onToggleRule={(id) => toggleIn(setRuleState, id)}
               deskew={deskew}
