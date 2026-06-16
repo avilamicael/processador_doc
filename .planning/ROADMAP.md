@@ -91,29 +91,48 @@ Plans:
 
 ### Phase 3: Extração Genérica via IA e Medição de Tokens
 
-**Goal**: O sistema extrai, para qualquer tipo de documento, os campos definidos no template usando a IA da OpenAI (caminho principal), aproveitando texto nativo local quando disponível, e mede o consumo de tokens por documento para a cobrança.
+**Goal**: O sistema extrai, para qualquer tipo de documento (incluindo imagens e PDFs escaneados), os dados que encontrar via IA da OpenAI de forma **genérica** (não dirigida por template), aproveitando texto nativo local quando disponível, e mede o consumo de tokens por documento para a cobrança.
 **Depends on**: Phase 2
-**Requirements**: EXT-01, EXT-02, EXT-04
+**Requirements**: EXT-01, EXT-02, USE-02
 **Success Criteria** (what must be TRUE):
 
-  1. O sistema extrai os campos pedidos de um documento de qualquer tipo (incluindo imagens e PDFs escaneados) via IA dirigida pela definição de campos do template
-  2. A IA retorna os dados em formato estruturado conforme um JSON Schema derivado do template, e validações de campo configuráveis são aplicadas ao resultado
+  1. O sistema extrai os dados de um documento de qualquer tipo (incluindo imagens e PDFs escaneados) via IA, devolvendo pares `dado→valor`, o texto integral e um palpite de tipo de documento
+  2. A IA retorna os dados em formato estruturado conforme um JSON Schema **genérico** (Structured Outputs), persistido junto com o texto nativo como base para os templates/classificação da Fase 4
   3. Quando o PDF já tem texto nativo, o sistema extrai esse texto localmente sem custo de IA
   4. Cada chamada à IA registra os tokens consumidos (prompt + completion) ligados ao documento, disponíveis para apoiar a cobrança por consumo
 
-**Plans**: TBD
+**Nota de escopo (2026-06-16, discuss-phase)**: **EXT-04** (JSON Schema **derivado do template** + **validações de campo configuráveis**) foi re-escopado da Fase 3 → **Fase 4** — depende de campos de template, que não existem na hora da extração genérica. O critério de sucesso 2 foi ajustado de "schema derivado do template + validações" para "schema genérico estruturado". Análogo ao re-escopo ING-01/ING-03 da Fase 2. Ver `phases/03-extra-o-gen-rica-via-ia-e-medi-o-de-tokens/03-CONTEXT.md` `<domain>`/`<deferred>`.
+
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Fundação: deps (openai/PyMuPDF/respx) + tunables de extração + schema genérico ExtractionResult + modelo Extraction (Alembic 0003) + scaffold de testes respx
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 03-02-PLAN.md — Primitivas: pdf_io (texto nativo/render/magic bytes) + router (seam D-03) + openai_client (Responses API + Structured Outputs + recusa + tokens)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 03-03-PLAN.md — extract_stage async idempotente (commit atômico: Extraction + full_text + Usage + marcador "extraido"); testes de tokens/estado/idempotência
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 03-04-PLAN.md — Wiring na fila: dispatch por step (extract no loop, ingest em thread) + FALHA por content_hash + sweep idempotente de enqueue de extract
 
 ### Phase 4: Templates, Sub-templates e Classificação
 
 **Goal**: O usuário consegue criar, no app, templates schema-first por tipo de documento e sub-templates por cliente/emissor, e o sistema classifica automaticamente cada documento contra eles — mandando para quarentena o que não casa.
 **Depends on**: Phase 3
-**Requirements**: TPL-01, TPL-02, TPL-03, TPL-04
+**Requirements**: TPL-01, TPL-02, TPL-03, TPL-04, EXT-04
 **Success Criteria** (what must be TRUE):
 
   1. O usuário cria um template declarando campos (nome, tipo, validação, dica) por um editor schema-first, sem desenhar zonas visuais
   2. O usuário cria sub-templates por cliente/emissor com campos e automações próprias
   3. Cada documento é classificado automaticamente contra os templates disponíveis (usando IA para contexto)
   4. Um documento que não casa com nenhum template vai para quarentena e nunca some
+  5. A IA retorna dados em formato estruturado conforme um JSON Schema **derivado do template**, com validações de campo configuráveis aplicadas ao resultado (EXT-04, re-escopado da Fase 3 em 2026-06-16)
 
 **Plans**: TBD
 **UI hint**: yes
@@ -188,7 +207,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Fundação de Estado e Storage | 4/4 | Complete    | 2026-06-15 |
 | 2. Ingestão e Fila Assíncrona | 5/5 | Complete    | 2026-06-16 |
-| 3. Extração Genérica via IA e Medição de Tokens | 0/TBD | Not started | - |
+| 3. Extração Genérica via IA e Medição de Tokens | 0/4 | Planned | - |
 | 4. Templates, Sub-templates e Classificação | 0/TBD | Not started | - |
 | 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |
 | 6. Automações de Arquivo (Renomear/Mover) | 0/TBD | Not started | - |

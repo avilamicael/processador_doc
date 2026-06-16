@@ -133,7 +133,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | EXT-01 | Phase 3 | Pending |
 | EXT-02 | Phase 3 | Pending |
 | EXT-03 | Phase 7 | Pending |
-| EXT-04 | Phase 3 | Pending |
+| EXT-04 | Phase 4 | Pending (re-escopado da Fase 3 → Fase 4 em 2026-06-16) |
 | EXT-05 | Phase 7 | Pending |
 | TPL-01 | Phase 4 | Pending |
 | TPL-02 | Phase 4 | Pending |
@@ -174,3 +174,4 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 ---
 *Requirements defined: 2026-06-15*
 *Last updated: 2026-06-15 — Phase 2 discuss: ING-01/ING-03 removidos do v1 (ingestão só por pasta monitorada)*
+*Last updated: 2026-06-16 — Phase 3 discuss: EXT-04 (schema derivado de template + validações de campo) re-escopado Fase 3 → Fase 4 (depende de campos de template)*
