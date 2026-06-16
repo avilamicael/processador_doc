@@ -18,12 +18,28 @@ import pytest
 from httpx import Response as HxResponse
 from sqlalchemy import Engine, select
 
+from app import config
 from app.extraction.openai_client import ExtractionRefused
 from app.extraction.stage import extract_stage
 from app.models import Document, Extraction, Usage
 from app.models.enums import DocState
 from app.storage import cas
 from app.storage.db import get_session
+
+
+@pytest.fixture(autouse=True)
+def _openai_key(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Chave OpenAI fictícia no env (respx mocka o transporte — 0 token).
+
+    Depende de `data_dir` para que ambos `DATA_DIR` e `OPENAI_API_KEY` estejam no
+    env antes de o `get_settings` (com cache limpo) recomputar. Não monkeypatcha
+    `get_settings` em si: o stage lê dele tanto `data_dir` quanto o tunável de
+    extração, então precisamos do Settings real reconstruído com os dois vars.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-stage")
+    config.get_settings.cache_clear()
+    yield
+    config.get_settings.cache_clear()
 
 
 def _seed_document_with_blob(session, blob: bytes, data_dir: Path) -> Document:
@@ -44,7 +60,9 @@ def _seed_document_with_blob(session, blob: bytes, data_dir: Path) -> Document:
         last_completed_step="aguardando_extracao",
     )
     session.add(doc)
-    session.flush()
+    # Commit explícito: `get_session` só auto-commita se houver pendências no exit,
+    # e o `flush` aqui esvaziaria `session.new` — sem commit o seed seria descartado.
+    session.commit()
     return doc
 
 
@@ -59,7 +77,10 @@ async def test_happy_path_texto_nativo_persiste_extraction(
 
         d = fitz.open()
         page = d.new_page()
-        page.insert_text((72, 72), "Nota Fiscal numero 12345 CNPJ 12.345.678/0001-90 Valor 1.234,56")
+        page.insert_text(
+            (72, 72),
+            "Nota Fiscal numero 12345 CNPJ 12.345.678/0001-90 Valor 1.234,56",
+        )
         blob = d.tobytes()
         d.close()
         doc = _seed_document_with_blob(session, blob, data_dir)
@@ -165,16 +186,24 @@ async def test_refusal_propaga_sem_corromper_estado(
 
 
 async def test_pdf_malformado_propaga_excecao_controlada(
-    schema_engine: Engine, data_dir: Path, mock_openai
+    schema_engine: Engine, data_dir: Path
 ) -> None:
-    """PDF malformado: fitz levanta → extract_stage propaga (worker tratará); sem Extraction."""
+    """PDF malformado: fitz levanta → extract_stage propaga (worker tratará); sem Extraction.
+
+    Sem `mock_openai`: a exceção do PyMuPDF ocorre ANTES de qualquer chamada à IA
+    (prova que o erro é local e a IA nunca é tocada num PDF corrompido).
+    """
+    import fitz
+
     blob = b"%PDF-1.7\nconteudo-corrompido-nao-e-um-pdf-valido\n%%EOF"
     with get_session(schema_engine) as session:
         doc = _seed_document_with_blob(session, blob, data_dir)
         content_hash = doc.content_hash
 
     with get_session(schema_engine) as session:
-        with pytest.raises(Exception):  # fitz.FileDataError (subclasse de Exception)
+        # fitz.FileDataError é a exceção concreta que o PyMuPDF levanta num PDF
+        # corrompido; o stage a propaga sem capturar (o worker do Plan 04 trata).
+        with pytest.raises(fitz.FileDataError):
             await extract_stage(session, content_hash=content_hash)
 
     with get_session(schema_engine) as session:
