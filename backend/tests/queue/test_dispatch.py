@@ -112,9 +112,13 @@ def test_dispatch_extract_chama_stage_e_marca_done(
 
 
 def test_dispatch_extract_esgota_retries_leva_documento_a_falha(
-    schema_engine: Engine, data_dir: Path, mock_openai, monkeypatch
+    schema_engine: Engine, data_dir: Path, monkeypatch
 ) -> None:
-    """extract falhando com retries esgotados → Document (por content_hash) a FALHA."""
+    """extract falhando com retries esgotados → Document (por content_hash) a FALHA.
+
+    Sem `mock_openai`: o stage é substituído por um que falha ANTES de qualquer
+    chamada à IA — prova que o caminho de FALHA não depende de tocar a OpenAI.
+    """
     with get_session(schema_engine) as s:
         doc = _seed_block(s, _text_pdf(), data_dir)
         content_hash = doc.content_hash
@@ -149,9 +153,9 @@ def test_dispatch_ingest_inalterado(
     schema_engine: Engine, data_dir: Path, tmp_path: Path
 ) -> None:
     """step='ingest' continua via to_thread (process_ingest); sem regressão."""
-    from app.ingest.hashing import sha256_file
-
     import pikepdf
+
+    from app.ingest.hashing import sha256_file
 
     src = tmp_path / "doc.pdf"
     pdf = pikepdf.Pdf.new()

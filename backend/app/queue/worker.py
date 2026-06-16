@@ -26,9 +26,11 @@ import json
 import logging
 from pathlib import Path
 
+from openai import AuthenticationError
 from sqlalchemy import Engine, select
 
 from app.config import get_settings
+from app.extraction.stage import extract_stage
 from app.models.document import Document
 from app.models.enums import DocState
 from app.models.ingested_original import IngestedOriginal
@@ -38,6 +40,10 @@ from app.queue import repo
 from app.storage.db import get_session
 
 logger = logging.getLogger(__name__)
+
+# Step do job de extração (a fila enfileira (block.content_hash, EXTRACT_STEP)).
+INGEST_STEP = "ingest"
+EXTRACT_STEP = "extract"
 
 
 def _process_job_blocking(engine: Engine, *, original_hash: str, payload: str) -> None:
@@ -95,6 +101,73 @@ def _fail_documents_for_original(engine: Engine, original_hash: str) -> None:
                 )
 
 
+def _fail_document_for_content_hash(engine: Engine, content_hash: str) -> None:
+    """Leva o Document de UM bloco (achado por content_hash) a FALHA.
+
+    Variante de `_fail_documents_for_original` para o job de extract, cuja
+    identidade é o `content_hash` do BLOCO (não o `original_hash` do original —
+    Pitfall 2). Usa SEMPRE `transition` (allowlist PROCESSANDO→FALHA, states.py) —
+    nunca seta `document.state` direto. Tolerante: bloco ausente ou em estado sem
+    aresta para FALHA é ignorado sem corromper o estado (re-tentável depois).
+    """
+    with get_session(engine) as session:
+        doc = session.scalar(
+            select(Document).where(Document.content_hash == content_hash)
+        )
+        if doc is None:
+            return
+        if doc.state == DocState.FALHA:
+            return
+        try:
+            transition(session, doc, DocState.FALHA)
+        except Exception:
+            # Estado sem aresta para FALHA (ex.: CONCLUIDO terminal) — `transition`
+            # já fez rollback, estado intacto. Só registramos metadados.
+            logger.warning(
+                "Não foi possível levar Document %s a FALHA (estado %s)",
+                doc.id,
+                doc.state,
+            )
+
+
+async def _dispatch(engine: Engine, *, step: str, original_hash: str, payload: str) -> None:
+    """Despacha o trabalho real conforme o `step` (Pitfall 1: async-vs-thread).
+
+    - `ingest`: o split é CPU/IO-bound → `asyncio.to_thread(_process_job_blocking)`
+      (inalterado; a thread usa SUA própria sessão).
+    - `extract`: `extract_stage` é uma COROUTINE (chamada OpenAI async) → `await`
+      direto no loop, com sessão própria. NUNCA `asyncio.to_thread` (não há event
+      loop na thread → RuntimeError) nem `asyncio.run` (já estamos num loop). Só o
+      PyMuPDF interno do stage vai a `to_thread`.
+
+    Levanta em falha — o chamador (`_run_once`) captura e roteia para
+    `schedule_retry`/FALHA (o stage NÃO faz retry, D-08).
+    """
+    if step == EXTRACT_STEP:
+        # content_hash do bloco == original_hash do job de extract (Pitfall 2).
+        with get_session(engine) as session:
+            await extract_stage(session, content_hash=original_hash)
+    else:
+        await asyncio.to_thread(
+            _process_job_blocking,
+            engine,
+            original_hash=original_hash,
+            payload=payload,
+        )
+
+
+def _fail_for_step(engine: Engine, *, step: str, original_hash: str) -> None:
+    """Roteia a variante de FALHA por step ao esgotar retries (dead-letter→FALHA).
+
+    `ingest`→Documents do original (por `origin_original_id`); `extract`→Document do
+    bloco (por `content_hash`, Pitfall 2).
+    """
+    if step == EXTRACT_STEP:
+        _fail_document_for_content_hash(engine, original_hash)
+    else:
+        _fail_documents_for_original(engine, original_hash)
+
+
 async def _run_once(engine: Engine) -> bool:
     """Executa UMA iteração do loop: claim→processa→done/backoff. Testável.
 
@@ -108,20 +181,38 @@ async def _run_once(engine: Engine) -> bool:
 
     job_id = row.id
     original_hash = row.original_hash
+    step = row.step
     attempts = row.attempts
     max_attempts = row.max_attempts
 
     try:
-        # Split é CPU/IO-bound → thread separada para não bloquear o event loop
-        # (Pitfall 4 / T-02-09). A thread usa sua própria sessão.
-        await asyncio.to_thread(
-            _process_job_blocking,
-            engine,
-            original_hash=original_hash,
-            payload=row.payload,
+        # Dispatch bifurcado por step (Pitfall 1): ingest→to_thread; extract→await
+        # coroutine no loop. Cada caminho abre SUA própria sessão.
+        await _dispatch(
+            engine, step=step, original_hash=original_hash, payload=row.payload
         )
+    except AuthenticationError:
+        # Chave OpenAI inválida NÃO é retryável (T-03-14): backoff só queimaria
+        # tempo/dinheiro e nunca curaria. Dead-letter IMEDIATO + FALHA no bloco,
+        # re-tentável manualmente após corrigir a chave. Log só metadados (nunca a
+        # chave nem o conteúdo, V7/V8). `mark_failed` é direto (não `schedule_retry`).
+        logger.error(
+            "Job %s (step=%s) dead-letter imediato: credenciais OpenAI inválidas",
+            job_id,
+            step,
+        )
+        with get_session(engine) as session:
+            repo.mark_failed(session, job_id, "AuthenticationError (chave OpenAI inválida)")
+        _fail_for_step(engine, step=step, original_hash=original_hash)
+        return True
     except Exception as exc:  # noqa: BLE001 — qualquer falha vira retry/dead-letter
-        logger.warning("Job %s falhou (tentativa %s): %s", job_id, attempts, exc)
+        logger.warning(
+            "Job %s (step=%s) falhou (tentativa %s): %s",
+            job_id,
+            step,
+            attempts,
+            exc,
+        )
         with get_session(engine) as session:
             repo.schedule_retry(
                 session,
@@ -130,10 +221,11 @@ async def _run_once(engine: Engine) -> bool:
                 max_attempts=max_attempts,
                 error=str(exc),
             )
-        # Se a tentativa esgotou as chances (job agora 'failed'), os Documents
-        # associados vão a FALHA (PROC-02 dead-letter → FALHA no documento).
+        # Se a tentativa esgotou as chances (job agora 'failed'), o(s) Document(s)
+        # associado(s) vão a FALHA (PROC-02 dead-letter → FALHA no documento),
+        # roteado por step: ingest→original; extract→content_hash (Pitfall 2).
         if attempts >= max_attempts:
-            _fail_documents_for_original(engine, original_hash)
+            _fail_for_step(engine, step=step, original_hash=original_hash)
         return True
 
     with get_session(engine) as session:
