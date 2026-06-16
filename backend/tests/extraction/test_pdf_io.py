@@ -13,7 +13,6 @@ import pytest
 
 from app.extraction import pdf_io
 
-
 # --- detect_blob_type (magic bytes) ---
 
 
@@ -67,9 +66,9 @@ def test_extract_text_and_decide_threshold_forces_vision(
 
 
 def test_extract_text_and_decide_malformed_raises() -> None:
-    # PDF inválido levanta exceção controlada (T-03-06) — o stage a transforma
-    # em FALHA, não derruba o worker.
-    with pytest.raises(Exception):
+    # PDF inválido levanta exceção controlada do fitz (T-03-06) — o stage a
+    # transforma em FALHA, não derruba o worker.
+    with pytest.raises(fitz.FileDataError):
         pdf_io.extract_text_and_decide(b"%PDF-quebrado", min_chars_per_page=16)
 
 
