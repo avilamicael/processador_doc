@@ -49,7 +49,7 @@ files_reviewed_list:
   - backend/tests/test_stabilizer.py
   - backend/tests/test_watcher.py
 findings:
-  critical: 2
+  critical: 0
   warning: 7
   info: 4
   total: 13
@@ -74,6 +74,8 @@ Há ainda warnings relevantes sobre o supervisor de reconfiguração (poll fixo 
 ## Critical Issues
 
 ### CR-01: Path traversal / leitura arbitrária — validação de pasta só normaliza, não confina
+
+**Status:** resolved (commit `0889614`) — docstring (módulo + `_normalize_path`) reescrito para não alegar que `resolve()` "barra path traversal": deixa explícito que só canoniza o formato e que não há confinamento de raiz no v1 single-tenant local (decisão de produto: cadastro por caminho absoluto mantido; allowlist/seletor fora de escopo, ficam para um eventual modo servidor). Endurecimento básico adicionado: path que já existe e não é diretório → 422; symlink → 422 (não seguimos link como pasta monitorada). Path inexistente continua aceito. Testes novos cobrem arquivo/symlink/diretório/inexistente.
 
 **File:** `backend/app/api/watched_folders.py:35-54`
 **Issue:** O docstring e os comentários afirmam que `_normalize_path` "barra path traversal" (V5/V12 — T-02-10). Isso é falso. `Path(raw).resolve()` apenas **resolve** `..` para um caminho absoluto canônico — não restringe a nenhuma raiz permitida. O teste `test_relative_path_is_normalized` confirma que `/tmp/foo/../bar` vira `/tmp/bar`, mas isso não é proteção: um operador (ou uma requisição maliciosa à API, que não tem autenticação nesta fase) pode cadastrar `C:\Windows\System32`, `/etc`, `/`, ou qualquer diretório do host. O watcher então fará `rglob("*")` recursivo, calculará hash e **copiará para o CAS** (via `cas.store`) o conteúdo de arquivos sensíveis do sistema operacional inteiro — e a fase explicitamente envia conteúdo para a OpenAI em fases seguintes. A própria CLAUDE.md exige "minimizar e tornar explícito o que sai da máquina". Resolver `..` sem confinar a uma allowlist de raízes **não é** uma defesa contra traversal; é só normalização de formato.
@@ -100,6 +102,8 @@ def _normalize_path(raw: str) -> str:
 Se a decisão de produto for não ter allowlist no v1 single-tenant, então o docstring/comentários devem PARAR de afirmar que isto "barra path traversal" — a afirmação de segurança é a parte que torna isto um defeito de revisão, pois mascara a ausência de controle.
 
 ### CR-02: Resume após crash perde/duplica trabalho — gate de dedup não cobre o caminho de retry com `IngestedOriginal` já commitado
+
+**Status:** resolved (commit `ed990ac`) — adotada a opção (a): `process_ingest` virou UMA transação. O loop de blocos não chama mais `transition()` (que commitava por bloco); valida a aresta RECEBIDO→PROCESSANDO uma vez e seta o estado em memória, com um único `session.commit()` no final. Crash antes do commit = rollback total → o gate de dedup jamais enxerga um `IngestedOriginal` meio-criado, então o resume recria todos os blocos (sem perda) e o `content_hash` único evita duplicata. Teste novo simula crash após o 1º bloco e prova rollback total + reprocesso recriando os 4 blocos exatamente uma vez; outro teste prova que o reprocesso sem crash continua no-op (duplicate).
 
 **File:** `backend/app/pipeline/ingest_stage.py:108-164` e `backend/app/queue/worker.py:114-141`
 **Issue:** `process_ingest` faz `session.commit()` apenas no final (linha 164), e o gate de dedup depende de `IngestedOriginal` já existir. Isso protege o caso em que um job inteiro re-roda. Porém há uma janela real de inconsistência no caminho de **retry parcial**:
