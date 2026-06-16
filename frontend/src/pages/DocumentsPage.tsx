@@ -1,7 +1,10 @@
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import type { DocState, StatusFilter } from '../types'
 import { Icon } from '../components/Icon'
 import { StatusPill } from '../components/StatusPill'
 import { useDocuments, useDuplicatesCount, useRescan } from '../hooks/useDocuments'
+import { getDocumentDetail } from '../lib/api'
 
 interface DocumentsPageProps {
   search: string
@@ -55,6 +58,10 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
   const docsQuery = useDocuments()
   const dupQuery = useDuplicatesCount()
   const rescan = useRescan()
+
+  // S4 — detalhe de classificação somente leitura (TPL-03/04). Abre num modal ao
+  // clicar no nome do arquivo; busca GET /documents/{id} sob demanda.
+  const [openDocId, setOpenDocId] = useState<number | null>(null)
 
   const data = docsQuery.data
   const items = data?.items ?? []
@@ -224,10 +231,21 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
                         </button>
                       </td>
                       <td>
-                        <div className="file-cell">
+                        <button
+                          className="file-cell"
+                          onClick={() => setOpenDocId(d.id)}
+                          aria-label={`Ver classificação de ${d.original_filename}`}
+                          style={{
+                            background: 'transparent',
+                            border: 0,
+                            padding: 0,
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                          }}
+                        >
                           <Icon name="docMini" size={17} stroke="var(--text-3)" style={{ flex: 'none' }} />
                           <span className="file-name">{d.original_filename}</span>
-                        </div>
+                        </button>
                       </td>
                       <td className="cell-mono">{d.source_folder_path ?? '—'}</td>
                       <td>
@@ -263,6 +281,170 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
             </span>
           )}
         </div>
+      </div>
+
+      {/* S4 — Detalhe de classificação somente leitura (TPL-03/04) */}
+      {openDocId != null && (
+        <DocumentDetailModal docId={openDocId} onClose={() => setOpenDocId(null)} />
+      )}
+    </div>
+  )
+}
+
+// Modal somente leitura: classificação de um documento (template casado + campos
+// bruto/normalizado com marca válido/inválido, ou estado de quarentena). NÃO
+// edita/resolve nada nesta fase (Fase 5). Valores renderizados como TEXTO PURO
+// (React, sem dangerouslySetInnerHTML — T-04-12).
+function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () => void }) {
+  const detailQuery = useQuery({
+    queryKey: ['document-detail', docId],
+    queryFn: () => getDocumentDetail(docId),
+  })
+
+  const detail = detailQuery.data
+  const cls = detail?.classification ?? null
+  const isQuarantine = cls != null && cls.template_id == null
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,.45)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 50,
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="card"
+        style={{ padding: 22, maxWidth: 640, width: '92%', maxHeight: '85vh', overflow: 'auto' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sec-head" style={{ marginBottom: 14 }}>
+          <div className="sec-head-col">
+            <h3 className="sec-title" style={{ fontSize: 15 }}>
+              Classificação
+            </h3>
+            {detail && (
+              <p className="sec-desc" style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>
+                {detail.original_filename}
+              </p>
+            )}
+          </div>
+          <button className="row-action" aria-label="Fechar" title="Fechar" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        {detailQuery.isLoading && (
+          <div style={{ padding: '24px 0', fontSize: 13, color: 'var(--text-3)' }}>
+            Carregando classificação…
+          </div>
+        )}
+
+        {detailQuery.isError && (
+          <div style={{ padding: '24px 0' }}>
+            <p style={{ fontSize: 13, margin: '0 0 12px' }}>
+              Não foi possível carregar a classificação. Verifique se o serviço está em execução.
+            </p>
+            <button className="btn-primary" onClick={() => detailQuery.refetch()}>
+              <Icon name="refresh" size={15} />
+              Tentar novamente
+            </button>
+          </div>
+        )}
+
+        {detail && cls == null && (
+          <div style={{ padding: '24px 0', textAlign: 'center' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+              Aguardando classificação
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
+              Este documento ainda não foi classificado.
+            </p>
+          </div>
+        )}
+
+        {detail && cls != null && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Badge do template casado OU pílula de quarentena */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
+                Template
+              </div>
+              {isQuarantine ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span
+                    className="pill"
+                    style={{ color: 'var(--st-leitura)', background: 'var(--st-leitura-bg)' }}
+                  >
+                    <span className="pill-dot" style={{ background: 'var(--st-leitura)' }} />
+                    Quarentena
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--text-3)' }}>
+                    Nenhum template casou com este documento. Ele fica em quarentena e nunca é
+                    descartado.
+                  </span>
+                </div>
+              ) : (
+                <span className="badge badge-ok">{cls.template_name}</span>
+              )}
+            </div>
+
+            {/* Tabela campo → valor (bruto) → normalizado */}
+            {cls.fields.length > 0 && (
+              <div>
+                <div
+                  style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}
+                >
+                  Campos extraídos
+                </div>
+                <div className="card" style={{ overflow: 'hidden' }}>
+                  <div className="table-scroll">
+                    <table className="docs" style={{ minWidth: 0 }}>
+                      <thead>
+                        <tr>
+                          <th>Campo</th>
+                          <th>Valor</th>
+                          <th>Normalizado</th>
+                          <th>Marca</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cls.fields.map((f) => (
+                          <tr key={f.field_name}>
+                            <td>{f.field_name}</td>
+                            <td className="cell-mono">{f.raw_value ?? '—'}</td>
+                            <td className="cell-mono">{f.normalized_value ?? '—'}</td>
+                            <td>
+                              {f.valid ? (
+                                <span className="badge badge-ok">válido</span>
+                              ) : (
+                                <span
+                                  className="badge"
+                                  style={{
+                                    color: 'var(--st-erro)',
+                                    background: 'var(--st-erro-bg)',
+                                  }}
+                                  title={f.invalid_reason ?? undefined}
+                                >
+                                  inválido
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
