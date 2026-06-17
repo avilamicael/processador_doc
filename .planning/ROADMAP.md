@@ -205,6 +205,8 @@ Plans:
   5. Mover entre discos diferentes é seguro (copia, verifica e só então remove a origem)
   6. O usuário define **regras condicionais de tratativa** (condição sobre os campos extraídos → qual automação aplicar), permitindo tratativas diferentes para o mesmo tipo de documento por cliente/emissor/valor (TPL-02, re-escopado da Fase 4 em 2026-06-16)
 
+**Nota de implementação do critério 5 (2026-06-17, planning):** D-11 redefine a mecânica de "copia, verifica e só então remove a origem" como **materializa do CAS → verifica o hash do destino → remove o arquivo original da pasta de origem**. O "copia" é a materialização do conteúdo imutável do CAS (não um move do original), o "verifica" é a conferência do SHA-256 do destino, e o "remove a origem" é o unlink do original na pasta monitorada SOMENTE após a verificação passar. O CAS preserva o conteúdo para sempre (rede final do undo), então a remoção nunca causa perda. O critério 5 é cumprido integralmente — não há redução de escopo.
+
 **Plans**: 5 plans
 **UI hint**: yes
 Plans:
