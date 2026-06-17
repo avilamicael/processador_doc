@@ -10,17 +10,23 @@
 // como texto puro pelo React (T-02-11): este módulo não interpreta HTML.
 
 import type {
+  ApplyResult,
   AttentionList,
+  AutomationRule,
   Doc,
   DocumentDetail,
   DocumentList,
+  DryRunResult,
   Folder,
   FolderCreate,
   FolderPatch,
   ReviewThreshold,
+  RuleCreate,
+  RulePatch,
   Template,
   TemplateCreate,
   TemplatePatch,
+  UndoResult,
 } from '../types'
 
 class ApiError extends Error {
@@ -167,6 +173,55 @@ export function updateTemplate(id: number, body: TemplatePatch): Promise<Templat
 
 export function deleteTemplate(id: number): Promise<void> {
   return request<void>(`/templates/${id}`, { method: 'DELETE' })
+}
+
+// --- Automações (CRUD de regras + dry-run/apply/undo — Fase 6, TPL-02/AUT-03/AUT-05) ---
+
+export function getAutomationRules(): Promise<AutomationRule[]> {
+  return request<AutomationRule[]>('/automations')
+}
+
+export function createAutomationRule(body: RuleCreate): Promise<AutomationRule> {
+  return request<AutomationRule>('/automations', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateAutomationRule(id: number, body: RulePatch): Promise<AutomationRule> {
+  return request<AutomationRule>(`/automations/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteAutomationRule(id: number): Promise<void> {
+  return request<void>(`/automations/${id}`, { method: 'DELETE' })
+}
+
+// AUT-03 — preview origem→destino SEM tocar o disco. `documentIds` vazio = todos
+// os documentos prontos (PROCESSANDO + classificado).
+export function postDryRun(documentIds: number[] = []): Promise<DryRunResult> {
+  return request<DryRunResult>('/automations/dry-run', {
+    method: 'POST',
+    body: JSON.stringify({ document_ids: documentIds }),
+  })
+}
+
+// D-03 — aplica por-doc OU por-lote; retorna o run_id (base do undo por-run).
+export function postApply(documentIds: number[]): Promise<ApplyResult> {
+  return request<ApplyResult>('/automations/apply', {
+    method: 'POST',
+    body: JSON.stringify({ document_ids: documentIds }),
+  })
+}
+
+// AUT-05 — desfaz por-doc (document_id) OU por-run (run_id). Reabre CONCLUIDO→PROCESSANDO.
+export function postUndo(body: { document_id?: number; run_id?: string }): Promise<UndoResult> {
+  return request<UndoResult>('/automations/undo', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
 }
 
 export { ApiError }

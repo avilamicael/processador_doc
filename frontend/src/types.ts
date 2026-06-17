@@ -1,10 +1,10 @@
 // Tipos do modelo de UI do DocWatch (Opção B).
 // Fase 2 (GSD 02-05): os tipos de documento/pasta agora refletem a API REAL do
 // backend (app/api/documents.py, app/api/watched_folders.py). Os tipos que ainda
-// pertencem a telas mock de fases futuras (Template/Automation/Integration/Rule)
+// pertencem a telas mock de fases futuras (Integration/Rule)
 // permanecem como modelo de UI até serem fiados.
 
-export type Page = 'documentos' | 'atencao' | 'templates' | 'automacoes' | 'config'
+export type Page = 'documentos' | 'atencao' | 'templates' | 'automacoes' | 'dryrun' | 'config'
 export type ConfigTab = 'pastas' | 'regras' | 'leitura' | 'integracoes'
 
 // Estado de domínio REAL do backend (app/models/enums.py DocState). Substitui a
@@ -167,13 +167,93 @@ export interface DocumentDetail {
   classification: Classification | null
 }
 
-export interface Automation {
+// --- Automações (forma REAL da API /automations — Fase 6, TPL-02) ---
+
+// Operadores de condição aceitos pelo backend (V5: conjunto fechado).
+export type RuleOperator = 'eq' | 'gt' | 'lt' | 'contains'
+
+// Conjunção entre condições de uma regra (E/OU — D-04).
+export type RuleConjunction = 'and' | 'or'
+
+// Condição `{field_name} {operator} {value}` de uma regra (ConditionOut do backend).
+export interface RuleCondition {
+  id: number
+  field_name: string
+  operator: RuleOperator
+  value: string
+  position: number
+}
+
+// Regra de automação exposta por GET /automations (RuleOut do backend).
+// Listadas em ordem de `priority` (primeira-que-casa-vence, D-05).
+export interface AutomationRule {
   id: number
   name: string
-  trigger: string
-  cond: string
-  action: string
-  runs: string
+  priority: number
+  conjunction: RuleConjunction
+  name_pattern: string | null
+  folder_pattern: string | null
+  active: boolean
+  conditions: RuleCondition[]
+}
+
+// Body de condição no POST/PATCH (ConditionIn — sem id/position, server-gerados).
+export interface RuleConditionCreate {
+  field_name: string
+  operator: RuleOperator
+  value: string
+}
+
+// Body de criação de regra (POST /automations — RuleIn).
+export interface RuleCreate {
+  name: string
+  priority: number
+  conjunction: RuleConjunction
+  name_pattern: string | null
+  folder_pattern: string | null
+  active: boolean
+  conditions: RuleConditionCreate[]
+}
+
+// Body de edição parcial (PATCH /automations/{id} — RulePatch).
+// `conditions` informado SUBSTITUI a coleção inteira; omitido preserva as atuais.
+export interface RulePatch {
+  name?: string
+  priority?: number
+  conjunction?: RuleConjunction
+  name_pattern?: string | null
+  folder_pattern?: string | null
+  active?: boolean
+  conditions?: RuleConditionCreate[]
+}
+
+// Uma linha do preview de dry-run (DryRunRow do backend, AUT-03).
+// Sinalização por flags booleanas (NÃO enum): blocked (D-07, vermelho),
+// collision (D-09, sufixo, âmbar) e skipped_identical (D-10, duplicata, azul).
+export interface DryRunRow {
+  document_id: number
+  original_filename: string
+  source_path: string | null
+  dest_path: string | null
+  blocked: boolean
+  collision: boolean
+  skipped_identical: boolean
+}
+
+// Resultado de POST /automations/dry-run (DryRunOut).
+export interface DryRunResult {
+  rows: DryRunRow[]
+}
+
+// Resultado de POST /automations/apply (ApplyOut): run_id do lote + enfileirados.
+export interface ApplyResult {
+  run_id: string
+  enqueued: number
+}
+
+// Resultado de POST /automations/undo (UndoOut): quantos foram revertidos.
+export interface UndoResult {
+  reverted: number
 }
 
 // --- Triagem "Precisam de atenção" (Fase 5 — REV-03/04/05) ---

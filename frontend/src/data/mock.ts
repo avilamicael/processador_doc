@@ -4,7 +4,7 @@
 // de fases futuras (Templates/Automações/Integrações/Regras) ainda não fiadas.
 // TEMPLATES mock removido na Fase 4 (04-06): a TemplatesPage agora lê templates
 // reais via TanStack Query (useTemplates) — o tipo Template passou a refletir a API.
-import type { Automation, Integration, Rule } from '../types'
+import type { Integration, Rule } from '../types'
 
 export const RULES: Rule[] = [
   { id: 1, name: 'Por marcador QR Code', param: 'SEP-DOC', desc: 'Divide o lote sempre que detecta um QR Code de separação na página.' },
@@ -20,12 +20,4 @@ export const INTEGRATIONS: Integration[] = [
   { id: 4, name: 'ERP Omie', cat: 'Gestão', mono: 'OM', on: true },
   { id: 5, name: 'Webhook', cat: 'Integração', mono: '{}', on: true },
   { id: 6, name: 'E-mail (SMTP)', cat: 'Notificação', mono: '@', on: true },
-]
-
-export const AUTOMATIONS: Automation[] = [
-  { id: 1, name: 'Indexar Nota Fiscal no ERP', trigger: 'Documento tratado', cond: 'Template = Nota Fiscal', action: 'Enviar ao ERP Omie', runs: '1.284 execuções' },
-  { id: 2, name: 'Arquivar contratos assinados', trigger: 'Documento tratado', cond: 'Template = Contrato', action: 'Mover p/ Jurídico + notificar', runs: '312 execuções' },
-  { id: 3, name: 'Alerta de falha de leitura', trigger: 'Status = Erro', cond: 'Qualquer documento', action: 'E-mail ao responsável', runs: '47 execuções' },
-  { id: 4, name: 'Webhook de boletos', trigger: 'Documento tratado', cond: 'Template = Boleto', action: 'POST p/ endpoint financeiro', runs: 'Pausada' },
-  { id: 5, name: 'Renomear pelo padrão', trigger: 'Documento tratado', cond: 'Qualquer documento', action: 'Renomear {tipo}-{nº}-{data}', runs: '3.140 execuções' },
 ]
