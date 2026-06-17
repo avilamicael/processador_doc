@@ -217,7 +217,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1)*
 
 - [x] 06-02-PLAN.md — Motores puros: naming (tokens→caminho sanitizado+confinado, bloqueio→revisão) + rules (regras condicionais primeira-que-casa-vence)
-- [ ] 06-03-PLAN.md — Operação física: fileops (materializa do CAS+anti-colisão+verifica hash) + undo (reversão por-doc/run com fallback CAS)
+- [x] 06-03-PLAN.md — Operação física: fileops (materializa do CAS+anti-colisão+verifica hash) + undo (reversão por-doc/run com fallback CAS)
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -268,6 +268,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
-| 6. Automações de Arquivo (Renomear/Mover) | 2/5 | In Progress|  |
+| 6. Automações de Arquivo (Renomear/Mover) | 3/5 | In Progress|  |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
