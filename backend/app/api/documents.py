@@ -54,6 +54,7 @@ from app.validation.fields import validate_field
 # imports pesados; as strings são contrato estável da fila, ver queue/worker.py).
 EXTRACT_STEP = "extract"
 CLASSIFY_STEP = "classify"
+APPLY_STEP = "apply"
 EXTRACTED_STEP = "extraido"
 
 # Copy dos motivos de balde (espelha 05-UI-SPEC). FALHA usa a mensagem persistida
@@ -623,12 +624,18 @@ def patch_field(
 
 @router.post("/documents/{document_id}/approve", response_model=DocumentDetailOut)
 def approve_document(request: Request, document_id: int) -> DocumentDetailOut:
-    """Aprova um doc em revisão (EM_REVISAO→CONCLUIDO) — guard D-07.
+    """Aprova um doc em revisão — dispara a AUTOMAÇÃO que conclui o doc (Fase 6, D-07).
 
     GUARD D-07: re-deriva a validade ATUAL dos obrigatórios (Pitfall 4 — não confia
     no score persistido). Se o CR não existe ou algum obrigatório está inválido →
     409 ("corrija os campos obrigatórios inválidos antes de aprovar"). Doc fora de
-    EM_REVISAO → 409 (transição fora da allowlist).
+    EM_REVISAO → 409.
+
+    MUDANÇA Fase 6: em vez de `transition(CONCLUIDO)` direto, ENFILEIRA o step
+    `apply` — é o `apply_stage` (worker) que aplica a automação (renomear/mover) E
+    conclui o documento (EM_REVISAO→CONCLUIDO via transition). Doc SEM regra de
+    automação aplicável também conclui: o apply é no-op de disco mas faz a transição
+    final. Mantém o doc em EM_REVISAO até o worker rodar o apply.
     """
     engine = request.app.state.engine
     with get_session(engine) as session:
@@ -636,6 +643,12 @@ def approve_document(request: Request, document_id: int) -> DocumentDetailOut:
         if doc is None:
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, f"documento {document_id} não encontrado"
+            )
+        # Guard de estado semântico: aprovar só faz sentido em EM_REVISAO.
+        if doc.state != DocState.EM_REVISAO:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "aprovar só é permitido para documentos em EM_REVISAO",
             )
         cr = session.scalar(
             select(ClassificationResult).where(ClassificationResult.document_id == document_id)
@@ -645,10 +658,15 @@ def approve_document(request: Request, document_id: int) -> DocumentDetailOut:
                 status.HTTP_409_CONFLICT,
                 "corrija os campos obrigatórios inválidos antes de aprovar",
             )
-        try:
-            transition(session, doc, DocState.CONCLUIDO)
-        except InvalidTransition as exc:
-            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        # Dispara o apply (que conclui o doc). NÃO transitamos aqui — o apply_stage
+        # faz EM_REVISAO→CONCLUIDO ao materializar (ou no-op de disco + conclusão
+        # para docs sem regra). Reusa o helper _requeue (UNIQUE-safe).
+        _requeue(
+            session,
+            content_hash=doc.content_hash,
+            step=APPLY_STEP,
+            payload={"content_hash": doc.content_hash},
+        )
         return _build_detail(session, doc, _folder_path_for(session, doc))
 
 

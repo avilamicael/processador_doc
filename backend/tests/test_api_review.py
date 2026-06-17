@@ -310,10 +310,16 @@ def test_patch_field_nonexistent_field_returns_404(
 # --- POST /documents/{id}/approve -------------------------------------------
 
 
-def test_approve_blocks_invalid_required_then_succeeds(
+def test_approve_blocks_invalid_required_then_dispatches_apply(
     client: TestClient, schema_engine: Engine
 ) -> None:
-    """approve → 409 com obrigatório inválido; → 200 (CONCLUIDO) após a correção."""
+    """approve → 409 com obrigatório inválido; após a correção → 200 + step apply enfileirado.
+
+    MUDANÇA Fase 6 (06-04, Open Q3): approve NÃO conclui mais o doc diretamente — ele
+    ENFILEIRA o step `apply`, e é o `apply_stage` (worker) quem aplica a automação e
+    transita EM_REVISAO→CONCLUIDO. Sem worker rodando no TestClient, o doc permanece
+    EM_REVISAO e o que provamos é a existência do job `apply` pendente.
+    """
     with get_session(schema_engine) as session:
         doc_id, _, _ = _seed_em_revisao(session, content_hash="3" * 64)
         session.commit()
@@ -324,14 +330,21 @@ def test_approve_blocks_invalid_required_then_succeeds(
     with get_session(schema_engine) as session:
         assert session.get(Document, doc_id).state == DocState.EM_REVISAO
 
-    # 2) corrige o obrigatório via patch → approve passa (200, CONCLUIDO).
+    # 2) corrige o obrigatório via patch → approve passa (200) e enfileira o apply.
     fix = client.patch(f"/documents/{doc_id}/fields/cnpj", json={"raw_value": "11.444.777/0001-61"})
     assert fix.status_code == 200, fix.text
 
     ok = client.post(f"/documents/{doc_id}/approve")
     assert ok.status_code == 200, ok.text
     with get_session(schema_engine) as session:
-        assert session.get(Document, doc_id).state == DocState.CONCLUIDO
+        # O doc segue EM_REVISAO até o worker rodar o apply (não há worker aqui).
+        assert session.get(Document, doc_id).state == DocState.EM_REVISAO
+        # Um job (content_hash, "apply") pendente foi criado pelo approve.
+        apply_job = session.scalar(
+            select(Job).where(Job.original_hash == "3" * 64, Job.step == "apply")
+        )
+        assert apply_job is not None
+        assert apply_job.status == JobStatus.PENDING
 
 
 def test_approve_non_em_revisao_returns_409(client: TestClient, schema_engine: Engine) -> None:
