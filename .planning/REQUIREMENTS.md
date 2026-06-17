@@ -40,13 +40,13 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 ### Automações de Arquivo (AUT)
 
-- [ ] **AUT-01**: Usuário define padrões de renomeação usando os campos extraídos (ex.: `{cliente}_{numero}_{data}.pdf`)
-- [ ] **AUT-02**: Usuário define para qual pasta mover, usando os campos extraídos (ex.: `Documentos/{cliente}/{ano-mes}/`)
+- [x] **AUT-01**: Usuário define padrões de renomeação usando os campos extraídos (ex.: `{cliente}_{numero}_{data}.pdf`)
+- [x] **AUT-02**: Usuário define para qual pasta mover, usando os campos extraídos (ex.: `Documentos/{cliente}/{ano-mes}/`)
 - [ ] **AUT-03**: Sistema mostra um dry-run/preview (origem → destino, colisões sinalizadas) antes de aplicar qualquer operação de arquivo
 - [ ] **AUT-04**: Sistema registra a intenção em log de auditoria ANTES de agir e protege contra colisão (nunca sobrescreve silenciosamente)
 - [ ] **AUT-05**: Usuário pode desfazer (undo) operações por documento e por lote/execução
 - [ ] **AUT-06**: Operação de mover entre discos diferentes é segura (copia, verifica e só então remove a origem)
-- [ ] **TPL-02**: Usuário cria regras condicionais de tratativa por tipo/cliente/emissor/valor (condição sobre os campos extraídos → qual automação aplicar) — permite tratativas diferentes para o mesmo tipo de documento. _(Re-escopado de "sub-templates" da Fase 4 → Fase 6 em 2026-06-16; o que variava não era a extração/campos e sim a automação.)_
+- [x] **TPL-02**: Usuário cria regras condicionais de tratativa por tipo/cliente/emissor/valor (condição sobre os campos extraídos → qual automação aplicar) — permite tratativas diferentes para o mesmo tipo de documento. _(Re-escopado de "sub-templates" da Fase 4 → Fase 6 em 2026-06-16; o que variava não era a extração/campos e sim a automação.)_
 
 ### Processamento (PROC)
 
@@ -144,8 +144,8 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | REV-03 | Phase 5 | Complete |
 | REV-04 | Phase 5 | Complete |
 | REV-05 | Phase 5 | Complete |
-| AUT-01 | Phase 6 | Pending |
-| AUT-02 | Phase 6 | Pending |
+| AUT-01 | Phase 6 | Complete |
+| AUT-02 | Phase 6 | Complete |
 | AUT-03 | Phase 6 | Pending |
 | AUT-04 | Phase 6 | Pending |
 | AUT-05 | Phase 6 | Pending |
