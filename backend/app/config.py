@@ -174,6 +174,29 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Tunables das AUTOMAÇÕES (Fase 6) — mesmo padrão dos demais (lidos de env sem
+    # deploy). Governam o confinamento e o saneamento dos destinos resolvidos a
+    # partir de tokens {campo} (valores vindos da IA, NÃO-confiáveis).
+    #
+    # `automation_dest_root`: raiz-base de confinamento dos destinos (V4 path
+    # traversal). Quando definida, todo destino resolvido DEVE cair sob esta raiz
+    # (`resolved.is_relative_to(root)`); fora dela = bloqueio. None = sem
+    # confinamento adicional além da sanitização — mas o campo existe para o
+    # cliente travar a base por env sem alterar código.
+    automation_dest_root: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("AUTOMATION_DEST_ROOT", "automation_dest_root"),
+    )
+    # `automation_max_component_len`: teto de comprimento (em chars) por COMPONENTE
+    # de nome/pasta, para mitigar o limite MAX_PATH (260) do Windows (Pitfall 5).
+    # Componentes mais longos são truncados de forma controlada na resolução.
+    automation_max_component_len: int = Field(
+        default=200,
+        validation_alias=AliasChoices(
+            "AUTOMATION_MAX_COMPONENT_LEN", "automation_max_component_len"
+        ),
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_dir(self) -> Path:
