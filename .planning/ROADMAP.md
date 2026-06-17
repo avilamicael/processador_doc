@@ -175,7 +175,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Fundação: colunas confidence_score/manually_corrected (Alembic 0005) + tunable do limiar + função pura compute_confidence + scaffolds Wave 0
+- [x] 05-01-PLAN.md — Fundação: colunas confidence_score/manually_corrected (Alembic 0005) + tunable do limiar + função pura compute_confidence + scaffolds Wave 0
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -188,6 +188,7 @@ Plans:
 **Wave 4** *(blocked on Wave 3)*
 
 - [ ] 05-04-PLAN.md — Frontend: AttentionPage (3 baldes + ações) + ConfidenceBadge + hooks/api/types + S6 na Config + navegação + verificação visual
+
 **UI hint**: yes
 
 ### Phase 6: Automações de Arquivo (Renomear/Mover)
@@ -247,7 +248,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Ingestão e Fila Assíncrona | 5/5 | Complete    | 2026-06-16 |
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
-| 5. Confiança, Revisão Humana e Quarentena | 0/TBD | Not started | - |
+| 5. Confiança, Revisão Humana e Quarentena | 1/4 | In Progress|  |
 | 6. Automações de Arquivo (Renomear/Mover) | 0/TBD | Not started | - |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
