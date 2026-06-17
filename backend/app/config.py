@@ -145,6 +145,17 @@ class Settings(BaseSettings):
             "CLASSIFY_MATCH_THRESHOLD", "classify_match_threshold"
         ),
     )
+    # `review_confidence_threshold` (Fase 5, D-03): limiar GLOBAL de QUALIDADE DE
+    # EXTRAÇÃO abaixo do qual o documento vai para revisão humana (EM_REVISAO).
+    # Score = fração de obrigatórios válidos (compute_confidence). default 0.8
+    # alinha à faixa "Alta ≥80%" do 05-UI-SPEC (Assumption A2 — calibrar). Lido de
+    # env sem deploy, mesmo padrão de classify_match_threshold.
+    review_confidence_threshold: float = Field(
+        default=0.8,
+        validation_alias=AliasChoices(
+            "REVIEW_CONFIDENCE_THRESHOLD", "review_confidence_threshold"
+        ),
+    )
     # `openai_classify_model`: modelo das chamadas PAGAS de desempate/classificação
     # (D-01/D-06). Modelos giram rápido (CLAUDE.md) → tunável por env; o default
     # reusa o modelo de extract para uma instância só precisar definir um modelo.

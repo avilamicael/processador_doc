@@ -62,6 +62,11 @@ class ClassificationResult(Base):
     )
     # Score do matcher local ou do desempate por IA — nullable (quarentena = sem score).
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Score 0.0–1.0 de QUALIDADE DE EXTRAÇÃO (D-01: fração de obrigatórios válidos).
+    # NÃO confundir com `confidence` (acima) = score do MATCHER/desempate (D-01 separa
+    # qualidade de extração vs score do matcher). nullable: quarentena não tem score
+    # (sem template = sem campos obrigatórios). Preenchido pelo roteamento do Plan 02.
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -96,6 +101,11 @@ class FilledField(Base):
     )
     # Motivo legível da falha de validação — opcional.
     invalid_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    # D-08: origem do valor marcada como corrigida manualmente (auditabilidade +
+    # base do approve). default False (valor veio da IA/documento, não do humano).
+    manually_corrected: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     classification_result: Mapped["ClassificationResult"] = relationship(
         back_populates="filled_fields"
