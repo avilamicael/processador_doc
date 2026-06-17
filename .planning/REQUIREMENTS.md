@@ -42,7 +42,7 @@ Requisitos para o lançamento inicial. Cada um mapeia para fases do roadmap. O m
 
 - [x] **AUT-01**: Usuário define padrões de renomeação usando os campos extraídos (ex.: `{cliente}_{numero}_{data}.pdf`)
 - [x] **AUT-02**: Usuário define para qual pasta mover, usando os campos extraídos (ex.: `Documentos/{cliente}/{ano-mes}/`)
-- [ ] **AUT-03**: Sistema mostra um dry-run/preview (origem → destino, colisões sinalizadas) antes de aplicar qualquer operação de arquivo
+- [x] **AUT-03**: Sistema mostra um dry-run/preview (origem → destino, colisões sinalizadas) antes de aplicar qualquer operação de arquivo
 - [x] **AUT-04**: Sistema registra a intenção em log de auditoria ANTES de agir e protege contra colisão (nunca sobrescreve silenciosamente)
 - [x] **AUT-05**: Usuário pode desfazer (undo) operações por documento e por lote/execução
 - [x] **AUT-06**: Operação de mover entre discos diferentes é segura (copia, verifica e só então remove a origem)
@@ -146,7 +146,7 @@ Mapeamento de cada requisito v1 para exatamente uma fase do roadmap.
 | REV-05 | Phase 5 | Complete |
 | AUT-01 | Phase 6 | Complete |
 | AUT-02 | Phase 6 | Complete |
-| AUT-03 | Phase 6 | Pending |
+| AUT-03 | Phase 6 | Complete |
 | AUT-04 | Phase 6 | Complete |
 | AUT-05 | Phase 6 | Complete |
 | AUT-06 | Phase 6 | Complete |

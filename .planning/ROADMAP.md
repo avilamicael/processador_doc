@@ -221,7 +221,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 06-04-PLAN.md — Orquestração: apply_stage (write-ahead idempotente+reconcile) + worker (step apply+sweep auto-aplica) + API /automations + approve dispara apply
+- [x] 06-04-PLAN.md — Orquestração: apply_stage (write-ahead idempotente+reconcile) + worker (step apply+sweep auto-aplica) + API /automations + approve dispara apply
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -268,6 +268,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
-| 6. Automações de Arquivo (Renomear/Mover) | 3/5 | In Progress|  |
+| 6. Automações de Arquivo (Renomear/Mover) | 4/5 | In Progress|  |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
