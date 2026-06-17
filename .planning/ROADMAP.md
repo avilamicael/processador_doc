@@ -66,7 +66,7 @@ Plans:
 
 **Note de escopo (2026-06-15)**: ING-01 (upload manual) e ING-03 (lote CLI) removidos do v1 → v2. Ingestão folder-only. Ver `phases/02-ingest-o-e-fila-ass-ncrona/02-CONTEXT.md`.
 
-**Plans**: 5 plans
+**Plans**: 8 plans (5 do modelo de regra-única; 06-01/06-04/06-05 ficam como histórico — REPLAN para PIPELINE adicionou 06-06/06-07/06-08)
 **UI hint**: yes
 Plans:
 **Wave 1**
@@ -226,6 +226,20 @@ Plans:
 **Wave 4** *(blocked on Wave 3)*
 
 - [ ] 06-05-PLAN.md — Frontend: tipos/api/hooks + Automações real (S1/S2/S3) + Dry-run (S4) + Aplicar/Desfazer (S5/S6) + verificação visual
+
+> **REPLAN (2026-06-17) — modelo de PIPELINE (D-12..D-16).** As automações deixaram de ser "regra única" e viraram um pipeline ordenado de etapas componíveis. 06-02 (naming) e 06-03 (fileops/undo) são REUSADOS como ações atômicas (não replanejados). 06-01/06-04/06-05 ficam como histórico do modelo antigo. Os planos abaixo reescrevem modelo de dados + executor + API + frontend.
+
+**Wave 1 (REPLAN)**
+
+- [ ] 06-06-PLAN.md — Modelo de dados do PIPELINE: AutomationPipeline 1:N PipelineStep 1:N StepFilter (substitui automation_rules/rule_conditions) + Alembic 0007 forward-only (documents/audit_log intactos) + scaffolds de teste do modelo
+
+**Wave 2 (REPLAN)** *(blocked on 06-06)*
+
+- [ ] 06-07-PLAN.md — Executor PURO do pipeline (run_pipeline, materialização única) + filtros de entrada (D-14) + apply_stage/dry_run reescritos + API CRUD de pipeline/steps/filtros + ajuste do worker (reusa naming/fileops/undo)
+
+**Wave 3 (REPLAN)** *(blocked on 06-07)*
+
+- [ ] 06-08-PLAN.md — Frontend construtor de pipeline (S1 lista ordenada/encadeada + S2 editor de etapa + S3 token com pré-visualização) + Dry-run (S4) + Aplicar/Desfazer (S5/S6) + verificação visual (sem visualizador; zero npm novo)
 
 ### Phase 7: Módulo Determinístico Opcional e Roteamento de Custo
 
