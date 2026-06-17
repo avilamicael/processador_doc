@@ -1,11 +1,12 @@
 ---
 phase: 6
 slug: automacoes-de-arquivo-renomear-mover
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-17
 revised: 2026-06-17
+reviewed_at: 2026-06-17
 revision: pipeline-redesign
 supersedes: rule-single-editor model (D-04/D-05 acoplado)
 ---
@@ -243,11 +244,11 @@ Nenhum registry de componentes é usado. Sistema de design próprio (`index.css`
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS (FLAG não-bloqueante: tamanhos herdados 12/13/15/16 com diferença de 1px — herança travada do bundle DocWatch, não escolha desta fase; executor compensa com peso 400 vs 600)
+- [x] Dimension 5 Spacing: PASS (FLAG não-bloqueante: 13/14/18/22px são exceções herdadas de classes reusadas em produção e estão congeladas; classes NOVAS usam só múltiplos de 4)
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending (draft — redesenhado p/ modelo de PIPELINE; aguardando gsd-ui-checker)
+**Approval:** approved 2026-06-17 (gsd-ui-checker — 6/6 dimensões; 0 BLOCK, 2 FLAG não-bloqueantes em Typography/Spacing herdados do design system travado)
