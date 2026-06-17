@@ -32,6 +32,9 @@ Escopo: AUT-01..AUT-06 + TPL-02. **Fora de escopo:** automações além de renom
 - **D-09:** Destino já ocupado por arquivo de **conteúdo DIFERENTE** (mesmo nome) → **sufixo incremental automático** (`nome_1.pdf`, `nome_2.pdf`). Nunca sobrescreve, não trava o fluxo, nada se perde; a colisão é registrada no log/dry-run.
 - **D-10:** Destino já ocupado por arquivo de **conteúdo IDÊNTICO** (mesmo SHA-256 do CAS) → **considera já-feito e pula como duplicata** (não cria `_1` de cópias idênticas). Reusa o dedup por hash já existente.
 
+### Arquivo físico de destino (resolução da Open Q1 do research — 2026-06-17)
+- **D-11:** A operação **materializa o destino a partir do CAS** (`cas.read_bytes(content_hash)` → escreve no destino + verifica hash), em vez de mover o arquivo original da pasta. Comportamento **uniforme** para blocos de PDF separado (que só existem no CAS) e para documentos não-separados; intrinsecamente seguro (o CAS é a fonte da verdade). AUT-06 passa a ser "materializar do CAS + verificar hash" (cross-device deixa de ser um caso especial, pois nunca se "move" o original — escreve-se do CAS). O **caminho de origem resolvido é persistido no `AuditLog`** no momento da aplicação (não se reconstrói depois), resolvendo o risco A2 do research. Política sobre o arquivo original na pasta de origem (manter/quarentenar/remover) é decisão do plan.
+
 ### Claude's Discretion
 - Comportamento detalhado do **undo quando o arquivo de destino já foi movido/renomeado/apagado pelo usuário** depois da automação (resolver com checagem de integridade + falha controlada, sem corromper estado). O planejador define a abordagem mais robusta.
 - **Formato/estrutura do audit log** (extensão do modelo `AuditLog` existente para guardar origem→destino + dados de undo) — o planejador modela.
