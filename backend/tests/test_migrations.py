@@ -158,12 +158,42 @@ def test_0004_cria_quatro_tabelas_da_fase_4(db_url: str) -> None:
     assert idx["unique"], "índice de classification_results.document_id deve ser UNIQUE"
 
 
-def test_downgrade_um_passo_remove_so_a_fase_4(db_url: str) -> None:
-    """downgrade -1 (de head=0004) remove as 4 tabelas da Fase 4,
-    preservando intactos os schemas das Fases 1, 2 e 3."""
+def test_downgrade_um_passo_remove_so_as_colunas_da_fase_5(db_url: str) -> None:
+    """downgrade -1 (de head=0005) reverte SOMENTE a 0005: dropa as 2 colunas da
+    Fase 5 (confidence_score, manually_corrected) e preserva TODAS as tabelas das
+    Fases 1–4 (a 0005 só adiciona colunas, não cria/dropa tabelas)."""
     cfg = _make_config(db_url)
     command.upgrade(cfg, "head")
     command.downgrade(cfg, "-1")
+
+    engine = create_engine(db_url)
+    try:
+        insp = inspect(engine)
+        tabelas = set(insp.get_table_names())
+        cols_cls = {c["name"] for c in insp.get_columns("classification_results")}
+        cols_ff = {c["name"] for c in insp.get_columns("filled_fields")}
+    finally:
+        engine.dispose()
+
+    # As 2 colunas da Fase 5 saíram no downgrade -1.
+    assert "confidence_score" not in cols_cls, "confidence_score não removida no downgrade -1"
+    assert "manually_corrected" not in cols_ff, "manually_corrected não removida no downgrade -1"
+    # Tabelas das Fases 1–4 (inclusive Fase 4) permanecem — a 0005 não as toca.
+    fase1234 = {
+        "documents", "pages", "audit_log", "usage",
+        "watched_folders", "ingested_originals", "jobs",
+        "extractions",
+        "templates", "template_fields", "classification_results", "filled_fields",
+    }
+    assert fase1234.issubset(tabelas), "schema das Fases 1–4 não preservado no downgrade -1"
+
+
+def test_downgrade_dois_passos_remove_so_a_fase_4(db_url: str) -> None:
+    """downgrade -2 (de head=0005) reverte 0005 + 0004: remove as 4 tabelas da
+    Fase 4, preservando intactos os schemas das Fases 1, 2 e 3."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "-2")
 
     engine = create_engine(db_url)
     try:
@@ -178,32 +208,8 @@ def test_downgrade_um_passo_remove_so_a_fase_4(db_url: str) -> None:
         "extractions",
     }
     sobrando = fase4 & tabelas
-    assert not sobrando, f"tabelas da Fase 4 não removidas no downgrade -1: {sobrando}"
-    assert fase123.issubset(tabelas), "schema das Fases 1/2/3 não preservado no downgrade -1"
-
-
-def test_downgrade_dois_passos_remove_fase_3(db_url: str) -> None:
-    """downgrade -2 (de head=0004) remove Fase 4 + Fase 3, preservando Fases 1 e 2."""
-    cfg = _make_config(db_url)
-    command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-2")
-
-    engine = create_engine(db_url)
-    try:
-        tabelas = set(inspect(engine).get_table_names())
-    finally:
-        engine.dispose()
-
-    fase34 = {
-        "templates", "template_fields", "classification_results", "filled_fields",
-        "extractions",
-    }
-    fase12 = {
-        "documents", "pages", "audit_log", "usage",
-        "watched_folders", "ingested_originals", "jobs",
-    }
-    assert not (fase34 & tabelas), f"tabelas das Fases 3/4 não removidas: {fase34 & tabelas}"
-    assert fase12.issubset(tabelas), "schema das Fases 1/2 não preservado no downgrade -2"
+    assert not sobrando, f"tabelas da Fase 4 não removidas no downgrade -2: {sobrando}"
+    assert fase123.issubset(tabelas), "schema das Fases 1/2/3 não preservado no downgrade -2"
 
 
 def test_downgrade_base_remove_as_tabelas(db_url: str) -> None:
