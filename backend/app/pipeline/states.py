@@ -14,8 +14,9 @@ validação) NÃO são estados de topo (D-05) — vivem no marcador interno
 from app.models.enums import DocState
 
 # Allowlist de transições válidas entre estados de topo (D-04). Derivada do
-# `<transition_model>` do plano. Todo membro de DocState é chave (CONCLUIDO mapeia
-# para conjunto vazio — estado terminal, sem saídas).
+# `<transition_model>` do plano. Todo membro de DocState é chave. CONCLUIDO deixou
+# de ser terminal na Fase 6: ganha a saída CONCLUIDO→PROCESSANDO para o undo (AUT-05)
+# reabrir um documento aplicado.
 TRANSITIONS: dict[DocState, set[DocState]] = {
     DocState.RECEBIDO: {
         DocState.PROCESSANDO,
@@ -39,8 +40,11 @@ TRANSITIONS: dict[DocState, set[DocState]] = {
     DocState.QUARENTENA: {DocState.PROCESSANDO},
     # Retry após falha.
     DocState.FALHA: {DocState.PROCESSANDO},
-    # Terminal — sem saídas.
-    DocState.CONCLUIDO: set(),
+    # Reabrir um documento já aplicado durante o UNDO (Fase 6, AUT-05): o endpoint
+    # /undo reverte o arquivo (dst→origem ou restaura do CAS) e transita
+    # CONCLUIDO→PROCESSANDO para o doc voltar a ser acionável. Antes da Fase 6
+    # CONCLUIDO era terminal (conjunto vazio); esta é a única aresta nova da fase.
+    DocState.CONCLUIDO: {DocState.PROCESSANDO},
 }
 
 
