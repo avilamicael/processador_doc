@@ -30,9 +30,11 @@ from openai import AuthenticationError
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
-from app.classification.stage import classify_stage
+from app.automation.stage import APPLY_STEP, apply_stage, reconcile_orphans
+from app.classification.stage import CLASSIFIED_STEP, classify_stage
 from app.config import get_settings
 from app.extraction.stage import EXTRACTED_STEP, extract_stage
+from app.models.audit_log import AuditLog
 from app.models.classification import ClassificationResult
 from app.models.document import Document
 from app.models.enums import DocState
@@ -52,6 +54,9 @@ EXTRACT_STEP = "extract"
 # Step do job de classificação (Fase 4): a fila enfileira (block.content_hash,
 # CLASSIFY_STEP) após o bloco ficar last_completed_step="extraido".
 CLASSIFY_STEP = "classify"
+# Step do job de AUTOMAÇÃO (Fase 6): a fila enfileira (block.content_hash,
+# APPLY_STEP) quando o doc está classificado e pronto para aplicar. APPLY_STEP é
+# importado de automation.stage (fonte única do contrato).
 
 
 def _process_job_blocking(engine: Engine, *, original_hash: str, payload: str) -> None:
@@ -173,6 +178,16 @@ async def _dispatch(engine: Engine, *, step: str, original_hash: str, payload: s
             await classify_stage(
                 session, content_hash=original_hash, forced_template_id=forced
             )
+    elif step == APPLY_STEP:
+        # `apply_stage` é uma COROUTINE (espelha classify_stage) → `await` DIRETO no
+        # loop, com sessão própria. NUNCA `asyncio.to_thread` (o fileops interno é
+        # IO síncrono mas roda dentro do stage; não há event loop na thread). O
+        # `run_id` do lote (apply por-run, D-03) viaja no payload; ausente = None.
+        run_id = json.loads(payload).get("run_id")
+        with get_session(engine) as session:
+            await apply_stage(
+                session, content_hash=original_hash, run_id=run_id
+            )
     else:
         await asyncio.to_thread(
             _process_job_blocking,
@@ -185,10 +200,10 @@ async def _dispatch(engine: Engine, *, step: str, original_hash: str, payload: s
 def _fail_for_step(engine: Engine, *, step: str, original_hash: str) -> None:
     """Roteia a variante de FALHA por step ao esgotar retries (dead-letter→FALHA).
 
-    `ingest`→Documents do original (por `origin_original_id`); `extract`/`classify`→
-    Document do bloco (por `content_hash`, Pitfall 2).
+    `ingest`→Documents do original (por `origin_original_id`); `extract`/`classify`/
+    `apply`→Document do bloco (por `content_hash`, Pitfall 2).
     """
-    if step in (EXTRACT_STEP, CLASSIFY_STEP):
+    if step in (EXTRACT_STEP, CLASSIFY_STEP, APPLY_STEP):
         _fail_document_for_content_hash(engine, original_hash)
     else:
         _fail_documents_for_original(engine, original_hash)
@@ -342,8 +357,55 @@ def enqueue_pending_classifications(session: Session) -> int:
     return created
 
 
+def enqueue_pending_applications(session: Session) -> int:
+    """Enfileira um job de apply p/ cada doc classificado de ALTA confiança pronto (D-01).
+
+    Auto-aplica (06-RESEARCH Open Q3): varremos os Documents em `state ==
+    PROCESSANDO` e `last_completed_step == "classificado"` (CLASSIFIED_STEP) cujo
+    `ClassificationResult.confidence_score >= review_confidence_threshold` (alta
+    confiança, D-01) e que ainda NÃO têm `AuditLog(status="done")` — e enfileiramos
+    `(block.content_hash, "apply")` para cada um. Documentos de BAIXA confiança
+    (abaixo do limiar) ficaram em EM_REVISAO no classify_stage e só aplicam após
+    aprovação humana (D-02) — este sweep NÃO os captura (filtro de estado +
+    confiança).
+
+    Idempotente por desenho: a chave do job é o `content_hash` e a UNIQUE
+    `uq_jobs_hash_step` garante 1 job por (hash, "apply"); `repo.enqueue` é no-op
+    quando já existe. A exclusão por `AuditLog(status="done")` evita re-enfileirar um
+    doc já aplicado. Rodar 2x não duplica.
+
+    Retorna quantos jobs NOVOS foram criados (no-ops não contam).
+    """
+    threshold = get_settings().review_confidence_threshold
+    docs = session.scalars(
+        select(Document)
+        .join(ClassificationResult, ClassificationResult.document_id == Document.id)
+        .where(
+            Document.state == DocState.PROCESSANDO,
+            Document.last_completed_step == CLASSIFIED_STEP,
+            ClassificationResult.confidence_score.is_not(None),
+            ClassificationResult.confidence_score >= threshold,
+            ~Document.id.in_(
+                select(AuditLog.document_id).where(AuditLog.status == "done")
+            ),
+        )
+    ).all()
+
+    created = 0
+    for doc in docs:
+        job = repo.enqueue(
+            session,
+            original_hash=doc.content_hash,
+            step=APPLY_STEP,
+            payload=json.dumps({"content_hash": doc.content_hash}),
+        )
+        if job is not None:
+            created += 1
+    return created
+
+
 def _sweep_pending(engine: Engine) -> int:
-    """Roda os dois sweeps idempotentes (extract + classify) e loga o que criou.
+    """Roda os três sweeps idempotentes (extract + classify + apply) e loga o que criou.
 
     Reusado no STARTUP e a cada ciclo OCIOSO do worker. Rodá-lo quando a fila
     esvazia é o que faz documentos avançarem ingest→extract→classify EM RUNTIME
@@ -366,7 +428,15 @@ def _sweep_pending(engine: Engine) -> int:
             "Sweep: %s job(s) de classify enfileirados (blocos extraídos pendentes)",
             enqueued_cls,
         )
-    return enqueued + enqueued_cls
+
+    with get_session(engine) as session:
+        enqueued_apply = enqueue_pending_applications(session)
+    if enqueued_apply:
+        logger.info(
+            "Sweep: %s job(s) de apply enfileirados (docs alta confiança pendentes, D-01)",
+            enqueued_apply,
+        )
+    return enqueued + enqueued_cls + enqueued_apply
 
 
 async def run_worker(engine: Engine, stop: asyncio.Event) -> None:
@@ -380,6 +450,15 @@ async def run_worker(engine: Engine, stop: asyncio.Event) -> None:
         requeued = repo.requeue_running(session)
     if requeued:
         logger.info("Resume: %s job(s) running re-enfileirados como pending", requeued)
+
+    # Reconciliação de intents órfãos de automação (Pitfall 7, T-06-13): um crash
+    # entre o write-ahead (intent) e o `done` deixa um AuditLog(status="intent")
+    # pendurado. UMA vez no startup, adjudicamos: destino íntegro → done; senão →
+    # orphaned (o doc segue sem 'done' e o sweep de apply o re-captura).
+    with get_session(engine) as session:
+        reconciled = reconcile_orphans(session)
+    if reconciled:
+        logger.info("Reconcile: %s intent(s) órfão(s) de automação adjudicados", reconciled)
 
     # Sweep no startup (cobre legados sem job — Fases 2/3/4). A MESMA rotina roda
     # a cada ciclo ocioso abaixo, encadeando os estágios para docs processados ao vivo.
