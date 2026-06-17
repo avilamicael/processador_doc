@@ -51,6 +51,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.classification import filler, matcher, openai_client
+from app.classification.confidence import compute_confidence
 from app.config import get_settings
 from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
@@ -129,7 +130,7 @@ def _missing_field_specs(template: Template, missing_names: list[str]) -> str:
 
 
 async def classify_stage(
-    session: Session, *, content_hash: str
+    session: Session, *, content_hash: str, forced_template_id: int | None = None
 ) -> ClassifyStageResult:
     """Classifica o bloco `content_hash`, preenche/valida os campos e persiste atômico.
 
@@ -180,57 +181,74 @@ async def classify_stage(
     if extraction is None:
         raise ValueError("Extraction inexistente para o bloco — fora de ordem")
 
-    # (4) Carregar os templates e pontuar (matcher PURO, custo 0).
-    templates = list(session.scalars(select(Template)).all())
-    matches = matcher.match_templates(
-        fields_json=extraction.fields_json,
-        full_text=extraction.full_text,
-        doc_type_guess=extraction.doc_type_guess,
-        templates=templates,
-    )
-
-    # (5) Política (limiar GLOBAL classify_match_threshold).
     settings = get_settings()
-    decision = matcher.decide(
-        matches, threshold=settings.classify_match_threshold
-    )
-
     called_ai = False
     usages: list[Usage] = []
     confidence: float | None = None
     matched_template_id: int | None = None
 
-    by_id = {tpl.id: tpl for tpl in templates}
-    conf_by_id = {m.template_id: m.confidence for m in matches}
+    if forced_template_id is not None:
+        # (4'/5') CAMINHO FORÇADO (D-09 — reclassificação de quarentena): o operador
+        # escolheu o template explicitamente. PULA matcher/decide/desempate por
+        # completo e vai direto ao filler+IA-faltantes+validação com o template
+        # forçado. `confidence` (score do matcher) fica None: não houve casamento
+        # automático. Template inexistente → ValueError ANTES de qualquer
+        # persistência (T-05-03) — o worker roteia a FALHA via dead-letter.
+        template = session.get(Template, forced_template_id)
+        if template is None:
+            raise ValueError("Template forçado inexistente")
+        matched_template_id = forced_template_id
+        confidence = None
+        by_id = {template.id: template}
+    else:
+        # (4) Carregar os templates e pontuar (matcher PURO, custo 0).
+        templates = list(session.scalars(select(Template)).all())
+        matches = matcher.match_templates(
+            fields_json=extraction.fields_json,
+            full_text=extraction.full_text,
+            doc_type_guess=extraction.doc_type_guess,
+            templates=templates,
+        )
 
-    if decision.status == "ambiguous":
-        # Zona cinzenta → desempate PAGO (D-01). A IA escolhe o id (ou null).
-        candidates = [
-            by_id[m.template_id]
-            for m in matches
-            if m.confidence >= settings.classify_match_threshold
-            and m.template_id in by_id
-        ]
-        result, usage = await openai_client.disambiguate(
-            _candidates_summary(candidates),
-            extraction.full_text,
+        # (5) Política (limiar GLOBAL classify_match_threshold).
+        decision = matcher.decide(
+            matches, threshold=settings.classify_match_threshold
         )
-        called_ai = True
-        usages.append(
-            Usage(
-                document_id=doc.id,
-                step=USAGE_STEP,
-                prompt_tokens=usage.prompt_tokens,
-                completion_tokens=usage.completion_tokens,
+
+        by_id = {tpl.id: tpl for tpl in templates}
+        conf_by_id = {m.template_id: m.confidence for m in matches}
+
+        if decision.status == "ambiguous":
+            # Zona cinzenta → desempate PAGO (D-01). A IA escolhe o id (ou null).
+            candidates = [
+                by_id[m.template_id]
+                for m in matches
+                if m.confidence >= settings.classify_match_threshold
+                and m.template_id in by_id
+            ]
+            result, usage = await openai_client.disambiguate(
+                _candidates_summary(candidates),
+                extraction.full_text,
             )
-        )
-        confidence = result.confidence
-        if result.matched_template_id is not None and result.matched_template_id in by_id:
-            matched_template_id = result.matched_template_id
-    elif decision.status == "matched":
-        matched_template_id = decision.template_id
-        confidence = conf_by_id.get(matched_template_id)
-    # "quarantine" → matched_template_id permanece None.
+            called_ai = True
+            usages.append(
+                Usage(
+                    document_id=doc.id,
+                    step=USAGE_STEP,
+                    prompt_tokens=usage.prompt_tokens,
+                    completion_tokens=usage.completion_tokens,
+                )
+            )
+            confidence = result.confidence
+            if (
+                result.matched_template_id is not None
+                and result.matched_template_id in by_id
+            ):
+                matched_template_id = result.matched_template_id
+        elif decision.status == "matched":
+            matched_template_id = decision.template_id
+            confidence = conf_by_id.get(matched_template_id)
+        # "quarantine" → matched_template_id permanece None.
 
     # (6) Quarentena (nenhum template casou). ATOMICIDADE: add ANTES do transition;
     # o transition faz o commit interno e persiste TUDO junto (T-04-14). NUNCA
@@ -307,19 +325,50 @@ async def classify_stage(
             )
         )
 
-    # (9) COMMIT ATÔMICO ÚNICO: ClassificationResult + FilledFields + Usage(s) +
-    # marcador "classificado" EM MEMÓRIA. NUNCA mark_step (comita sozinho), NUNCA
-    # transition PROCESSANDO→PROCESSANDO. state permanece PROCESSANDO; nunca CONCLUIDO.
+    # (9) ROTEAMENTO DE ESTADO POR SCORE (Fase 5, D-01/D-04) num COMMIT ATÔMICO
+    # ÚNICO: ClassificationResult (+confidence_score) + FilledFields + Usage(s) + o
+    # destino de estado. `compute_confidence` é a fração de obrigatórios válidos +
+    # `has_invalid_required` (qualquer obrigatório inválido força revisão mesmo com
+    # score alto, D-04). `below_threshold` aplica o limiar global (REV-02).
+    score, has_invalid_required = compute_confidence(
+        cr.filled_fields, list(template.fields)
+    )
+    cr.confidence_score = score
     for u in usages:
         session.add(u)
+    below_threshold = score < settings.review_confidence_threshold
+
+    if has_invalid_required or below_threshold:
+        # Precisa de atenção humana → EM_REVISAO. NUNCA `session.commit()` antes do
+        # `transition` (Pitfall 2): o `transition` comita TUDO junto (CR +
+        # FilledFields + Usages + estado) atomicamente. A allowlist valida
+        # PROCESSANDO→EM_REVISAO (T-05-04); inválida faz rollback sem corromper.
+        transition(session, doc, DocState.EM_REVISAO, completed_step=CLASSIFIED_STEP)
+        logger.info(
+            "Documento %s → EM_REVISAO (score=%.3f has_invalid_required=%s)",
+            doc.id,
+            score,
+            has_invalid_required,
+        )
+        return ClassifyStageResult(
+            matched=True, template_id=matched_template_id, called_ai=called_ai
+        )
+
+    # Passou (score >= limiar e nenhum obrigatório inválido). Mantém o comportamento
+    # terminal da Fase 4: state permanece PROCESSANDO + marcador "classificado".
+    # NUNCA transita para CONCLUIDO (Open Q1 RESOLVIDA, T-05-05): CONCLUIDO é
+    # terminal e é a Fase 6 que captura docs prontos para aplicar automações;
+    # auto-CONCLUIR aqui pularia esse ponto de captura. A conclusão só ocorre via
+    # aprovação humana (Plan 03).
     doc.last_completed_step = CLASSIFIED_STEP
     session.commit()
 
     logger.info(
-        "Classificação concluída document_id=%s template_id=%s called_ai=%s",
+        "Classificação concluída document_id=%s template_id=%s called_ai=%s score=%.3f",
         doc.id,
         matched_template_id,
         called_ai,
+        score,
     )
     return ClassifyStageResult(
         matched=True, template_id=matched_template_id, called_ai=called_ai

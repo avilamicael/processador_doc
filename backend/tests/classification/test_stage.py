@@ -410,7 +410,13 @@ async def test_faltantes_chama_ia_e_merge_por_nome(schema_engine: Engine) -> Non
 
 
 async def test_campo_invalido_marca_sem_quarentena(schema_engine: Engine) -> None:
-    """DV de CNPJ falho → FilledField.valid=False; documento SEGUE (D-10), não quarentena."""
+    """DV de CNPJ falho → FilledField.valid=False; NÃO vai para quarentena (D-10).
+
+    Atualizado na Fase 5: o documento foi CLASSIFICADO (não foi para QUARENTENA por
+    isto — D-10 preservado), mas como o obrigatório é inválido o roteamento D-04 o
+    leva a EM_REVISAO (atenção humana), não mais permanecendo PROCESSANDO+pronto. O
+    ponto do teste (campo inválido marca, não joga em QUARENTENA) segue válido.
+    """
     with respx.mock(base_url="https://api.openai.com/v1", assert_all_called=False) as router:
         route = router.post("/responses")
         with get_session(schema_engine) as s:
@@ -440,8 +446,10 @@ async def test_campo_invalido_marca_sem_quarentena(schema_engine: Engine) -> Non
 
     with get_session(schema_engine) as s:
         reloaded = s.get(Document, doc_id)
-        # documento NÃO foi para quarentena (D-10: marca, não bloqueia)
-        assert reloaded.state == DocState.PROCESSANDO
+        # documento NÃO foi para QUARENTENA (D-10: marca, não bloqueia); mas o
+        # obrigatório inválido força EM_REVISAO (D-04, roteamento da Fase 5).
+        assert reloaded.state == DocState.EM_REVISAO
+        assert reloaded.state != DocState.QUARENTENA
         assert reloaded.last_completed_step == CLASSIFIED_STEP
         cr = s.scalar(
             select(ClassificationResult).where(
