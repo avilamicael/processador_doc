@@ -183,7 +183,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 05-03-PLAN.md — API de triagem: endpoints retry/reclassify/patch/approve (allowlist como guard) + GET /documents/attention (3 baldes) + GET/PUT limiar global
+- [x] 05-03-PLAN.md — API de triagem: endpoints retry/reclassify/patch/approve (allowlist como guard) + GET /documents/attention (3 baldes) + GET/PUT limiar global
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -248,7 +248,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Ingestão e Fila Assíncrona | 5/5 | Complete    | 2026-06-16 |
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
-| 5. Confiança, Revisão Humana e Quarentena | 2/4 | In Progress|  |
+| 5. Confiança, Revisão Humana e Quarentena | 3/4 | In Progress|  |
 | 6. Automações de Arquivo (Renomear/Mover) | 0/TBD | Not started | - |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |

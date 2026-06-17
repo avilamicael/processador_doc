@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-06-17T03:42:56.011Z"
+last_updated: "2026-06-17T03:55:10.717Z"
 last_activity: 2026-06-17
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 23
-  completed_plans: 21
+  completed_plans: 22
   percent: 50
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 ## Current Position
 
 Phase: 05 (confian-a-revis-o-humana-e-quarentena) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-06-17
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
@@ -72,6 +72,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 04 P06 | 12 | 2 tasks | 6 files |
 | Phase 05 P01 | 6 | 2 tasks | 9 files |
 | Phase 05 P02 | 5 | 2 tasks | 6 files |
+| Phase 05 P03 | 8 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [04-06]: Classificacao S4 somente leitura via modal sob demanda (GET /documents/{id}); badge do template/tabela Campo-Valor-Normalizado com marca valido-invalido/pilula Quarentena reusando --st-leitura sem alterar StatusPill; valores como texto puro (T-04-12).
 - [Phase 05-01]: confidence_score (qualidade de extração, D-01) distinto de confidence (matcher); compute_confidence puro (fração de obrigatórios válidos) com has_invalid_required forçando revisão mesmo com score alto (D-04); review_confidence_threshold global default 0.8 (D-03); migração 0005 não toca documents (trigger intacto, T-05-01).
 - [Phase ?]: [05-02]: classify_stage roteia EM_REVISAO (score < limiar OU obrigatório inválido, D-04) vs PROCESSANDO+classificado num commit atômico (sem commit antes do transition); NUNCA CONCLUIDO (Open Q1, T-05-05); forced_template_id (D-09) pula matcher/decide/desempate, inexistente → ValueError (T-05-03); repo.requeue_step reseta job existente para pending (Open Q2); worker repassa forced_template_id do payload.
+- [Phase ?]: [05-03]: 4 endpoints de revisão em api/documents.py com allowlist (transition) + pré-condição de estado explícita como guard (retry só FALHA, reclassify só QUARENTENA → 409); reclassify valida template (404) + apaga CR de quarentena ANTES + requeue_step com forced_template_id; patch revalida via validate_field SEM IA + manually_corrected + recalcula confidence_score; approve via _has_invalid_required (D-07); GET /documents/attention dedicado (3 baldes, selectinload evita N+1); GET/PUT /config/review-threshold persiste no .env + cache_clear (REV-02/D-03).
 
 ### Pending Todos
 
@@ -137,6 +139,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-17T03:42:22.576Z
+Last session: 2026-06-17T03:54:49.002Z
 Stopped at: Completed 05-01-PLAN.md
 Resume file: None
