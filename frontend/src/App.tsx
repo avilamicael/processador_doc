@@ -8,6 +8,7 @@ import { AttentionPage } from './pages/AttentionPage'
 import { ConfigPage } from './pages/ConfigPage'
 import { TemplatesPage } from './pages/TemplatesPage'
 import { AutomationsPage } from './pages/AutomationsPage'
+import { DryRunPage } from './pages/DryRunPage'
 
 type Theme = 'light' | 'dark'
 
@@ -19,6 +20,7 @@ const PAGE_META: Record<Page, [title: string, desc: string]> = {
   ],
   templates: ['Templates', 'Modelos de extração de dados por tipo de documento'],
   automacoes: ['Automações', 'Ações executadas após o tratamento dos documentos'],
+  dryrun: ['Pré-visualização das automações', 'Confira origem → destino antes de aplicar'],
   config: ['Configurações', 'Pastas monitoradas, regras, leitura e integrações'],
 }
 
@@ -36,7 +38,6 @@ export default function App() {
   const [selected, setSelected] = useState<number[]>([])
   const [watcher, setWatcher] = useState(true)
   const [ruleState, setRuleState] = useState<Record<number, boolean>>({ 1: true, 2: false, 3: true, 4: true })
-  const [autoState, setAutoState] = useState<Record<number, boolean>>({ 1: true, 2: true, 3: true, 4: false, 5: true })
   const [deskew, setDeskew] = useState(true)
   const [denoise, setDenoise] = useState(true)
 
@@ -96,7 +97,8 @@ export default function App() {
             />
           )}
           {page === 'templates' && <TemplatesPage />}
-          {page === 'automacoes' && <AutomationsPage autoState={autoState} onToggleAuto={(id) => toggleIn(setAutoState, id)} />}
+          {page === 'automacoes' && <AutomationsPage />}
+          {page === 'dryrun' && <DryRunPage />}
         </div>
       </main>
     </div>

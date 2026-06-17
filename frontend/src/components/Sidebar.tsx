@@ -17,6 +17,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { page: 'templates', label: 'Templates', icon: 'grid' },
       { page: 'automacoes', label: 'Automações', icon: 'bolt' },
+      { page: 'dryrun', label: 'Pré-visualização', icon: 'eye' },
     ],
   },
   { title: 'SISTEMA', items: [{ page: 'config', label: 'Configurações', icon: 'sliders' }] },
