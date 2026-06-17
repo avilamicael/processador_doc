@@ -22,6 +22,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from app import __version__
+from app.api import config as config_api
 from app.api import documents as documents_api
 from app.api import templates as templates_api
 from app.api import watched_folders as watched_folders_api
@@ -79,6 +80,7 @@ app = FastAPI(
 app.include_router(watched_folders_api.router)
 app.include_router(documents_api.router)
 app.include_router(templates_api.router)
+app.include_router(config_api.router)
 
 
 @app.get("/health")

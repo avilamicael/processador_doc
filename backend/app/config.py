@@ -100,9 +100,7 @@ class Settings(BaseSettings):
     # temperatura 0.0 reduz variância entre execuções (base estável p/ Fases 4/7, D-06).
     openai_extract_temperature: float = Field(
         default=0.0,
-        validation_alias=AliasChoices(
-            "OPENAI_EXTRACT_TEMPERATURE", "openai_extract_temperature"
-        ),
+        validation_alias=AliasChoices("OPENAI_EXTRACT_TEMPERATURE", "openai_extract_temperature"),
     )
     # Teto explícito de tokens de saída (Pitfall 3/6): sem limite, uma extração que
     # "viaja" gasta milhares de tokens — e a saída inclui o full_text. Dimensionar
@@ -117,9 +115,7 @@ class Settings(BaseSettings):
     # de scans ruins de forma confiável mas custa mais; "low" é ~85 tokens fixos.
     openai_extract_image_detail: str = Field(
         default="high",
-        validation_alias=AliasChoices(
-            "OPENAI_EXTRACT_IMAGE_DETAIL", "openai_extract_image_detail"
-        ),
+        validation_alias=AliasChoices("OPENAI_EXTRACT_IMAGE_DETAIL", "openai_extract_image_detail"),
     )
     # Limiar da heurística texto-vs-visão: mínimo de caracteres nativos por página
     # para considerar o PDF "tem texto suficiente" (caminho barato). ~16 é um ponto
@@ -141,9 +137,7 @@ class Settings(BaseSettings):
     # desempata (chamada paga); zero sinais → quarentena (template_id null).
     classify_match_threshold: float = Field(
         default=0.5,
-        validation_alias=AliasChoices(
-            "CLASSIFY_MATCH_THRESHOLD", "classify_match_threshold"
-        ),
+        validation_alias=AliasChoices("CLASSIFY_MATCH_THRESHOLD", "classify_match_threshold"),
     )
     # `review_confidence_threshold` (Fase 5, D-03): limiar GLOBAL de QUALIDADE DE
     # EXTRAÇÃO abaixo do qual o documento vai para revisão humana (EM_REVISAO).
@@ -152,26 +146,20 @@ class Settings(BaseSettings):
     # env sem deploy, mesmo padrão de classify_match_threshold.
     review_confidence_threshold: float = Field(
         default=0.8,
-        validation_alias=AliasChoices(
-            "REVIEW_CONFIDENCE_THRESHOLD", "review_confidence_threshold"
-        ),
+        validation_alias=AliasChoices("REVIEW_CONFIDENCE_THRESHOLD", "review_confidence_threshold"),
     )
     # `openai_classify_model`: modelo das chamadas PAGAS de desempate/classificação
     # (D-01/D-06). Modelos giram rápido (CLAUDE.md) → tunável por env; o default
     # reusa o modelo de extract para uma instância só precisar definir um modelo.
     openai_classify_model: str = Field(
         default="gpt-4o-2024-08-06",
-        validation_alias=AliasChoices(
-            "OPENAI_CLASSIFY_MODEL", "openai_classify_model"
-        ),
+        validation_alias=AliasChoices("OPENAI_CLASSIFY_MODEL", "openai_classify_model"),
     )
     # Classificação é determinística (mesma decisão para o mesmo documento) →
     # temperatura 0.0, espelhando o equivalente de extract.
     openai_classify_temperature: float = Field(
         default=0.0,
-        validation_alias=AliasChoices(
-            "OPENAI_CLASSIFY_TEMPERATURE", "openai_classify_temperature"
-        ),
+        validation_alias=AliasChoices("OPENAI_CLASSIFY_TEMPERATURE", "openai_classify_temperature"),
     )
     # Teto de tokens de saída do desempate por IA (a saída é compacta:
     # template casado + confiança + razão), espelhando o de extract.
@@ -219,3 +207,52 @@ def ensure_data_dir(settings: "Settings | None" = None) -> Path:
 def get_settings() -> Settings:
     """Retorna uma instância cacheada de Settings (lida uma vez por processo)."""
     return Settings()
+
+
+def env_file_path() -> Path:
+    """Caminho do arquivo `.env` que o `Settings` lê (SettingsConfigDict.env_file).
+
+    Resolvido relativo à CWD (mesma semântica de `pydantic-settings`). Centralizado
+    aqui para que a persistência de tunables (ex.: `persist_env_setting`) escreva
+    EXATAMENTE no arquivo que o `Settings` relê — e para que os testes possam
+    monkeypatchar este ponto único em vez de poluir o `.env` real.
+    """
+    env_file = Settings.model_config.get("env_file", ".env")
+    return Path(env_file)
+
+
+def persist_env_setting(key: str, value: str) -> None:
+    """Persiste `KEY=value` no `.env`, substituindo a linha existente ou anexando.
+
+    Escrita ATÔMICA (arquivo temporário + `os.replace`) para não corromper o `.env`
+    sob crash/concorrência. `key` é uma constante do código (não input do usuário);
+    `value` já vem validado (ex.: faixa Pydantic do endpoint) — nunca interpolamos
+    input cru em SQL/shell (T-05-15). Preserva as demais linhas do arquivo.
+
+    Após chamar, o chamador deve invocar `get_settings.cache_clear()` para que o
+    novo valor seja relido (o `lru_cache` mantém a instância antiga até limpar).
+    """
+    path = env_file_path()
+    lines: list[str] = []
+    if path.exists():
+        lines = path.read_text(encoding="utf-8").splitlines()
+
+    new_line = f"{key}={value}"
+    replaced = False
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        # Casa a chave no início da linha (ignorando comentários e linhas em branco).
+        if stripped and not stripped.startswith("#"):
+            existing_key = stripped.split("=", 1)[0].strip()
+            if existing_key == key:
+                lines[i] = new_line
+                replaced = True
+                break
+    if not replaced:
+        lines.append(new_line)
+
+    content = "\n".join(lines) + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, path)
