@@ -171,7 +171,23 @@ Plans:
 
 **Nota de escopo (2026-06-16):** modelo "web ativa, leve" — uma visão única "Precisam de atenção" com 3 baldes (FALHA → tentar de novo; QUARENTENA → atribuir template + reclassificar; EM_REVISAO → corrigir campos + aprovar). Visualizador de documento na web removido por decisão de visão (web = gestão; arquivos via Windows Explorer). Ver `phases/05-confian-a-revis-o-humana-e-quarentena/05-CONTEXT.md`.
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Fundação: colunas confidence_score/manually_corrected (Alembic 0005) + tunable do limiar + função pura compute_confidence + scaffolds Wave 0
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 05-02-PLAN.md — classify_stage: cálculo+persistência do score, roteamento EM_REVISAO vs PROCESSANDO+classificado (sem auto-CONCLUIDO), forced_template_id + repo.requeue_step + worker payload
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 05-03-PLAN.md — API de triagem: endpoints retry/reclassify/patch/approve (allowlist como guard) + GET /documents/attention (3 baldes) + GET/PUT limiar global
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 05-04-PLAN.md — Frontend: AttentionPage (3 baldes + ações) + ConfidenceBadge + hooks/api/types + S6 na Config + navegação + verificação visual
 **UI hint**: yes
 
 ### Phase 6: Automações de Arquivo (Renomear/Mover)
