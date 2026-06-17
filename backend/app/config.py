@@ -114,7 +114,11 @@ class Settings(BaseSettings):
     # Alavanca de custo do caminho visão (Pitfall 4 / D-04): "high" lê dígitos finos
     # de scans ruins de forma confiável mas custa mais; "low" é ~85 tokens fixos.
     openai_extract_image_detail: str = Field(
-        default="high",
+        # TODO(custo): baixado de "high" → "low" para economizar tokens no caminho
+        # visão (~85 tokens fixos/página vs milhares). VERIFICAR DEPOIS: medir, com a
+        # tabela `usage`, se a qualidade de leitura em scans reais se mantém aceitável;
+        # se cair, voltar para "high" ou tornar por-template. (decisão de teste)
+        default="low",
         validation_alias=AliasChoices("OPENAI_EXTRACT_IMAGE_DETAIL", "openai_extract_image_detail"),
     )
     # Limiar da heurística texto-vs-visão: mínimo de caracteres nativos por página
