@@ -1,7 +1,9 @@
 """Testes da máquina de estados explícita por documento.
 
 Prova:
-- O mapa `TRANSITIONS` cobre os 6 estados de topo (D-04), com `CONCLUIDO` terminal.
+- O mapa `TRANSITIONS` cobre os 6 estados de topo (D-04). Desde a Fase 6 (AUT-05),
+  `CONCLUIDO` deixou de ser terminal: ganha a ÚNICA saída `CONCLUIDO→PROCESSANDO`
+  para o undo reabrir um documento já aplicado.
 - `is_valid_transition` aceita apenas pares no mapa (allowlist explícita — D-06,
   T-01-16: nenhum salto de etapa/fluxo ilegal).
 - `transition` persiste transições válidas e, numa transição inválida, levanta
@@ -43,8 +45,9 @@ def schema_engine(engine: Engine) -> Iterator[Engine]:
 
 def test_transitions_map_cobre_os_seis_estados() -> None:
     assert set(TRANSITIONS.keys()) == set(DocState)
-    # CONCLUIDO é terminal — conjunto vazio de saídas.
-    assert TRANSITIONS[DocState.CONCLUIDO] == set()
+    # Fase 6 (AUT-05): CONCLUIDO deixou de ser terminal — a única saída é
+    # CONCLUIDO→PROCESSANDO (undo reabre o documento aplicado).
+    assert TRANSITIONS[DocState.CONCLUIDO] == {DocState.PROCESSANDO}
 
 
 def test_transitions_map_modelo_exato() -> None:
@@ -72,8 +75,8 @@ def test_transitions_map_modelo_exato() -> None:
 def test_transitions_map_is_valid_transition() -> None:
     assert is_valid_transition(DocState.RECEBIDO, DocState.PROCESSANDO) is True
     assert is_valid_transition(DocState.RECEBIDO, DocState.CONCLUIDO) is False
-    # Terminal: CONCLUIDO não tem saídas válidas.
-    assert is_valid_transition(DocState.CONCLUIDO, DocState.PROCESSANDO) is False
+    # Fase 6 (AUT-05): CONCLUIDO→PROCESSANDO é a aresta de reabertura do undo.
+    assert is_valid_transition(DocState.CONCLUIDO, DocState.PROCESSANDO) is True
     # Retry/reprocesso permitidos.
     assert is_valid_transition(DocState.FALHA, DocState.PROCESSANDO) is True
     assert is_valid_transition(DocState.QUARENTENA, DocState.PROCESSANDO) is True
