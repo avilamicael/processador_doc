@@ -1,10 +1,11 @@
 ---
 phase: 6
 slug: automacoes-de-arquivo-renomear-mover
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-17
+reviewed_at: 2026-06-17
 ---
 
 # Phase 6 — UI Design Contract
@@ -26,7 +27,7 @@ A Fase 6 entrega **duas superfícies novas** (a aba Automações real, hoje um m
 | # | Surface | Origem | O que muda |
 |---|---------|--------|------------|
 | S1 | **Aba "Automações" — lista de regras** (substitui o mock) | Reescreve `AutomationsPage.tsx`, molde `TemplatesPage` + classes `.rule-card`/`.stack` | Lista as **regras condicionais** ordenadas por prioridade (D-05, primeira-que-casa-vence). Cada regra: condições `{campo} [op] valor` (E/OU) → automação a aplicar (padrão de nome + pasta destino). Estados loading/erro/vazio. Polling/refetch via TanStack Query (padrão `useTemplates`) |
-| S2 | **Editor de regra condicional** (criar/editar) | Novo, molde do construtor schema-first de template (S2 da Fase 4) | Form inline: linhas de condição (`select` campo + `select` operador `= > < contém` + input valor), combinador **E/OU**, e a **ação** (padrão de nome `{campo}_...` + padrão de pasta `Documentos/{cliente}/{data:aaaa-mm}/`). Reordenação por prioridade (mover ↑/↓). Sem "Cancelar" supérfluo (convenção 04-UI-SPEC: CTAs contextuais) |
+| S2 | **Editor de regra condicional** (criar/editar) | Novo, molde do construtor schema-first de template (S2 da Fase 4) | Form inline: linhas de condição (`select` campo + `select` operador `= > < contém` + input valor), combinador **E/OU**, e a **ação** (padrão de nome `{campo}_...` + padrão de pasta `Documentos/{cliente}/{data:aaaa-mm}/`). Reordenação por prioridade (botões mover ↑/↓ — ver nota de acessibilidade em §Visuals). Sem "Cancelar" supérfluo (convenção 04-UI-SPEC: CTAs contextuais) |
 | S3 | **Editor de padrão (nome/pasta) com tokens `{campo}`** | Novo, sub-bloco de S2 | Campo de texto do padrão + **lista de tokens disponíveis** (campos do template, inseríveis por clique) + **pré-visualização ao vivo** do nome/caminho resolvido com dados de exemplo, mostrando sanitização (D-08) aplicada. `{data:aaaa-mm}` documentado como sufixo de formato |
 | S4 | **Tela de Dry-run / Preview** (origem→destino) | Nova página/painel, molde `table.docs` da `DocumentsPage` | Tabela de pares **origem → destino** (texto mono), coluna de **colisão sinalizada** (sufixo `_1` aplicado, D-09 / duplicata idêntica pulada, D-10 / bloqueado→revisão por campo faltante, D-07). CTA **"Aplicar"** (lote) só após o usuário ver o preview. Seleção por documento (`.checkbox`) e por lote (D-03) |
 | S5 | **Ação por-documento na lista (Aplicar / Desfazer)** | Estende `DocumentsPage` + `AttentionPage` | Em documentos de alta confiança auto-aplicados (D-01) o estado vira "Concluído"; a linha ganha ação **"Desfazer"** (`.row-action`). Documentos rebaixados a revisão por campo faltante no padrão (D-07) aparecem em "Precisam de atenção" com o motivo "Campo X usado no nome está faltando" |
@@ -52,7 +53,7 @@ A Fase 6 entrega **duas superfícies novas** (a aba Automações real, hoje um m
 | Tool | none — sistema de design próprio TRAVADO em `frontend/src/index.css` (DocWatch "Corporate Modern"). shadcn NÃO usado (CLAUDE.md: stack é React 19 + Vite + CSS com tokens; sem component lib) |
 | Preset | not applicable |
 | Component library | none — componentes próprios em `frontend/src/components/` (Header, Sidebar, Icon, StatusPill, Switch, ConfidenceBadge); classes CSS utilitárias em `index.css`. Reusar `.rule-card`/`.auto-card`/`.flow-pill` já existentes para regras/automação |
-| Icon library | `Icon` próprio (`frontend/src/components/Icon.tsx`). Usar nomes já existentes: `bolt` (automação — já na nav e no mock), `arrowRight` (fluxo condição→ação, já usado), `plus` (nova regra), `refresh` (reprocessar/reaplicar), `check`/`checkSmall` (aplicado/válido), `folder` (pasta destino), `dots`/`docMini`. Para **"desfazer"** e **"colisão/alerta"**, se não houver ícone equivalente, adicionar a `Icon.tsx` no MESMO estilo de stroke dos existentes (não importar lib externa) |
+| Icon library | `Icon` próprio (`frontend/src/components/Icon.tsx`). Usar nomes já existentes: `bolt` (automação — já na nav e no mock), `arrowRight` (fluxo condição→ação, já usado), `plus` (nova regra), `refresh` (reprocessar/reaplicar), `check`/`checkSmall` (aplicado/válido), `folder` (pasta destino), `dots`/`docMini`. Para **"desfazer"**, **"colisão/alerta"** e **"mover ↑/↓"** (reordenação de prioridade), se não houver ícone equivalente, adicionar a `Icon.tsx` no MESMO estilo de stroke dos existentes (não importar lib externa) |
 | Font | UI: `Plus Jakarta Sans` (`--font-ui`); mono: `JetBrains Mono` (`--font-mono`). **Mono obrigatório** para: caminhos origem/destino, padrões `{campo}`, nome de arquivo, hash, e o valor numérico de condições |
 
 **shadcn gate:** `components.json` não encontrado (verificado em `frontend/`). Projeto possui sistema de design próprio explícito e maduro; CLAUDE.md e os UI-SPECs anteriores proíbem introduzir shadcn/Tailwind. Gate resolvido como **Tool: none** (sistema existente). Registry safety gate: **não aplicável** (sem registries). Convenção da fase: **code-and-config — sem adicionar dependência npm nova** (consistente com 05-04 e com o RESEARCH "zero dependência nova").
@@ -73,7 +74,7 @@ Escala 4-point já praticada em `index.css`. Reusa exatamente os tokens dos UI-S
 | 2xl | 48px | Padding de estados vazio/erro (`48px 24px`, padrão `DocumentsPage`/`AttentionPage`) |
 | 3xl | 64px | Espaçamento de nível de página |
 
-Exceções (herdadas do bundle DocWatch, já em produção — manter, não "corrigir"): `--row-py: 13px` (linhas de `table.docs`, reusado na tabela de dry-run S4); paddings de card `16px 18px` (`.rule-card`/`.auto-card`, reusados para regras); padding de diálogo `22px` (padrão `confirmRemove`, reusado em S6); card de campo/condição `14px` (padrão do construtor da Fase 4, reusado nas linhas de condição de S2). **Regra para classes novas desta fase (ex.: `.dryrun-row`, `.pattern-preview`, `.token-chip`, `.rule-priority`): NÃO introduzir valores de espaçamento fora dos múltiplos de 4 acima; reusar exclusivamente os tokens ou as classes/cards existentes que já carregam as exceções herdadas (13/14/16-18/22px). As exceções herdadas são travadas, não licença para criar novos valores ímpares.**
+Exceções (herdadas do bundle DocWatch, já em produção — manter, não "corrigir"): `--row-py: 13px` (linhas de `table.docs`, reusado na tabela de dry-run S4); paddings de card `16px 18px` (`.rule-card`/`.auto-card`, reusados para regras); padding de diálogo `22px` (padrão `confirmRemove`, reusado em S6); card de campo/condição `14px` (padrão do construtor da Fase 4, reusado nas linhas de condição de S2). **Regra para classes novas desta fase (ex.: `.dryrun-row`, `.pattern-preview`, `.token-chip`, `.rule-priority`): NÃO introduzir valores de espaçamento fora dos múltiplos de 4 acima; reusar exclusivamente os tokens ou as classes/cards existentes que já carregam as exceções herdadas (13/14/16-18/22px). As exceções herdadas são travadas, não licença para criar novos valores ímpares.** O executor deve checar esta regra explicitamente ao criar `.dryrun-row`, `.pattern-preview`, `.token-chip` e `.rule-priority`.
 
 ---
 
@@ -84,9 +85,11 @@ Tamanhos e pesos TRAVADOS em `index.css`. Esta fase usa exatamente os 4 papéis 
 | Role | Size | Weight | Line Height | Token/uso existente |
 |------|------|--------|-------------|---------------------|
 | Body | 13px | 400 (regular) | 1.5 | texto de motivo/descrição de regra (`.rule-desc`/`.sec-desc`), células da tabela de dry-run, hint de padrão |
-| Label | 12px | 600 (semibold) | 1.4 | rótulos de campo, "QUANDO/SE/AÇÃO" (`.flow-tag` 10px uppercase), cabeçalho de coluna (`table.docs th` 11px uppercase), `.rule-name` 14px/600 |
+| Label | 12px | 600 (semibold) | 1.4 | rótulos de campo, cabeçalho de coluna |
 | Heading | 15px | 600 (semibold) | 1.25 | `.sec-title` — título da aba Automações, título do editor de regra, título do dry-run |
 | Display | 16px | 700 (bold) | 1.2 | `.page-title` (cabeçalho da página) |
+
+> **Tamanhos herdados de classes existentes reusadas — referência documental, NÃO novos tamanhos desta fase:** `.flow-tag` 10px uppercase ("QUANDO/SE/AÇÃO"), `table.docs th` 11px uppercase (cabeçalho de coluna), `.rule-name` 14px/600 (nome da regra). Esses três valores vêm do bundle DocWatch já em produção e são reusados tal-qual. **Elementos NOVOS desta fase usam exclusivamente os 4 papéis da tabela acima (12/13/15/16px).** O contrato tipográfico da fase é de **4 tamanhos**; os herdados são travados, não licença para criar novos.
 
 **Pesos: exatamente 2 — regular `400` e forte (semibold `600` / bold `700`).** 600 e 700 são subvariantes do mesmo "peso forte" (não dois pesos independentes): use **700** apenas em `.page-title` (Display), `.btn-primary` e `.stat-num` (contagens grandes do topo do dry-run, se exibidas em card); use **600** em todo o resto que precise de peso forte (rótulos, `.rule-name`, títulos de seção, badges, `.flow-tag`). Não escolher arbitrariamente entre 600 e 700 em elementos novos. Fonte mono (`--font-mono`) reservada a: caminhos origem→destino, padrões `{campo}`, nome de arquivo, valor de condição numérica, hash.
 
@@ -103,7 +106,7 @@ Paleta TRAVADA em `:root` / `[data-theme="dark"]` de `index.css`. Tema claro e e
 | Accent (10%) | `var(--accent)` #2563EB / #3B82F6 | Ver lista reservada abaixo |
 | Destructive | `var(--st-erro)` #DC2626 / #F87171 (+ `--st-erro-bg`) | Apenas sinalização: bloqueio→revisão por campo faltante (D-07), erro de operação, motivo de FALHA. **Nenhuma ação desta fase é destrutiva** (Aplicar e Desfazer são reversíveis por desenho — ver Copywriting) |
 
-**Accent reservado para:** botão primário **"Aplicar"** (dry-run S4) e **"Aplicar lote"**; **"Nova regra"** e **"Salvar regra"** (S1/S2); estado `:focus` dos inputs de condição/padrão (`box-shadow: 0 0 0 3px var(--accent-ring)`); estado ativo de aba/chip de filtro do dry-run (`.chip.active`/`.tab` ativo em `--accent-soft`); `.flow-pill.action` (a pílula da AÇÃO de uma regra, já em `--accent-soft`/`--accent`). **Não** usar accent como cor de fundo geral, nem em todo elemento interativo, nem na ação "Desfazer" (que é `.row-action` neutra/`.btn-ghost`).
+**Accent reservado para:** botão primário **"Aplicar"** (dry-run S4) e **"Aplicar selecionados"**; **"Nova regra"** e **"Salvar regra"** (S1/S2); estado `:focus` dos inputs de condição/padrão (`box-shadow: 0 0 0 3px var(--accent-ring)`); estado ativo de aba/chip de filtro do dry-run (`.chip.active`/`.tab` ativo em `--accent-soft`); `.flow-pill.action` (a pílula da AÇÃO de uma regra, já em `--accent-soft`/`--accent`). `--accent-soft` é variante tonal (fundo suave do mesmo accent para estados ativos), não um segundo accent. **Não** usar accent como cor de fundo geral, nem em todo elemento interativo, nem na ação "Desfazer" (que é `.row-action` neutra/`.btn-ghost`).
 
 ### Cores semânticas de status (reusar tokens `--st-*` existentes — NÃO criar novos)
 
@@ -126,9 +129,9 @@ Idioma: **pt-BR** (consistente com todo o frontend). Tom: direto, sem jargão, e
 
 | Element | Copy |
 |---------|------|
-| Primary CTA (dry-run S4) | **"Aplicar"** (lote: **"Aplicar selecionados"**) — após o preview |
+| Primary CTA (dry-run S4) | **"Aplicar automações"** (lote: **"Aplicar selecionados"**) — após o preview |
 | Primary CTA (S1/S2) | **"Nova regra"** (criar) / **"Salvar regra"** (editar) |
-| CTA secundária por-doc | **"Desfazer"** (reverter aplicação) / **"Pré-visualizar"** (abrir dry-run de 1 doc) |
+| CTA secundária por-doc | **"Desfazer aplicação"** (reverter; rótulo curto "Desfazer" aceitável só na `.row-action` com `title`/tooltip que repete o objeto) / **"Pré-visualizar automação"** (abrir dry-run de 1 doc) |
 | Empty state heading (S1 regras) | **"Nenhuma regra de automação ainda"** |
 | Empty state body (S1) | **"Crie uma regra para renomear e organizar arquivos automaticamente a partir dos campos extraídos. Ex.: holerite com valor acima de R$ 3.000 → pasta Análise."** + CTA "Nova regra" |
 | Empty state (S4 dry-run vazio) | **"Nenhum documento pronto para automação. Documentos de alta confiança são aplicados automaticamente; os demais aguardam revisão."** |
@@ -140,9 +143,17 @@ Idioma: **pt-BR** (consistente com todo o frontend). Tom: direto, sem jargão, e
 | Hint de preview (S3) | **"Pré-visualização com dados de exemplo. Caracteres inválidos no Windows são removidos automaticamente."** |
 | Resultado do undo (sucesso) | **"Desfeito. O arquivo voltou ao local de origem."** |
 | Resultado do undo (via CAS) | **"O arquivo de destino não foi encontrado no lugar esperado. Restauramos a cópia íntegra preservada pelo sistema para a pasta de origem."** |
-| Destructive confirmation | **Nenhuma ação desta fase é destrutiva.** "Aplicar" sempre oferece "Desfazer" depois; "Desfazer" restaura (do destino ou do CAS) e nunca apaga sem rede. O diálogo de S6 confirma a intenção mas comunica reversibilidade — **não** usa linguagem de alerta vermelho de exclusão permanente. |
+| Destructive confirmation | **Nenhuma ação desta fase é destrutiva.** "Aplicar automações" sempre oferece "Desfazer aplicação" depois; "Desfazer aplicação" restaura (do destino ou do CAS) e nunca apaga sem rede. O diálogo de S6 confirma a intenção mas comunica reversibilidade — **não** usa linguagem de alerta vermelho de exclusão permanente. |
 
-> Convenção de CTA (herdada 04/05-UI-SPEC): CTAs contextuais, sem botão "Cancelar" supérfluo onde fechar o painel já cancela. "Aplicar" e "Aplicar selecionados" SEMPRE vêm depois de o usuário ver o dry-run (AUT-03) — nunca um "aplicar direto" sem preview na UI manual.
+> Convenção de CTA (herdada 04/05-UI-SPEC): CTAs contextuais, sem botão "Cancelar" supérfluo onde fechar o painel já cancela. CTAs primárias carregam verbo + substantivo ("Aplicar automações", "Salvar regra", "Nova regra", "Pré-visualizar automação"). Onde o espaço da linha exige rótulo curto ("Desfazer" na `.row-action`), o objeto vem no `title`/tooltip. "Aplicar automações" e "Aplicar selecionados" SEMPRE vêm depois de o usuário ver o dry-run (AUT-03) — nunca um "aplicar direto" sem preview na UI manual.
+
+---
+
+## Visuals — Notas de acessibilidade
+
+- **Reordenação de prioridade (S2, botões mover ↑/↓):** são `.row-action`/botões icon-only. Cada botão DEVE ter `aria-label` + `title` ("Aumentar prioridade" / "Diminuir prioridade") — o componente `Icon` não carrega rótulo acessível por si só. Não deixar botão de seta sem label textual acessível.
+- **Outras ações icon-only** (Desfazer, Pré-visualizar como `.row-action`): mesma regra — `aria-label` + `title` com o objeto explícito.
+- Accent restrito à CTA primária por superfície; "Desfazer" e os controles de reordenação são neutros (`.row-action`/`.btn-ghost`), nunca accent.
 
 ---
 
@@ -159,11 +170,11 @@ Nenhum registry de componentes é usado. Sistema de design próprio (`index.css`
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS (FLAGs de CTA de palavra única resolvidos — verbo+substantivo + objeto no `title`)
+- [x] Dimension 2 Visuals: PASS (acessibilidade de ações icon-only ↑/↓/Desfazer documentada)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS (tamanhos herdados movidos para nota; contrato = 4 papéis)
+- [x] Dimension 5 Spacing: PASS (exceções herdadas justificadas; regra para classes novas explícita)
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-06-17
