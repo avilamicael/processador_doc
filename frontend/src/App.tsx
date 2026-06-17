@@ -4,6 +4,7 @@ import type { ConfigTab, Page, StatusFilter } from './types'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { DocumentsPage } from './pages/DocumentsPage'
+import { AttentionPage } from './pages/AttentionPage'
 import { ConfigPage } from './pages/ConfigPage'
 import { TemplatesPage } from './pages/TemplatesPage'
 import { AutomationsPage } from './pages/AutomationsPage'
@@ -79,6 +80,7 @@ export default function App() {
               onToggleAll={toggleAll}
             />
           )}
+          {page === 'atencao' && <AttentionPage />}
           {page === 'config' && (
             <ConfigPage
               tab={configTab}

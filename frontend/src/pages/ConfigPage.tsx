@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { INTEGRATIONS, RULES } from '../data/mock'
 import type { ConfigTab, Folder } from '../types'
 import { Icon } from '../components/Icon'
@@ -9,6 +9,7 @@ import {
   useUpdateFolder,
   useWatchedFolders,
 } from '../hooks/useWatchedFolders'
+import { useReviewThreshold, useSaveReviewThreshold } from '../hooks/useAttention'
 
 interface ConfigPageProps {
   tab: ConfigTab
@@ -397,6 +398,95 @@ function LeituraTab({ deskew, onToggleDeskew, denoise, onToggleDenoise }: Config
           <Switch on={denoise} onToggle={onToggleDenoise} />
         </div>
       </div>
+
+      {/* S6 — Limiar de confiança (D-03): lê/salva /config/review-threshold */}
+      <ReviewThresholdField />
+    </div>
+  )
+}
+
+// S6 — Limiar de confiança global. Lê via useReviewThreshold (0.0–1.0 na API),
+// exibe/edita em 0–100% com sufixo "%", e salva via useSaveReviewThreshold
+// (converte 0–100 ↔ 0.0–1.0). Documentos com confiança abaixo do limiar (ou com
+// obrigatório inválido) vão para revisão.
+function ReviewThresholdField() {
+  const thresholdQuery = useReviewThreshold()
+  const saveThreshold = useSaveReviewThreshold()
+  const [pct, setPct] = useState<string>('')
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Sincroniza o input com o valor carregado da API (0.0–1.0 → 0–100).
+  useEffect(() => {
+    if (thresholdQuery.data) {
+      setPct(String(Math.round(thresholdQuery.data.threshold * 100)))
+    }
+  }, [thresholdQuery.data])
+
+  const submit = () => {
+    setSaveError(null)
+    const parsed = Number.parseInt(pct, 10)
+    if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
+      setSaveError('Informe um valor entre 0 e 100.')
+      return
+    }
+    saveThreshold.mutate(parsed / 100, {
+      onError: () =>
+        setSaveError('Não foi possível salvar o limiar. Tente novamente.'),
+    })
+  }
+
+  return (
+    <div className="card" style={{ padding: 18, marginTop: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>
+          Limiar de confiança
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+          Documentos com confiança abaixo deste valor, ou com qualquer campo obrigatório
+          inválido, vão para revisão.
+        </span>
+      </div>
+
+      {thresholdQuery.isLoading && (
+        <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Carregando limiar…</div>
+      )}
+
+      {thresholdQuery.isError && (
+        <div>
+          <p style={{ fontSize: 13, margin: '0 0 12px' }}>
+            Não foi possível carregar o limiar. Verifique se o serviço está em execução.
+          </p>
+          <button className="btn-primary" onClick={() => thresholdQuery.refetch()}>
+            <Icon name="refresh" size={15} />
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {!thresholdQuery.isLoading && !thresholdQuery.isError && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              className="search-input"
+              type="number"
+              min={0}
+              max={100}
+              style={{ width: 120 }}
+              value={pct}
+              onChange={(e) => setPct(e.target.value)}
+              aria-label="Limiar de confiança em porcentagem"
+            />
+            <span style={{ fontSize: 13, color: 'var(--text-2)' }}>%</span>
+          </div>
+          <button className="btn-primary" onClick={submit} disabled={saveThreshold.isPending}>
+            {saveThreshold.isPending ? 'Salvando…' : 'Salvar limiar'}
+          </button>
+        </div>
+      )}
+
+      {saveError && (
+        <p style={{ fontSize: 13, color: 'var(--st-erro)', margin: '10px 0 0' }}>{saveError}</p>
+      )}
     </div>
   )
 }

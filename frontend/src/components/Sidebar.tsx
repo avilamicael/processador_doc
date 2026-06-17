@@ -5,7 +5,13 @@ import type { IconName } from './Icon'
 interface NavItem { page: Page; label: string; icon: IconName }
 
 const GROUPS: { title: string; items: NavItem[] }[] = [
-  { title: 'OPERAÇÃO', items: [{ page: 'documentos', label: 'Documentos', icon: 'doc' }] },
+  {
+    title: 'OPERAÇÃO',
+    items: [
+      { page: 'documentos', label: 'Documentos', icon: 'doc' },
+      { page: 'atencao', label: 'Precisam de atenção', icon: 'alert' },
+    ],
+  },
   {
     title: 'PROCESSAMENTO',
     items: [

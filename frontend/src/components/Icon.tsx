@@ -5,7 +5,7 @@ export type IconName =
   | 'logo' | 'doc' | 'docMini' | 'grid' | 'bolt' | 'sliders' | 'search'
   | 'sun' | 'moon' | 'bell' | 'eye' | 'download' | 'dots' | 'plus'
   | 'filter' | 'refresh' | 'folder' | 'arrowRight' | 'check' | 'checkSmall'
-  | 'tableMini'
+  | 'tableMini' | 'alert'
 
 interface IconDef { body: ReactNode; sw?: number; fill?: boolean }
 
@@ -31,6 +31,7 @@ const ICONS: Record<IconName, IconDef> = {
   check: { sw: 3.2, body: <path d="M20 6 9 17l-5-5" /> },
   checkSmall: { sw: 1.8, body: <path d="m4 12 5 5L20 6" /> },
   tableMini: { sw: 1.8, body: <><path d="M4 4h16v16H4z" /><path d="M4 9h16" /></> },
+  alert: { sw: 1.8, body: <><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></> },
 }
 
 interface IconProps {
