@@ -205,8 +205,25 @@ Plans:
   5. Mover entre discos diferentes é seguro (copia, verifica e só então remove a origem)
   6. O usuário define **regras condicionais de tratativa** (condição sobre os campos extraídos → qual automação aplicar), permitindo tratativas diferentes para o mesmo tipo de documento por cliente/emissor/valor (TPL-02, re-escopado da Fase 4 em 2026-06-16)
 
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
+Plans:
+**Wave 1**
+
+- [ ] 06-01-PLAN.md — Fundação: estender AuditLog (write-ahead+undo) + modelos AutomationRule/RuleCondition + Alembic 0006 + tunables + scaffolds Wave 0
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 06-02-PLAN.md — Motores puros: naming (tokens→caminho sanitizado+confinado, bloqueio→revisão) + rules (regras condicionais primeira-que-casa-vence)
+- [ ] 06-03-PLAN.md — Operação física: fileops (materializa do CAS+anti-colisão+verifica hash) + undo (reversão por-doc/run com fallback CAS)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 06-04-PLAN.md — Orquestração: apply_stage (write-ahead idempotente+reconcile) + worker (step apply+sweep auto-aplica) + API /automations + approve dispara apply
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 06-05-PLAN.md — Frontend: tipos/api/hooks + Automações real (S1/S2/S3) + Dry-run (S4) + Aplicar/Desfazer (S5/S6) + verificação visual
 
 ### Phase 7: Módulo Determinístico Opcional e Roteamento de Custo
 
@@ -249,6 +266,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
-| 6. Automações de Arquivo (Renomear/Mover) | 0/TBD | Not started | - |
+| 6. Automações de Arquivo (Renomear/Mover) | 0/5 | Not started | - |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
