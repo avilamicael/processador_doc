@@ -10,12 +10,14 @@
 // como texto puro pelo React (T-02-11): este módulo não interpreta HTML.
 
 import type {
+  AttentionList,
   Doc,
   DocumentDetail,
   DocumentList,
   Folder,
   FolderCreate,
   FolderPatch,
+  ReviewThreshold,
   Template,
   TemplateCreate,
   TemplatePatch,
@@ -67,6 +69,56 @@ export function getDocumentDetail(id: number): Promise<DocumentDetail> {
 
 export function postRescan(): Promise<{ enqueued: number }> {
   return request<{ enqueued: number }>('/rescan', { method: 'POST' })
+}
+
+// --- Triagem "Precisam de atenção" (Fase 5 — REV-03/04/05) ---
+
+// Os 3 baldes (FALHA/QUARENTENA/EM_REVISAO) num payload só (endpoint dedicado, Open Q3).
+export function getAttention(): Promise<AttentionList> {
+  return request<AttentionList>('/documents/attention')
+}
+
+// FALHA → "Tentar de novo" (FALHA→PROCESSANDO; reenfileira o step adequado).
+export function postRetry(id: number): Promise<DocumentDetail> {
+  return request<DocumentDetail>(`/documents/${id}/retry`, { method: 'POST' })
+}
+
+// QUARENTENA → "Reclassificar" com template forçado (QUARENTENA→PROCESSANDO, D-09).
+export function postReclassify(id: number, templateId: number): Promise<DocumentDetail> {
+  return request<DocumentDetail>(`/documents/${id}/reclassify`, {
+    method: 'POST',
+    body: JSON.stringify({ template_id: templateId }),
+  })
+}
+
+// EM_REVISAO → corrigir um campo (revalida SEM IA, D-08). `field_name` codificado na URL.
+export function patchField(
+  id: number,
+  fieldName: string,
+  rawValue: string | null,
+): Promise<DocumentDetail> {
+  return request<DocumentDetail>(`/documents/${id}/fields/${encodeURIComponent(fieldName)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ raw_value: rawValue }),
+  })
+}
+
+// EM_REVISAO → "Aprovar documento" (EM_REVISAO→CONCLUIDO; guard D-07 no backend).
+export function postApprove(id: number): Promise<DocumentDetail> {
+  return request<DocumentDetail>(`/documents/${id}/approve`, { method: 'POST' })
+}
+
+// --- Limiar global de confiança (S6 — Config; D-03) ---
+
+export function getReviewThreshold(): Promise<ReviewThreshold> {
+  return request<ReviewThreshold>('/config/review-threshold')
+}
+
+export function putReviewThreshold(value: number): Promise<ReviewThreshold> {
+  return request<ReviewThreshold>('/config/review-threshold', {
+    method: 'PUT',
+    body: JSON.stringify({ threshold: value }),
+  })
 }
 
 // --- Pastas monitoradas (CRUD) ---

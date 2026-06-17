@@ -4,7 +4,7 @@
 // pertencem a telas mock de fases futuras (Template/Automation/Integration/Rule)
 // permanecem como modelo de UI até serem fiados.
 
-export type Page = 'documentos' | 'templates' | 'automacoes' | 'config'
+export type Page = 'documentos' | 'atencao' | 'templates' | 'automacoes' | 'config'
 export type ConfigTab = 'pastas' | 'regras' | 'leitura' | 'integracoes'
 
 // Estado de domínio REAL do backend (app/models/enums.py DocState). Substitui a
@@ -140,6 +140,8 @@ export interface ClassificationField {
   normalized_value: string | null
   valid: boolean
   invalid_reason: string | null
+  // D-08: campo corrigido manualmente pelo operador (não veio da IA/documento).
+  manually_corrected: boolean
 }
 
 // Bloco de classificação (template_id/template_name null = quarentena, D-03).
@@ -147,6 +149,9 @@ export interface Classification {
   template_id: number | null
   template_name: string | null
   confidence: number | null
+  // D-02: score 0.0–1.0 de qualidade de extração (a UI multiplica por 100).
+  // `null` em quarentena (sem template = sem obrigatórios).
+  confidence_score: number | null
   fields: ClassificationField[]
 }
 
@@ -169,4 +174,35 @@ export interface Automation {
   cond: string
   action: string
   runs: string
+}
+
+// --- Triagem "Precisam de atenção" (Fase 5 — REV-03/04/05) ---
+
+// Item dos baldes FALHA/QUARENTENA (AttentionItemOut do backend): id + nome + motivo.
+export interface AttentionItem {
+  id: number
+  original_filename: string
+  motivo: string | null
+}
+
+// Item de EM_REVISAO (ReviewItemOut): estende com score + campos editáveis inline.
+export interface ReviewItem {
+  id: number
+  original_filename: string
+  motivo: string | null
+  confidence_score: number | null
+  fields: ClassificationField[]
+}
+
+// Resposta de GET /documents/attention (AttentionOut): os 3 baldes + contagens.
+export interface AttentionList {
+  falha: AttentionItem[]
+  quarentena: AttentionItem[]
+  em_revisao: ReviewItem[]
+  counts: Record<string, number>
+}
+
+// Limiar global de confiança (GET/PUT /config/review-threshold) — 0.0–1.0 (D-03).
+export interface ReviewThreshold {
+  threshold: number
 }

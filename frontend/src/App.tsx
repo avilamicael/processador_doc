@@ -12,6 +12,10 @@ type Theme = 'light' | 'dark'
 
 const PAGE_META: Record<Page, [title: string, desc: string]> = {
   documentos: ['Documentos', 'Arquivos encontrados e tratados pelo watcher'],
+  atencao: [
+    'Precisam de atenção',
+    'Documentos que pararam por falha, quarentena ou baixa confiança',
+  ],
   templates: ['Templates', 'Modelos de extração de dados por tipo de documento'],
   automacoes: ['Automações', 'Ações executadas após o tratamento dos documentos'],
   config: ['Configurações', 'Pastas monitoradas, regras, leitura e integrações'],
