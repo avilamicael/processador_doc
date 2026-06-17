@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     # conta no momento da implementação (modelos giram rápido, D-04). Precisa
     # suportar visão (input_image) + Structured Outputs (text_format Pydantic).
     openai_extract_model: str = Field(
-        default="gpt-4o-2024-08-06",
+        default="gpt-4o-mini-2024-07-18",
         validation_alias=AliasChoices("OPENAI_EXTRACT_MODEL", "openai_extract_model"),
     )
     # Extração é determinística (queremos os MESMOS dados, não criatividade) →
@@ -152,7 +152,7 @@ class Settings(BaseSettings):
     # (D-01/D-06). Modelos giram rápido (CLAUDE.md) → tunável por env; o default
     # reusa o modelo de extract para uma instância só precisar definir um modelo.
     openai_classify_model: str = Field(
-        default="gpt-4o-2024-08-06",
+        default="gpt-4o-mini-2024-07-18",
         validation_alias=AliasChoices("OPENAI_CLASSIFY_MODEL", "openai_classify_model"),
     )
     # Classificação é determinística (mesma decisão para o mesmo documento) →
