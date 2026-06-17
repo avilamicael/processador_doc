@@ -14,6 +14,19 @@ Escopo: AUT-01..AUT-06 + TPL-02. **Fora de escopo:** automações além de renom
 <decisions>
 ## Implementation Decisions
 
+### ⚠️ REDESIGN — Modelo de PIPELINE de automações (2026-06-17) — SUBSTITUI o modelo de regra-única
+> Decisão do usuário ao revisar a Fase 6: as automações deixam de ser uma "regra única (condição → nome+pasta, primeira-que-casa-vence)" e passam a ser um **pipeline ordenado de etapas componíveis**. Isto **SUBSTITUI D-04, D-05 e o acoplamento de D-06** (nome+pasta numa só regra). Demais decisões abaixo (D-07, D-08, D-09, D-10, D-11, D-01/02/03, AUT-04/05) permanecem válidas.
+
+- **D-12:** Automações = **pipeline ORDENADO de etapas (steps)**. Cada documento passa por **TODAS as etapas cujo filtro casa, na ordem** definida pelo usuário (encadeado), não "primeira que casa vence". (SUBSTITUI D-05.)
+- **D-13:** Cada etapa = **um filtro de entrada + UMA ação atômica**. Ações do v1: **Mover** (pasta destino com tokens), **Renomear** (tokens dos campos), **Identificar tipo (gate)** (classifica contra template; porteiro p/ etapas seguintes), **Rotear/decidir tratar** (enviar p/ revisão humana / marcar não-tratar / ignorar). Renomear+mover = duas etapas encadeadas. (SUBSTITUI D-04 e o acoplamento de D-06.)
+- **D-14:** **Filtros de entrada** combináveis por etapa: pasta de origem monitorada, tipo de arquivo (extensão), tipo/template classificado, valor de campo extraído, **nome do arquivo, tamanho** (e atributos simples afins).
+- **D-15:** A ação **Identificar tipo** REUSA a classificação/extração já existentes (Fases 3/4) — não cria parsers novos. Parser de linha digitável de boleto e afins permanecem na Fase 7.
+- **D-16:** **Escopo v1 do pipeline:** ações de arquivo (mover/renomear/rotear) + identificação de tipo como etapa. **Fora do v1:** etapas que extraem campo específico (ex. buscar linha digitável) — Fase 7.
+
+**Open questions a resolver no replan:**
+- Semântica do "caminho corrente" de um documento no pipeline: como Renomear (muda nome-alvo) e Mover (muda pasta-alvo) compõem antes da materialização do CAS para o disco (D-11) — a operação física acontece a cada etapa de arquivo ou é resolvida e materializada ao final? O write-ahead/undo (AUT-04/05) precisa cobrir o pipeline inteiro (undo de todas as etapas de um documento).
+- Como o pipeline se relaciona com a fila/worker existente (step `apply`): o `apply_stage` passa a executar o pipeline ordenado por documento.
+
 ### Disparo da automação
 - **D-01:** **Auto-aplica para documentos de alta confiança** (acima do `review_confidence_threshold` da Fase 5 — i.e., os que NÃO caíram em EM_REVISAO). Documentos de baixa confiança / em revisão só têm a automação aplicada **após** aprovação humana.
 - **D-02:** Mesmo no auto-aplica, as garantias de segurança NÃO são puladas: log-antes-de-agir e undo continuam valendo. O que o auto-aplica dispensa é o clique humano de confirmação para os de alta confiança.

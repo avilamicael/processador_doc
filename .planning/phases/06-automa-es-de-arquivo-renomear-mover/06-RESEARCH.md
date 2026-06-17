@@ -1,471 +1,499 @@
-# Phase 6: Automações de Arquivo (Renomear/Mover) - Research
+# Phase 6: Automações de Arquivo (Renomear/Mover) — Research
 
-**Researched:** 2026-06-17
-**Domain:** Operações de arquivo seguras/reversíveis no Windows (rename/move atômico, cross-device, anti-colisão), audit-log write-ahead + undo, e motor de regras condicionais sobre campos extraídos
-**Confidence:** HIGH (operações de arquivo Windows, padrões do código existente, modelagem de regras) / MEDIUM (mecânica exata de undo sob estado externo mutável — Claude's Discretion)
+**Researched:** 2026-06-17 (re-pesquisa pós REDESIGN para modelo de PIPELINE)
+**Domain:** Pipeline ordenado de etapas componíveis de automação sobre documentos classificados, executando operações de arquivo seguras/reversíveis no Windows (rename/move atômico, cross-device, anti-colisão), com audit-log write-ahead agrupado por execução + undo do pipeline inteiro
+**Confidence:** HIGH (tijolos de fileops/CAS/Windows/EXDEV já implementados e testados; padrões do código existente; reuso de classificação para o gate) / MEDIUM (semântica exata de composição nome+pasta no pipeline — Open Question principal; undo agrupado sobre múltiplas etapas)
+
+> **NOTA DE RE-PESQUISA.** Esta versão SUBSTITUI o modelo de "regra única (condição→nome+pasta, primeira-que-casa-vence)" pela arquitetura de **pipeline ordenado de steps componíveis** (D-12..D-16). Os achados técnicos de operação de arquivo (CAS/EXDEV/Windows/anti-colisão/write-ahead) **permanecem válidos e foram preservados** — os tijolos (`naming.py`, `fileops.py`, `undo.py`) já estão implementados e testados, e são reusados como blocos atômicos do pipeline. O que muda é a **camada de orquestração** (`stage.py`, modelos, API) e o **modelo de dados** (de `automation_rules`/`rule_conditions` para `automation_pipelines`/`pipeline_steps`/`step_filters`).
 
 <user_constraints>
 ## User Constraints (from CONTEXT.md)
 
 ### Locked Decisions
 
-**Disparo da automação**
-- **D-01:** Auto-aplica para documentos de alta confiança (acima do `review_confidence_threshold` da Fase 5 — i.e., os que NÃO caíram em EM_REVISAO). Documentos de baixa confiança / em revisão só têm a automação aplicada **após** aprovação humana.
-- **D-02:** Mesmo no auto-aplica, as garantias de segurança NÃO são puladas: log-antes-de-agir e undo continuam valendo. O auto-aplica só dispensa o clique humano de confirmação para os de alta confiança.
-- **D-03:** Aplicação disponível **por documento E por lote/execução** (espelha o undo de AUT-05, que é por-doc e por-lote).
+**REDESIGN — Modelo de PIPELINE (2026-06-17) — substitui D-04, D-05 e o acoplamento de D-06**
+- **D-12:** Automações = **pipeline ORDENADO de etapas (steps)**. Cada documento passa por **TODAS as etapas cujo filtro casa, na ordem** definida pelo usuário (encadeado), não "primeira que casa vence". (SUBSTITUI D-05.)
+- **D-13:** Cada etapa = **um filtro de entrada + UMA ação atômica**. Ações do v1: **Mover** (pasta destino com tokens), **Renomear** (tokens dos campos), **Identificar tipo (gate)** (classifica contra template; porteiro p/ etapas seguintes), **Rotear/decidir tratar** (enviar p/ revisão humana / marcar não-tratar / ignorar). Renomear+mover = duas etapas encadeadas. (SUBSTITUI D-04 e o acoplamento de D-06.)
+- **D-14:** **Filtros de entrada** combináveis por etapa: pasta de origem monitorada, tipo de arquivo (extensão), tipo/template classificado, valor de campo extraído, **nome do arquivo, tamanho** (e atributos simples afins).
+- **D-15:** A ação **Identificar tipo** REUSA a classificação/extração já existentes (Fases 3/4) — não cria parsers novos. Parser de linha digitável de boleto e afins permanecem na Fase 7.
+- **D-16:** **Escopo v1 do pipeline:** ações de arquivo (mover/renomear/rotear) + identificação de tipo como etapa. **Fora do v1:** etapas que extraem campo específico (ex. buscar linha digitável) — Fase 7.
 
-**Regras condicionais (TPL-02)**
-- **D-04:** O usuário expressa regras como **condições estruturadas `{campo} [operador] valor`** (operadores: =, >, <, contém; combináveis com E/OU) → **qual automação aplicar**. Cobre tipo/cliente/emissor/valor (ex.: "tipo == holerite E valor > 3000 → pasta Análise").
-- **D-05:** **Precedência por ordem de prioridade**: regras ordenadas pelo usuário; a **primeira que casar vence**. Simples de entender e depurar; o usuário controla a ordem.
+**Disparo da automação (MANTIDO)**
+- **D-01:** Auto-aplica para documentos de alta confiança (acima do `review_confidence_threshold` da Fase 5). Baixa confiança / em revisão só aplica **após** aprovação humana.
+- **D-02:** Mesmo no auto-aplica, log-antes-de-agir e undo continuam valendo. O auto-aplica só dispensa o clique humano.
+- **D-03:** Aplicação disponível **por documento E por lote/execução** (espelha o undo de AUT-05).
 
-**Padrões de nome e pasta (AUT-01/AUT-02)**
-- **D-06:** Padrões usam tokens `{campo}` referenciando os campos extraídos (ex.: `{cliente}_{numero}_{data}.pdf`, `Documentos/{cliente}/{ano-mes}/`).
-- **D-07:** **Campo vazio/inválido no padrão → bloqueia e manda pra revisão humana** (não aplica nome incompleto). Mesmo um documento de alta confiança é **rebaixado para revisão** se faltar um campo usado no nome/pasta. Evita arquivos com nome quebrado.
-- **D-08:** O sistema **sanitiza automaticamente** caracteres inválidos no Windows (`\ / : * ? " < > |`) e **formata datas** via sufixo no token (ex.: `{data:aaaa-mm}`). O usuário não precisa se preocupar com isso.
+**Padrões de nome e pasta (MANTIDO — AUT-01/AUT-02)**
+- **D-06:** Padrões usam tokens `{campo}` referenciando os campos extraídos.
+- **D-07:** Campo vazio/inválido no padrão → bloqueia e manda pra revisão humana.
+- **D-08:** Sanitiza automaticamente caracteres inválidos no Windows e formata datas via sufixo no token (`{data:aaaa-mm}`).
 
-**Política de colisão (AUT-04)**
-- **D-09:** Destino já ocupado por arquivo de **conteúdo DIFERENTE** (mesmo nome) → **sufixo incremental automático** (`nome_1.pdf`, `nome_2.pdf`). Nunca sobrescreve, não trava o fluxo, nada se perde; a colisão é registrada no log/dry-run.
-- **D-10:** Destino já ocupado por arquivo de **conteúdo IDÊNTICO** (mesmo SHA-256 do CAS) → **considera já-feito e pula como duplicata** (não cria `_1` de cópias idênticas). Reusa o dedup por hash já existente.
+**Política de colisão (MANTIDO — AUT-04)**
+- **D-09:** Conteúdo DIFERENTE (mesmo nome) → sufixo incremental automático (`nome_1.pdf`). Nunca sobrescreve.
+- **D-10:** Conteúdo IDÊNTICO (mesmo SHA-256 do CAS) → considera já-feito e pula como duplicata.
+
+**Arquivo físico de destino (MANTIDO — D-11)**
+- **D-11:** A operação **materializa o destino a partir do CAS** (`cas.read_bytes(content_hash)` → escreve + verifica hash), em vez de mover o original. Comportamento uniforme p/ blocos separados e não-separados. AUT-06 = "materializar do CAS + verificar hash". O caminho de origem resolvido é persistido no `AuditLog` no apply.
 
 ### Claude's Discretion
-- Comportamento detalhado do **undo quando o arquivo de destino já foi movido/renomeado/apagado pelo usuário** depois da automação (resolver com checagem de integridade + falha controlada, sem corromper estado).
-- **Formato/estrutura do audit log** (extensão do modelo `AuditLog` existente para guardar origem→destino + dados de undo).
-- **Onde a automação aparece na UI**: nova aba de Automações (padrões + regras condicionais) + tela de dry-run/preview com pares origem→destino e colisões sinalizadas. Honra o design system travado (mesmos tokens das fases 2/4/5).
+- Comportamento do **undo quando o arquivo de destino já foi alterado** pelo usuário (checagem de integridade + falha controlada, sem corromper estado).
+- **Formato/estrutura do audit log** (extensão do `AuditLog` para origem→destino + dados de undo, agora **agrupado por execução do pipeline**).
+- **Onde a automação aparece na UI**: nova aba de Automações (construtor de PIPELINE de etapas) + tela de dry-run/preview. Honra o design system travado.
 - Mecânica cross-device (AUT-06): copia→verifica(hash)→remove a origem.
 
 ### Deferred Ideas (OUT OF SCOPE)
-- Automações além de renomear/mover (chamar API, enviar por e-mail/WhatsApp) — fora do v1 (PROJECT.md "Não-objetivos").
+- Automações além de arquivo (chamar API, e-mail/WhatsApp) — fora do v1.
+- Etapas que extraem campo específico (linha digitável de boleto etc.) — **Fase 7** (D-16).
 - Separação de documentos dirigida por IA e roteamento determinístico de custo (boleto/NF-e sem IA) — Fase 7.
 </user_constraints>
 
 <phase_requirements>
 ## Phase Requirements
 
-| ID | Description | Research Support |
+| ID | Description | Research Support (modelo de PIPELINE) |
 |----|-------------|------------------|
-| AUT-01 | Padrões de renomeação com `{campo}` | §Padrão de tokens + sanitização (D-06/D-08); reusa `FilledField.normalized_value` e `validation/dates.py` para `{data:aaaa-mm}` |
-| AUT-02 | Padrões de pasta-destino com `{campo}` | Mesmo motor de tokens; cada segmento de pasta é sanitizado individualmente; pasta criada com `mkdir(parents=True)` |
-| AUT-03 | Dry-run/preview origem→destino, colisões sinalizadas | §Pattern Dry-run puro (resolução de destino + checagem de colisão SEM tocar disco); colisão via `cas`/SHA-256 (D-09/D-10) |
-| AUT-04 | Audit log ANTES de agir + anti-colisão (nunca sobrescreve) | §Audit write-ahead (intent→executa→outcome); estende `AuditLog`; `os.open(O_CREAT\|O_EXCL)` / `Path.exists()` para nunca sobrescrever |
-| AUT-05 | Undo por-documento E por-lote/execução | §Undo reversível; coluna `run_id`/`batch_id` no audit + CAS como rede de segurança final |
-| AUT-06 | Cross-device seguro (copia→verifica→remove) | §Mover entre volumes: `os.replace` → fallback EXDEV → copy+fsync+verifica hash+remove (reusa `cas.store`/`hashing`) |
-| TPL-02 | Regras condicionais por tipo/cliente/emissor/valor | §Motor de regras: novas tabelas `automation_rules`/`rule_conditions`/`automation_actions`; avaliador puro sobre `FilledField` normalizado |
+| AUT-01 | Padrões de renomeação com `{campo}` | Ação **Renomear** do step → reusa `naming.resolve_pattern` (já implementado, sanitização D-08). |
+| AUT-02 | Padrões de pasta-destino com `{campo}` | Ação **Mover** do step → reusa `naming.resolve_dest_folder` (confinamento V4, já implementado). |
+| AUT-03 | Dry-run/preview origem→destino, colisões sinalizadas | `pipeline_dry_run` agora simula o **pipeline inteiro** por documento, resolvendo o caminho-alvo final SEM tocar o disco; sinaliza colisão/bloqueio/skip por step. |
+| AUT-04 | Audit log ANTES de agir + anti-colisão | Write-ahead por **execução do pipeline** (`run_id` agrupa os steps de arquivo de um documento); `resolve_collision` já garante nunca-sobrescrever. |
+| AUT-05 | Undo por-documento E por-lote/execução | `undo.py` já reverte por-doc e por-run; com o pipeline o undo cobre **todas as etapas de arquivo de um documento** (agrupadas por `run_id`/`pipeline_run_id`). |
+| AUT-06 | Cross-device seguro | `fileops.materialize_to_dest`/`safe_move` (EXDEV→copy+fsync+verifica-hash+remove) — já implementado e testado. |
+| TPL-02 | Regras condicionais por tipo/cliente/emissor/valor | **Filtros de entrada por step** (D-14) — reusa o avaliador `rules.evaluate_condition` para condições sobre campos extraídos; estende para filtros de pasta/extensão/nome/tamanho/template. |
+
+> **Status no REQUIREMENTS.md:** AUT-01..06 estão marcados "Complete" (modelo de regra-única). O REDESIGN reabre a fase: o critério de aceite agora exige que esses requisitos sejam satisfeitos **através de etapas do pipeline**, não de uma regra única. O replan deve re-verificar cada um sob o novo modelo.
 </phase_requirements>
 
 ## Summary
 
-Esta fase transforma o documento já classificado/aprovado num **efeito real sobre o sistema de arquivos do cliente** — a operação de maior risco de todo o produto (a constraint da CLAUDE.md é categórica: "nunca pode causar perda"). A boa notícia é que **a fundação de segurança já existe**: o CAS imutável por SHA-256 (`storage/cas.py`) preserva uma cópia íntegra de cada bloco para sempre, dando uma rede de recuperação independente do arquivo físico do cliente; a máquina de estados com allowlist (`pipeline/states.py`) já roteia para EM_REVISAO; o `AuditLog` já existe como casca esperando esta fase; e `validation/fields.py`/`dates.py`/`money.py` já normalizam exatamente os tipos que os tokens de nome e as condições numéricas precisam.
+O REDESIGN troca a **estrutura de configuração** das automações (de uma regra única que decide nome+pasta para um pipeline ordenado de etapas componíveis) sem mudar a **física da operação de arquivo**, que já está construída e testada. Os três tijolos puros/seguros — `naming.py` (tokens→caminho confinado V4), `fileops.py` (materialização verificada do CAS, anti-colisão, EXDEV) e `undo.py` (reversão por-doc/por-run com fallback CAS) — **permanecem intactos e são reusados como ações atômicas dos steps**. O trabalho do replan concentra-se em (1) um novo modelo de dados de pipeline, (2) um avaliador de **filtros de entrada por step** (generalizando o avaliador de condições existente), (3) uma reescrita do `apply_stage` para **executar o pipeline ordenado por documento** resolvendo o caminho-alvo incrementalmente, e (4) um audit-log/undo agrupado por **execução do pipeline** (não por operação isolada).
 
-O trabalho concentra-se em três motores novos, todos seguindo o padrão já provado nas Fases 3–5 (função pura isolável → persistência atômica num único commit → step no worker): (1) **resolução de destino** (tokens `{campo}` → caminho sanitizado, com bloqueio→revisão quando falta campo, D-07); (2) **operação de arquivo segura** (audit write-ahead → `os.replace` atômico no mesmo volume, ou copia→verifica-hash→remove entre volumes, com anti-colisão por sufixo/dedup, D-09/D-10); e (3) **avaliador de regras condicionais** (condições estruturadas sobre campos normalizados, primeira-que-casa-vence, D-04/D-05). Tudo apenas em Python stdlib + as libs já no projeto — **nenhuma dependência nova é necessária**.
+A decisão de arquitetura mais importante — e a Open Question principal — é a **semântica do "caminho-alvo" ao longo do pipeline**. A recomendação (HIGH confidence, alinhada a D-11) é: o pipeline **resolve o caminho-alvo em memória** ao passar por etapas Renomear (muda o nome-alvo) e Mover (muda a pasta-alvo), e **materializa do CAS UMA única vez ao final**, quando o documento sai do pipeline com um caminho-alvo final. Isto é estritamente mais seguro e idempotente do que executar uma operação física por etapa: evita N materializações/cópias intermediárias no disco do cliente, evita estados-intermediários órfãos no NTFS, e dá um único par origem→destino por documento para o write-ahead/undo. As etapas Renomear/Mover tornam-se **transformações puras do plano-alvo**; só a saída do pipeline toca o disco.
 
-**Primary recommendation:** Modele a operação de arquivo como um novo **step de fila `apply`** que roda DEPOIS de classify/aprovação, espelhando `classify_stage` em forma e garantias atômicas. Escreva o registro de auditoria com `status=intent` ANTES de tocar o disco, execute a operação física (idempotente e nunca-sobrescreve), e atualize o mesmo registro para `status=done`+dados-de-undo num commit; um crash entre intent e done deixa um rastro auditável e reconciliável no startup. **Resolva primeiro a Open Question 1 (qual arquivo físico é movido)** — é a maior incógnita de design da fase.
+O segundo eixo é o **gate "Identificar tipo"** (D-15): uma etapa-porteiro que reusa a classificação existente (`classify_stage`, inclusive o caminho `forced_template_id`) para decidir se o documento casa um template-alvo. Combinado com D-12 (passa por todas as etapas cujo filtro casa), o gate é modelado como um **filtro de entrada** das etapas seguintes (`template_id == X`), não como um desvio de fluxo imperativo — mantendo o avaliador puro e o pipeline declarativo.
+
+**Primary recommendation:** Modele o pipeline como `AutomationPipeline 1:N PipelineStep`, cada step com `action_type` (move | rename | identify_type | route) + `params_json` + `filters` (1:N `StepFilter`). O `apply_stage` itera os steps ordenados por `position`, mantém um **plano-alvo em memória** (`(target_folder, target_name)`) mutado pelas ações Renomear/Mover, executa o gate `identify_type` reusando a classificação, aplica `route` como transição de estado, e **materializa do CAS uma vez** quando o plano-alvo final é conhecido — sob o mesmo write-ahead `intent→done`+`run_id` já implementado. Os tijolos `naming`/`fileops`/`undo` **não mudam**. **Resolva a Open Question 1 (composição incremental vs. materialização por etapa) antes de planejar tarefas** — a recomendação é materialização única ao final.
 
 ## Architectural Responsibility Map
 
 | Capability | Primary Tier | Secondary Tier | Rationale |
 |------------|-------------|----------------|-----------|
-| Avaliação de regras condicionais (TPL-02) | API/Backend (módulo puro) | — | Lógica de negócio determinística sobre campos extraídos; nenhuma IA, nenhum disco — função pura testável, como `matcher`/`filler` |
-| Resolução de tokens `{campo}` → caminho | API/Backend (módulo puro) | Database (lê `FilledField`) | Substituição + sanitização + format de data é transformação pura sobre dados já persistidos |
-| Operação física rename/move | API/Backend (worker step) | Filesystem/OS | Tocar NTFS é responsabilidade do backend rodando na máquina do cliente; nunca do browser |
-| Audit write-ahead + undo | Database / Storage | Filesystem (CAS) | Persistência transacional do intent/outcome; CAS é a rede de recuperação física |
-| Dry-run/preview | API/Backend (puro) → exposto via API | Frontend (render) | Resolução de destino + colisão é backend; o React só renderiza pares origem→destino |
-| Disparo (auto vs. pós-aprovação) | API/Backend (worker + endpoint) | — | O limiar e a transição de estado são autoridade do backend (Fase 5 seam) |
-| UI de Automações + dry-run | Frontend (SSR não aplicável; SPA Vite) | API/Backend | Token-driven, mesmos padrões TanStack Query das Fases 2/4/5 |
+| Definição/CRUD do pipeline (steps, filtros, params) | API/Backend (CRUD aninhado) | Database | Espelha `api/templates.py` (1:N aninhado) — config do operador, sem IA |
+| Avaliação de filtros de entrada por step (D-14) | API/Backend (módulo puro) | Database (lê `FilledField`, atributos do arquivo) | Determinístico sobre campos extraídos + metadados de arquivo; reusa `rules.evaluate_condition` |
+| Resolução incremental do caminho-alvo (Renomear/Mover) | API/Backend (módulo puro) | Database (lê `FilledField`) | Transformação pura do plano-alvo `(folder, name)` — reusa `naming.resolve_pattern`/`resolve_dest_folder` |
+| Gate "Identificar tipo" (D-15) | API/Backend (reusa classificação) | OpenAI (só se a classificação precisar de IA) | Reusa `classify_stage` (matcher local custo-0 → IA desempate só se necessário) |
+| Ação "Rotear" (revisão/não-tratar/ignorar) | API/Backend (state machine) | — | Transição de estado via `transition` (allowlist) — nunca seta `document.state` direto |
+| Materialização física (uma vez ao final) | API/Backend (worker step) | Filesystem/OS + CAS | `fileops.materialize_to_dest` do CAS — já implementado, verifica hash |
+| Audit write-ahead + undo do pipeline inteiro | Database / Storage | Filesystem (CAS) | `run_id`/`pipeline_run_id` agrupa todas as operações de um documento; CAS é a rede |
+| Dry-run/preview do pipeline | API/Backend (puro) → API | Frontend (render) | Simula o pipeline completo por doc; React renderiza origem→destino-final |
+| UI: construtor de pipeline + dry-run | Frontend (SPA Vite) | API/Backend | Token-driven, mesmos padrões TanStack Query das Fases 2/4/5 |
 
 ## Standard Stack
 
 ### Core
 
-**Nenhuma dependência nova é necessária.** A fase é construída inteiramente sobre a stdlib do Python 3.12 e bibliotecas já presentes no projeto.
+**Nenhuma dependência nova é necessária.** A fase é construída inteiramente sobre a stdlib do Python 3.12 e bibliotecas já presentes no projeto. O REDESIGN não introduz nada novo no stack — só reorganiza a orquestração.
 
 | Lib / Módulo | Origem | Propósito nesta fase | Por que é o padrão |
 |--------------|--------|----------------------|--------------------|
-| `os` (`os.replace`, `os.open` `O_CREAT\|O_EXCL`, `os.fsync`, `os.stat`) | stdlib | Rename/replace atômico no mesmo volume; criação exclusiva anti-sobrescrita; durabilidade | `os.replace` é a primitiva atômica portável (Windows `MoveFileEx`/POSIX `rename`) — já usada com sucesso no `cas.py` `[VERIFIED: backend/app/storage/cas.py:107]` |
-| `shutil` (`shutil.copyfile` / `copy2`) | stdlib | Cópia de bytes na trilha cross-device (AUT-06) | `shutil.move` lida com EXDEV, mas para AUT-06 queremos **copia→verifica→remove explícito** (controle de hash), não a magia opaca do `move` `[CITED: docs.python.org/3/library/shutil]` |
-| `pathlib.Path` | stdlib | Manipulação de caminho, `mkdir(parents=True, exist_ok=True)`, `.exists()`, `.stat()` | Já é o padrão do projeto (`watched_folders.py`, `cas.py`) `[VERIFIED: codebase]` |
-| `hashlib.sha256` | stdlib (via `storage/cas.py` + `ingest/hashing.py`) | Verificação pós-cópia cross-device (AUT-06) e detecção idêntico/diferente na colisão (D-09/D-10) | Reusa o MESMO hashing do CAS — o hash já calculado é `Document.content_hash` `[VERIFIED: backend/app/models/document.py:42]` |
-| `SQLAlchemy 2.0` + `Alembic` | já no projeto | Tabelas de regras + extensão do `AuditLog`; migração **0006** | Padrão travado: "Migrações somente via Alembic" `[VERIFIED: CONTEXT.md code_context]` |
-| `Pydantic 2.13` | já no projeto | Schemas In/Patch/Out dos endpoints de automação/regras | Espelha `watched_folders.py`/`templates.py` `[VERIFIED: codebase]` |
-| `validation/fields.py`, `dates.py`, `money.py` | já no projeto | Format de `{data:...}` e coerção de tipos para comparação numérica das condições | Reuso direto — `normalize_date` devolve ISO `YYYY-MM-DD` fatiável; `normalize_money_brl` devolve string `Decimal` comparável `[VERIFIED: backend/app/validation/dates.py, money.py]` |
+| `os`/`shutil`/`pathlib`/`hashlib` | stdlib | Materialização verificada do CAS, EXDEV, anti-colisão (já encapsulados em `fileops.py`) | `os.replace` é a primitiva atômica portável; já em uso no `cas.py` e `fileops.py` `[VERIFIED: backend/app/automation/fileops.py:154]` |
+| `SQLAlchemy 2.0` + `Alembic` | já no projeto | Tabelas de pipeline/steps/filtros; migração **0007** (redesenha as tabelas da 0006) | Padrão travado: "Migrações somente via Alembic" `[VERIFIED: backend/alembic/versions/ — 0001..0006 presentes]` |
+| `Pydantic 2.13` | já no projeto | Schemas In/Patch/Out do CRUD de pipeline (aninhado: pipeline→steps→filtros) | Espelha `api/automations.py`/`api/templates.py` `[VERIFIED: codebase]` |
+| `app/automation/naming.py` | **já implementado** | Ações Renomear (`resolve_pattern`) e Mover (`resolve_dest_folder`, confinamento V4) | Funções puras testadas; reusadas como ações atômicas — NÃO reescrever `[VERIFIED: backend/app/automation/naming.py:156,174]` |
+| `app/automation/fileops.py` | **já implementado** | Materialização do CAS + anti-colisão + EXDEV (`materialize_to_dest`, `resolve_collision`, `safe_move`, `remove_original`, `hash_file`) | Máquina segura verify-then-remove; reusada na materialização final — NÃO reescrever `[VERIFIED: backend/app/automation/fileops.py:91,201,244]` |
+| `app/automation/undo.py` | **já implementado** | Undo por-doc/por-run com fallback CAS (`undo_document`, `undo_run`, `undo_operation`) | Já reverte por `run_id` agrupando operações; serve ao undo do pipeline inteiro `[VERIFIED: backend/app/automation/undo.py:146,164]` |
+| `app/automation/rules.py` | **já implementado** | Avaliador puro de condições (`evaluate_condition`, dispatch por operador, coerção Decimal) | Base do avaliador de **filtros de entrada** (D-14) — estender, não substituir `[VERIFIED: backend/app/automation/rules.py:71]` |
+| `app/classification/stage.py` | já no projeto | Gate "Identificar tipo" (D-15) — `classify_stage` + caminho `forced_template_id` | Reuso direto: matcher local custo-0 → IA só em desempate `[VERIFIED: backend/app/classification/stage.py:132,190]` |
+| `validation/fields.py`, `dates.py`, `money.py` | já no projeto | Format de `{data:...}` e coerção numérica das condições dos filtros | Reuso direto (já consumido por `naming`/`rules`) `[VERIFIED: codebase]` |
 
 ### Supporting (opcional — avaliar, não obrigatório)
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `pathvalidate` | 3.3.1 | Sanitização robusta de nome de arquivo + detecção de nomes reservados Windows (CON/PRN/NUL/COM1…) e truncamento por comprimento | **Só se** o planejador decidir não hand-rollar. Cobre casos que a lista simples de D-08 não cobre (nomes reservados, trailing dot/space, MAX_PATH). MIT, mantida (`github.com/thombashi/pathvalidate`). `[ASSUMED]` — ver Package Legitimacy Audit |
+| `pathvalidate` | 3.3.1 | Sanitização robusta de nome (nomes reservados Windows, MAX_PATH) | Já coberto à mão em `naming.sanitize_component` (`_WIN_RESERVED`, truncamento). Só considerar se surgir um gap; **recomendação: continuar hand-roll** (já implementado e testado). `[ASSUMED]` — ver Package Legitimacy Audit |
 
 ### Alternatives Considered
 
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
-| Sanitização hand-rolled (D-08) | `pathvalidate` 3.3.1 | Hand-roll cobre exatamente os 9 chars de D-08 + format de data, é zero-dependência e alinha com a cultura do projeto de hand-rollar determinismo (boleto/CNPJ/datas). `pathvalidate` adiciona cobertura de **nomes reservados Windows** e **MAX_PATH** que a lista de D-08 NÃO menciona — isto é um gap real de confiabilidade Windows. **Recomendação:** hand-roll a substituição dos 9 chars (D-08 explícito), MAS incluir explicitamente o tratamento de nomes reservados e comprimento (ver Pitfalls 4 e 5), seja à mão seja via lib. |
-| `shutil.move` para cross-device | copia→fsync→verifica-hash→remove manual | `shutil.move` esconde o EXDEV e NÃO verifica integridade pós-cópia; AUT-06 exige "verifica e só então remove a origem" — o controle manual é o requisito, não escolha de estilo. |
-| Linguagem de expressão (eval/AST) p/ regras | Condições estruturadas `{campo}[op]valor` | Nunca usar `eval`. As condições estruturadas (D-04) são exatamente o que evita injeção e mantém depurável (D-05). |
+| Materialização ÚNICA ao final do pipeline (recomendado) | Operação física por etapa Renomear/Mover | Por-etapa cria N cópias/renames intermediários no NTFS, multiplica janelas de falha parcial, e gera múltiplos pares origem→destino confusos para o undo. Materialização única é mais segura, idempotente e dá 1 par origem→destino-final por doc. **Recomendação forte: materialização única.** (Open Q1.) |
+| Gate como **filtro de entrada** das etapas seguintes (recomendado) | Gate como desvio imperativo (`if !match: stop`) | D-12 já diz "passa por todas as etapas cujo filtro casa". Modelar o gate como um filtro `template_id == X` mantém o pipeline declarativo e o avaliador puro; o "porteiro" emerge naturalmente (etapas seguintes filtram pelo template identificado). |
+| Estender as tabelas 0006 via nova migração 0007 (recomendado) | Editar a migração 0006 in-place | A 0006 já existe e pode ter sido aplicada em ambientes; **sem dados em prod** (CONTEXT diz que pode redesenhar), mas o padrão Alembic é forward-only: 0007 dropa/redesenha as tabelas de regra e cria as de pipeline. Mantém o histórico de migração íntegro e o `trigger` de `documents` intacto. |
+| Linguagem de expressão (eval/AST) p/ filtros | Filtros estruturados (`field/op/value` + tipo de filtro) | Nunca usar `eval` (V5). Os filtros estruturados (D-14) são exatamente o que evita injeção e mantém depurável. |
 
 **Installation:**
 ```bash
-# NENHUMA dependência nova obrigatória. Tudo é stdlib + libs já instaladas.
-# OPCIONAL (somente se o planejador escolher não hand-rollar a sanitização):
-#   cd backend && uv add pathvalidate==3.3.1
-#   (requer gate de verificação humana — ver Package Legitimacy Audit)
+# NENHUMA dependência nova obrigatória. Tudo é stdlib + libs já instaladas + os
+# tijolos já implementados (naming/fileops/undo/rules/classify).
 ```
 
-**Version verification:** `pathvalidate` confirmado no PyPI: versão atual **3.3.1**, licença MIT, repo `github.com/thombashi/pathvalidate` `[VERIFIED: pip index versions pathvalidate → 3.3.1; pypi.org/pypi/pathvalidate/json → license MIT]`. Python do projeto: 3.12.13 `[VERIFIED: backend/.venv python --version]`.
+**Version verification:** Python do projeto: 3.12.x `[VERIFIED: CLAUDE.md TL;DR + research anterior backend/.venv]`. Migrações 0001..0006 presentes em `backend/alembic/versions/` `[VERIFIED: ls]`. `pathvalidate` (opcional) confirmado no PyPI 3.3.1 MIT na pesquisa anterior.
 
 ## Package Legitimacy Audit
 
-> slopcheck **não pôde ser instalado** (pip offline no sandbox). Por protocolo, qualquer pacote novo é tratado como `[ASSUMED]` e o planejador DEVE colocar um `checkpoint:human-verify` antes de instalá-lo. Como a recomendação primária é **zero-dependência**, este gate só se aplica se o planejador optar pela lib opcional.
+> slopcheck **não pôde ser instalado** (pip offline no sandbox). A recomendação primária é **zero-dependência nova**; o REDESIGN não adiciona pacotes. Se o planejador optar pela lib opcional `pathvalidate`, ela vira `[ASSUMED]` e exige `checkpoint:human-verify` antes do `uv add`.
 
 | Package | Registry | Age | Downloads | Source Repo | slopcheck | Disposition |
 |---------|----------|-----|-----------|-------------|-----------|-------------|
-| `pathvalidate` | PyPI | ~10 anos (releases desde 2016, atual 3.3.1) | alto (lib popular de filename) | github.com/thombashi/pathvalidate (MIT) | indisponível (offline) | **Flagged** — opcional; se adotada, planejador insere `checkpoint:human-verify` antes do `uv add` |
+| `pathvalidate` | PyPI | ~10 anos (atual 3.3.1) | alto | github.com/thombashi/pathvalidate (MIT) | indisponível (offline) | **Flagged** — opcional; já coberto por hand-roll em `naming.py`. Se adotada, gate humano. |
 
 **Packages removed due to slopcheck [SLOP] verdict:** none
-**Packages flagged as suspicious [SUS]:** none por evidência; `pathvalidate` marcado `[ASSUMED]` apenas porque slopcheck não rodou neste ambiente offline. Metadados verificados manualmente (MIT, repo oficial thombashi, versionamento longo e consistente) reduzem o risco a baixo, mas o gate humano permanece por disciplina.
+**Packages flagged as suspicious [SUS]:** none por evidência; `pathvalidate` marcado `[ASSUMED]` só por slopcheck offline.
 
-*Recomendação operacional: a stack-padrão desta fase é stdlib-only; preferir hand-roll evita o gate inteiramente.*
+*A stack desta fase é stdlib-only + código já no projeto; preferir o hand-roll já implementado evita o gate inteiramente.*
 
 ## Architecture Patterns
 
 ### System Architecture Diagram
 
 ```
-                    Documento classificado/aprovado
-                    (state PROCESSANDO+classificado de alta confiança  → auto, D-01
-                     OU EM_REVISAO→CONCLUIDO via aprovação humana)
+                  Documento classificado (PROCESSANDO + "classificado")
+                  alta confiança → auto-aplica (D-01)  |  pós-aprovação humana
                                     │
                                     ▼
-                    ┌──────────────────────────────────────┐
-                    │  Worker: novo step "apply" (fila)      │  ← espelha classify dispatch
-                    └──────────────────────────────────────┘
+                  ┌──────────────────────────────────────┐
+                  │  Worker: step "apply" (fila in-process)│  ← espelha classify dispatch
+                  │  enqueue_pending_applications (D-01)   │
+                  └──────────────────────────────────────┘
                                     │
                                     ▼
-       ┌─────────────────────────────────────────────────────────────┐
-       │  apply_stage(session, content_hash)  [função pura+persist.]   │
-       │                                                               │
-       │  1. Lê FilledField (normalized_value) do doc                   │
-       │  2. AVALIADOR DE REGRAS (puro) ───────────────► escolhe a      │
-       │     condições {campo}[op]valor, 1ª que casa vence (D-05)       │  automação
-       │  3. RESOLVE DESTINO (puro) ────────────────────► caminho final │
-       │     tokens {campo}/{data:fmt} → sanitiza (D-08)                │
-       │        │  campo faltante/inválido? ──► transition(EM_REVISAO)  │  (D-07, bloqueia)
-       │        ▼                                                       │
-       │  4. CHECA COLISÃO (puro, lê disco read-only)                   │
-       │     destino existe? ── hash igual (CAS/SHA-256)? ─► PULA (D-10)│
-       │                    └─ hash diferente? ─► sufixo _1/_2 (D-09)   │
-       │        │                                                       │
-       │        ▼  (modo DRY-RUN para aqui e retorna o preview)          │  ← AUT-03
-       │  5. AUDIT WRITE-AHEAD: AuditLog(status=intent, src→dst, undo)  │  ← AUT-04 (ANTES de agir)
-       │        │  commit                                               │
-       │        ▼                                                       │
-       │  6. OPERAÇÃO FÍSICA:                                           │
-       │     mesmo volume?  ── os.replace(src→dst)  [atômico]           │
-       │     volumes difer.? ─ copy→fsync→verifica SHA-256→remove src   │  ← AUT-06
-       │        │  (nunca sobrescreve: O_EXCL/exists-check garantidos)   │
-       │        ▼                                                       │
-       │  7. AuditLog(status=done) + transition(CONCLUIDO) [1 commit]   │
-       └─────────────────────────────────────────────────────────────┘
+   ┌──────────────────────────────────────────────────────────────────────┐
+   │  apply_stage(session, content_hash, run_id)   [EXECUTA O PIPELINE]      │
+   │                                                                        │
+   │  IDEMPOTÊNCIA: AuditLog(status="done") p/ este run/doc já existe? no-op │
+   │                                                                        │
+   │  PLANO-ALVO em memória := (target_folder=base_root, target_name=orig)  │
+   │  fields := {field_name: normalized_value}  (campos válidos do doc)      │
+   │  file_attrs := {ext, size, source_folder_id, original_filename}        │
+   │                                                                        │
+   │  PARA CADA step em pipeline.steps ORDENADO por position (D-12):         │
+   │    ── filtro de entrada do step casa? (D-14: campo/pasta/ext/nome/      │
+   │       tamanho/template) ── NÃO → PULA este step (continua)              │
+   │    ── SIM, despacha por action_type (D-13):                             │
+   │       • IDENTIFY_TYPE (gate, D-15): classify (reusa classify_stage /    │
+   │           forced_template_id); resultado vira atributo "template_id"    │
+   │           consumível pelos filtros das etapas seguintes (porteiro)      │
+   │       • RENAME: target_name := naming.resolve_pattern(pattern, fields)  │
+   │           None (campo faltante) → BLOQUEIA → transition(EM_REVISAO) D-07 │
+   │       • MOVE: target_folder := naming.resolve_dest_folder(pat, fields,  │
+   │           base_root)  None (confinamento V4 / campo faltante) → BLOQUEIA │
+   │       • ROUTE: transition(EM_REVISAO | marca não-tratar/ignorar) e SAI   │
+   │                                                                        │
+   │  ── pipeline terminou com plano-alvo final (folder/target_name)?        │
+   │     dest := target_folder / target_name                                │
+   │     ── DRY-RUN? → retorna o preview (source→dest, colisão) SEM disco    │
+   │     ── anti-colisão (resolve_collision): idêntico → skip (D-10);        │
+   │        diferente → sufixo _1/_2 (D-09)                                  │
+   │     ── WRITE-AHEAD: AuditLog(status="intent", src, dest, run_id,        │
+   │        content_hash) + commit  ── ANTES de tocar o disco (AUT-04)       │
+   │     ── materialize_to_dest(content_hash, dest) do CAS + verifica hash   │  ← UMA vez (D-11)
+   │     ── remove_original(source) só após verificar (AUT-06 crit 5)        │
+   │     ── audit.status="done" + transition(CONCLUIDO) [1 commit]           │
+   └──────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
-            CAS (SHA-256) preserva o conteúdo original PARA SEMPRE
-            ── rede de recuperação independente do arquivo físico ──
+            CAS (SHA-256) preserva o conteúdo original PARA SEMPRE — rede de undo
                                     │
                                     ▼
-        UNDO (por-doc ou por-run/batch): lê AuditLog status=done,
-        reverte dst→src (ou restaura do CAS se dst sumiu); marca status=undone
+        UNDO (por-doc ou por-run/pipeline-run): undo.undo_document/undo_run
+        reverte dst→origem (ou restaura do CAS); CONCLUIDO→PROCESSANDO; status=undone
 ```
 
 ### Recommended Project Structure
 ```
 backend/app/
-├── automation/                    # NOVO módulo (espelha classification/)
-│   ├── __init__.py
-│   ├── rules.py                   # avaliador PURO: condições {campo}[op]valor (D-04/D-05)
-│   ├── naming.py                  # resolução PURA de tokens→caminho + sanitização (D-06/D-07/D-08)
-│   ├── fileops.py                 # operação física segura: replace/cross-device/anti-colisão (AUT-04/06, D-09/D-10)
-│   ├── stage.py                   # apply_stage: orquestra rules→naming→fileops→audit→estado (1 commit)
-│   └── undo.py                    # reversão por-doc e por-run (AUT-05)
+├── automation/
+│   ├── rules.py            # MANTÉM avaliador puro; ESTENDE p/ filtros de entrada (D-14)
+│   │                       #   (novos tipos de filtro: pasta-origem, extensão, nome, tamanho, template)
+│   ├── naming.py           # INALTERADO — resolve_pattern / resolve_dest_folder (ações Rename/Move)
+│   ├── fileops.py          # INALTERADO — materialize_to_dest / resolve_collision / safe_move
+│   ├── undo.py             # INALTERADO (ou pequeno ajuste de agrupamento por pipeline_run)
+│   ├── pipeline.py         # NOVO: executor PURO do pipeline → resolve plano-alvo + decisões (testável sem disco)
+│   └── stage.py            # REESCRITO: apply_stage executa o pipeline ordenado + materializa 1x
 ├── models/
-│   ├── audit_log.py               # ESTENDER: src/dst/run_id/status/undo_data (migração 0006)
-│   └── automation_rule.py         # NOVO: AutomationRule + RuleCondition + AutomationAction
+│   ├── audit_log.py        # MANTÉM colunas write-ahead (status/src/dst/run_id/content_hash);
+│   │                       #   considerar pipeline_run_id (alias de run_id) p/ agrupar o pipeline inteiro
+│   └── automation_pipeline.py  # NOVO: AutomationPipeline + PipelineStep + StepFilter (substitui automation_rule.py)
 ├── api/
-│   └── automations.py             # NOVO: CRUD regras/padrões + POST /dry-run + POST /apply + POST /undo
+│   └── automations.py      # REESCRITO: CRUD de pipeline/steps/filtros + dry-run/apply/undo (ações preservadas)
 └── alembic/versions/
-    └── 0006_automations.py        # NOVO: tabelas de regra + colunas do audit
+    └── 0007_automation_pipeline.py  # NOVO: dropa automation_rules/rule_conditions, cria pipeline/steps/filters
+                                     #   NÃO toca `documents` (trigger trg_documents_updated_at intacto)
 ```
 
-### Pattern 1: Stage com persistência atômica num único commit (REUSAR)
-**What:** O `apply_stage` segue EXATAMENTE a forma de `classify_stage`: função `async`/`def` isolável, idempotente, que checa um registro existente ANTES de agir e persiste tudo num único `session.commit()` (ou via `transition`, que comita internamente).
-**When to use:** Sempre — é o padrão estabelecido do pipeline.
+### Pattern 1: Pipeline como executor PURO + materialização única (NOVO — coração do REDESIGN)
+**What:** Separar a EXECUÇÃO LÓGICA do pipeline (puro, sem disco) da MATERIALIZAÇÃO FÍSICA (uma vez, ao final). O executor puro recebe `(steps, fields, file_attrs)` e devolve uma **decisão**: ou um plano-alvo final `(target_folder, target_name)`, ou um sinal de bloqueio (D-07), ou um sinal de roteamento (EM_REVISAO/não-tratar/ignorar).
+**When to use:** Sempre — é o que torna o pipeline testável sem tocar o disco (dry-run = chamar o executor puro e parar antes da materialização) e idempotente.
 ```python
-# Padrão (derivado de backend/app/classification/stage.py:160-364) [VERIFIED: codebase]
-# 1. Localiza o doc por content_hash → None = ValueError (worker re-tenta)
-# 2. IDEMPOTÊNCIA: AuditLog(status=done) já existe p/ este doc → no-op (não re-move)
-# 3. ... avalia/resolve/checa colisão ...
-# 4. transition(session, doc, DocState.CONCLUIDO, completed_step="aplicado")
-#    → comita CR/audit/estado JUNTOS; allowlist PROCESSANDO→CONCLUIDO já existe
+# backend/app/automation/pipeline.py (NOVO, PURO)
+# @dataclass PipelinePlan: target_folder: Path|None, target_name: str|None,
+#                          blocked: bool, route_to: str|None, identified_template_id: int|None
+#
+# def run_pipeline(steps, fields, file_attrs, *, base_root, classify_fn) -> PipelinePlan:
+#     folder = base_root.resolve(); name = file_attrs["original_filename"]
+#     identified = None
+#     for step in sorted(steps, key=lambda s: s.position):       # D-12 ordem
+#         if not filter_matches(step.filters, step.conjunction, fields, file_attrs, identified):
+#             continue                                            # filtro não casa → pula
+#         if step.action_type == "identify_type":
+#             identified = classify_fn(step.params["template_id"])  # gate (D-15)
+#             file_attrs["template_id"] = identified
+#         elif step.action_type == "rename":
+#             name = naming.resolve_pattern(step.params["name_pattern"], fields)
+#             if name is None: return PipelinePlan(blocked=True)   # D-07
+#         elif step.action_type == "move":
+#             folder = naming.resolve_dest_folder(step.params["folder_pattern"], fields, base_root=base_root)
+#             if folder is None: return PipelinePlan(blocked=True) # D-07 / V4
+#         elif step.action_type == "route":
+#             return PipelinePlan(route_to=step.params["target"]) # em_revisao / nao_tratar / ignorar
+#     return PipelinePlan(target_folder=folder, target_name=name, identified_template_id=identified)
 ```
-**Atenção crítica (do classify_stage):** NUNCA `session.commit()` manual antes de um `transition` — o `transition` comita tudo junto; commitar antes quebra a atomicidade `[VERIFIED: backend/app/classification/stage.py:341-346]`.
+**Por quê materialização única (Open Q1):** Cada etapa Rename/Move muda só o **plano-alvo em memória**. O disco só é tocado quando o pipeline produz um caminho-alvo final — uma única `materialize_to_dest`. Isso elimina N operações físicas, N janelas de falha e N pares no audit. **Recomendação HIGH.**
 
-### Pattern 2: Audit write-ahead (intent → executa → outcome)
-**What:** Antes de tocar o disco, persistir um `AuditLog` com `status="intent"` + origem + destino resolvido + payload de undo. Depois da operação física, atualizar para `status="done"`. Crash no meio = registro `intent` órfão, reconciliável no startup do worker.
-**When to use:** AUT-04 ("registra a intenção ANTES de agir").
-**Por quê NÃO basta o `os.replace` atômico:** o requisito é **auditar a intenção**, não só executar atômico. E há o ponto fino do Windows: `MoveFileEx` (que o `os.replace` usa) **pode silenciosamente cair para um `CopyFile` não-atômico** em circunstâncias indocumentadas `[CITED: github.com/untitaker/python-atomicwrites#25 discussion]` — o write-ahead é a rede contra essa janela.
+### Pattern 2: Filtros de entrada por step (NOVO — generaliza o avaliador de regras, D-14)
+**What:** Cada step tem 0..N filtros combinados por `conjunction` (and/or). Cada filtro é estruturado (`filter_type`, `operator`, `value`) — **sem eval**. O avaliador despacha por `filter_type`:
+- `field` — reusa `rules.evaluate_condition` EXATAMENTE (campo extraído `{campo}[op]valor`, coerção Decimal/data);
+- `source_folder` — `file_attrs["source_folder_id"]` == valor (pasta monitorada de origem);
+- `extension` — `file_attrs["ext"]` casa (ex.: `.pdf`, `.jpg`); case-insensitive;
+- `filename` — nome do arquivo (`contains`/`eq` sobre `original_filename`);
+- `size` — `file_attrs["size"]` `gt`/`lt` valor (coerção numérica, Pitfall 2);
+- `template` — `identified_template_id` == valor (porteiro do gate, D-15).
+**When to use:** Em todo step. Step sem filtros = casa sempre (aplica-se a todo documento).
 ```python
-# 1. session.add(AuditLog(document_id=doc.id, action="move", status="intent",
-#       source_path=str(src), dest_path=str(dst), run_id=run_id,
-#       details=json.dumps({"undo": {"restore_to": str(src)}})))
-#    session.commit()                 # <-- ANTES de tocar o disco
-# 2. fileops.safe_move(src, dst)      # operação física
-# 3. audit.status = "done"; transition(doc, CONCLUIDO); # 1 commit
+# Estende rules.py: reusa evaluate_condition p/ filter_type="field"; novos ramos
+# para os demais. NUNCA eval. Filtro desconhecido → não casa (falha fechada, V5).
+def filter_matches(filters, conjunction, fields, file_attrs, identified_template_id) -> bool:
+    if not filters:
+        return True                                  # sem filtro = aplica-se a tudo
+    results = (evaluate_filter(f, fields, file_attrs, identified_template_id) for f in filters)
+    return any(results) if conjunction == "or" else all(results)
 ```
+**Anti-pattern:** Materializar o "tamanho" lendo o disco a cada filtro — ler `file_attrs["size"]` uma vez (do CAS/`os.stat` da origem) e passar adiante; o avaliador é puro.
 
-### Pattern 3: Operação de arquivo segura por volume (AUT-06)
-**What:** Decidir a trilha pela comparação de volume; nunca sobrescrever; verificar integridade na trilha cross-device.
+### Pattern 3: Gate "Identificar tipo" reusa a classificação (D-15)
+**What:** A etapa `identify_type` chama a classificação já existente para decidir o template. Reusa `classify_stage` (matcher local custo-0; IA só em desempate) ou, quando o operador trava o template-alvo no step, o caminho `forced_template_id` (já implementado em `classify_stage`, linha 190). O resultado (`template_id`) vira um atributo consumível pelos **filtros `template`** das etapas seguintes (o porteiro de D-12).
+**When to use:** Quando o pipeline precisa decidir/confirmar o tipo no meio do fluxo. Se o doc já está classificado (caminho normal), o gate pode só LER o `ClassificationResult` existente (custo 0) em vez de re-classificar.
 ```python
-def safe_move(src: Path, dst: Path) -> None:
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    # ANTI-COLISÃO (nunca sobrescreve): o dst já foi resolvido p/ um nome livre
-    # (sufixo _1/_2, D-09) ou pulado (D-10) ANTES de chegar aqui. Defesa extra:
-    # criar exclusivo. os.replace SOBRESCREVE — por isso a resolução é a montante.
-    try:
-        os.replace(src, dst)                         # mesmo volume: atômico
-    except OSError as exc:
-        if exc.errno != errno.EXDEV:
-            raise
-        # CROSS-DEVICE (AUT-06): copia → fsync → verifica hash → remove origem
-        expected = sha256_of(src)                    # mesmo hashing do CAS
-        tmp = dst.with_suffix(dst.suffix + ".partial")
-        shutil.copyfile(src, tmp)
-        with open(tmp, "rb") as f: os.fsync(f.fileno())
-        if sha256_of(tmp) != expected:               # VERIFICA antes de remover
-            tmp.unlink(missing_ok=True)
-            raise IntegrityError("hash divergente pós-cópia cross-device")
-        os.replace(tmp, dst)                         # commit local atômico
-        src.unlink()                                 # só REMOVE após verificar
+# Reuso: se o doc JÁ tem ClassificationResult, o gate lê template_id existente (custo 0).
+#        Só re-classifica/força quando o step pede um template específico ainda não confirmado.
+# NUNCA cria parser novo (D-15) — linha digitável de boleto etc. = Fase 7 (D-16).
 ```
-**Fonte da semântica EXDEV / errno 18:** `[CITED: alexwlchan.net/2019/atomic-cross-filesystem-moves-in-python; docs.python.org/3/library/os#os.replace]`. **Confirma `os.replace` atômico same-volume + falha cross-device** `[VERIFIED: WebSearch cross-referenced docs.python.org]`.
+**Cuidado de custo (LGPD/tokens):** o gate NÃO deve re-cobrar a IA se a classificação já existe — espelhar a idempotência do `classify_stage` (`ClassificationResult` existente → no-op).
 
-### Pattern 4: Avaliador de regras puro (D-04/D-05)
-**What:** Sobre os `FilledField.normalized_value` do documento, avaliar cada `AutomationRule` na ordem de prioridade; a primeira cujas condições (`{campo}[op]valor`, combinadas E/OU) casam decide a automação.
-```python
-# Comparação por tipo do campo (REUSA validation/):
-#  =      : igualdade sobre normalized_value (string)
-#  >, <   : se o campo é moeda/numero/data → comparar Decimal/data ISO, não string
-#           (normalize_money_brl já devolve string Decimal-comparável;
-#            normalize_date devolve ISO YYYY-MM-DD, lexicograficamente ordenável)
-#  contém : substring case-insensitive sobre raw_value/normalized_value
-# Primeira regra que casa vence (D-05); nenhuma casa → automação default/nenhuma.
-```
-**Anti-pattern:** NUNCA `eval()` da condição. As condições são dados estruturados (3 colunas: campo, operador, valor), avaliados por um dispatch explícito por operador.
+### Pattern 4: Stage com persistência atômica num único commit (REUSAR — INALTERADO)
+**What:** O `apply_stage` continua seguindo a forma de `classify_stage`: idempotente, write-ahead `intent→done`, persistência via `transition` (commit único). O REDESIGN só muda **o que** se resolve antes da materialização (o pipeline, não uma regra única).
+**Atenção crítica:** NUNCA `session.commit()` manual antes de um `transition` `[VERIFIED: backend/app/automation/stage.py:440]`.
+
+### Pattern 5: Audit write-ahead agrupado por execução do pipeline (AUT-04/AUT-05)
+**What:** Como a materialização é única por documento (Pattern 1), há **um** `AuditLog(intent→done)` por documento por execução, agrupado pelo `run_id` do lote. O undo do "pipeline inteiro" de um documento é então o undo de seus `AuditLog(status="done")` — já coberto por `undo.undo_document` (seleciona todos os `done` do doc) e `undo.undo_run` (por `run_id`).
+**Nota sobre múltiplas operações:** se o planejador escolher materialização por-etapa (NÃO recomendado), aí sim haveria N AuditLogs por doc e seria necessário um `pipeline_run_id` distinto do `run_id` de lote para agrupar as etapas de UM documento. Com materialização única, `run_id` (lote) + `document_id` já agrupam corretamente — `undo.py` não precisa mudar.
 
 ### Anti-Patterns to Avoid
-- **Sobrescrever silenciosamente:** jamais `os.replace(src, dst)` sem que `dst` já tenha sido resolvido para um caminho livre (D-09) — `os.replace` SOBRESCREVE por design. A anti-colisão é a montante, na resolução do nome.
-- **Mover sem CAS como rede:** o CAS já preserva o conteúdo; nunca tratar o arquivo físico como a única cópia.
-- **`document.state = ...` direto:** sempre via `transition` (allowlist). Anti-pattern explícito no worker `[VERIFIED: backend/app/queue/worker.py:84]`.
-- **Commit por operação dentro de um lote atômico:** quebra a reversibilidade do batch (mesma lição do `ingest_stage` CR-02).
-- **Comparar `>`/`<` de moeda como string:** `"100" > "99"` é `False` lexicograficamente. Coerção para Decimal/data é obrigatória nas condições numéricas.
-- **Assumir que existe um arquivo físico por bloco:** ver Open Question 1 — **não existe** para blocos separados.
+- **Materializar por etapa:** multiplica janelas de falha e confunde o undo (ver Pattern 1).
+- **Gate como desvio imperativo:** modelar como filtro mantém o pipeline declarativo e testável.
+- **Sobrescrever silenciosamente:** anti-colisão é a montante (`resolve_collision`); `os.replace` sobrescreve por design. (INALTERADO — já tratado em `fileops.py`.)
+- **`document.state = ...` direto:** sempre via `transition` (allowlist) `[VERIFIED: backend/app/queue/worker.py:106]`.
+- **Re-cobrar a IA no gate:** se `ClassificationResult` já existe, ler em vez de re-classificar (custo/LGPD).
+- **Comparar `>`/`<` de moeda/tamanho como string:** coerção Decimal obrigatória nos filtros numéricos (Pitfall 2 — já tratado em `rules._as_decimal`).
+- **Editar a migração 0006 in-place:** criar 0007 forward-only (dropa regras, cria pipeline); não tocar `documents`.
 
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| Rename atômico same-volume | wrapper próprio sobre `MoveFileEx` | `os.replace` | Já é a primitiva portável usada no `cas.py`; reescrever só adiciona bugs |
-| Hash de verificação cross-device | novo hasher | `ingest/hashing.py` + `storage/cas.py` (SHA-256) | O hash do bloco JÁ é `Document.content_hash`; recalcular com outro código diverge |
-| Cópia de bytes com buffer | loop manual `read()/write()` | `shutil.copyfile` | stdlib, testada, lida com chunks |
-| Recuperação do conteúdo original (undo último-recurso) | backup paralelo | CAS (`cas.read_bytes(content_hash)`) | O CAS é exatamente a rede de segurança imutável — `[VERIFIED: backend/app/storage/cas.py]` |
-| Normalização de data/moeda p/ tokens e condições | parser novo | `validation/dates.py`, `validation/money.py` | Já resolvem `dayfirst` pt-BR e Decimal; reusar mantém consistência com a extração |
-| Sanitização de nome reservado/MAX_PATH Windows | lista incompleta | `pathvalidate` 3.3.1 OU tratamento explícito documentado | A lista de 9 chars de D-08 NÃO cobre CON/PRN/NUL nem o limite de 260 — gap de confiabilidade Windows (ver Pitfalls 4/5) |
+| Resolução de tokens→caminho + sanitização Windows | novo resolver | `automation/naming.py` (já implementado) | Confinamento V4, reservados, MAX_PATH, `{data:fmt}` já cobertos e testados |
+| Materialização verificada do CAS / EXDEV / anti-colisão | nova máquina de arquivo | `automation/fileops.py` (já implementado) | Verify-then-remove, copy+fsync+hash, sufixo D-09/skip D-10 — já testados |
+| Undo por-doc/por-run + fallback CAS | nova reversão | `automation/undo.py` (já implementado) | Já agrupa por `run_id`, restaura do CAS quando o destino sumiu |
+| Avaliador de condições sobre campos (`field` filter) | novo dispatch | `automation/rules.evaluate_condition` (já implementado) | Coerção Decimal/data, dispatch por operador sem eval — só ESTENDER para os novos tipos de filtro |
+| Decisão de tipo no gate | novo classificador/parser | `classification/stage.classify_stage` (+ `forced_template_id`) | D-15 manda reusar; parser de boleto etc. = Fase 7 |
+| Recuperação do conteúdo original | backup paralelo | CAS (`cas.read_bytes`) | Rede imutável já existente |
 
-**Key insight:** A fase parece "só renomear arquivos", mas o domínio é **integridade de dados sob falha parcial no Windows**. Cada peça de segurança que você precisaria construir (cópia imutável, hashing, máquina de estados reversível, audit) **já está construída e testada** no projeto — o valor desta fase é orquestrá-las corretamente, não reinventá-las.
+**Key insight:** O REDESIGN é uma mudança de **orquestração e modelo de dados**, não de física. Toda a parte perigosa (tocar o NTFS sob falha parcial) já está construída, testada e **não muda**. O valor do replan é montar o pipeline declarativo por cima dos tijolos existentes, com materialização única ao final.
 
 ## Runtime State Inventory
 
-> Fase de **efeito sobre o filesystem do cliente** (não rename de código). O inventário abaixo cobre o estado de runtime que esta fase cria/move e que afeta undo e idempotência.
+> Fase de **efeito sobre o filesystem do cliente** + **reestruturação de modelo de dados** (regras → pipeline). Cobre tanto o estado de runtime quanto a migração de schema.
 
 | Category | Items Found | Action Required |
 |----------|-------------|------------------|
-| Stored data | `AuditLog` (existe, mínimo) será a fonte de verdade do undo. `ClassificationResult`/`FilledField` guardam os valores que viram tokens. `IngestedOriginal.source_folder_id`→`WatchedFolder.path` é o ÚNICO lugar que reconstrói o caminho de origem do **original** (não há coluna de caminho absoluto). | Migração 0006: estender `AuditLog` (src/dst/status/run_id/undo_data). Decidir persistência do caminho-fonte (ver Open Q1). |
-| Live service config | Nenhuma. Single-tenant, sem serviço externo registrando estado. | None — verificado: não há broker/serviço externo no modo padrão (fila in-process SQLite). |
-| OS-registered state | O arquivo FÍSICO do cliente no NTFS é o estado mutável externo crítico. Após mover, o caminho de origem deixa de existir; o usuário pode mexer no destino. | Undo deve checar integridade do destino (hash) antes de reverter; falha controlada se o destino sumiu/mudou (Claude's Discretion). |
-| Secrets/env vars | `review_confidence_threshold` (lido da config, governa o auto-aplica D-01). Nenhum segredo novo. | None — reusa a config existente da Fase 5 `[VERIFIED: backend/app/config.py:151]`. |
-| Build artifacts | Nenhum artefato compilado afetado. CAS blobs em `data_dir/cas` são imutáveis e crescem (rede de segurança), não precisam limpeza nesta fase. | None. |
+| Stored data | (1) `automation_rules` + `rule_conditions` (criadas na 0006) — **sem dados em prod** (CONTEXT autoriza redesenhar). (2) `AuditLog` estendido (status/src/dst/run_id/content_hash) — **MANTÉM** (write-ahead/undo independem do modelo de regra/pipeline). (3) `ClassificationResult`/`FilledField` — fonte dos tokens e do gate. (4) `IngestedOriginal.source_folder_id`→`WatchedFolder.path` — reconstrói o caminho de origem (+ filtro `source_folder`, D-14). | Migração **0007**: DROP `automation_rules`/`rule_conditions`, CREATE `automation_pipelines`/`pipeline_steps`/`step_filters`. NÃO tocar `audit_log` nem `documents`. |
+| Live service config | Nenhuma. Single-tenant, fila in-process SQLite, sem broker. | None — verificado. |
+| OS-registered state | O arquivo FÍSICO do cliente no NTFS é o estado mutável crítico. Após materializar, o destino pode ser mexido pelo usuário (undo checa integridade). | INALTERADO pelo REDESIGN — `fileops`/`undo` já tratam. |
+| Secrets/env vars | `review_confidence_threshold` (auto-aplica D-01); `automation_dest_root` (base de confinamento V4, `stage._base_root`). Nenhum segredo novo. | None — reusa config da Fase 5/6 `[VERIFIED: backend/app/automation/stage.py:170]`. |
+| Build artifacts | Nenhum compilado. CAS blobs imutáveis crescem (rede). O `apply` step e os sweeps no `worker.py` já referenciam `APPLY_STEP`/`enqueue_pending_applications` — **permanecem válidos** (o contrato do step não muda, só o que `apply_stage` faz por dentro). | None. |
 
-**A pergunta canônica respondida:** depois de mover/renomear o arquivo do cliente, o que ainda tem o estado antigo? **(1)** o `AuditLog` precisa do caminho de origem para o undo — e esse caminho NÃO está persistido hoje (Open Q1); **(2)** o CAS mantém o conteúdo por hash independente do caminho físico — é a rede final.
+**A pergunta canônica respondida:** depois de aplicar o pipeline e mover/renomear o arquivo, o que ainda tem estado antigo? **(1)** o `AuditLog` guarda o caminho de origem resolvido no momento do apply (já persistido — D-11/risco A2 resolvido); **(2)** o CAS mantém o conteúdo por hash; **(3)** as tabelas `automation_rules`/`rule_conditions` ficam órfãs após a 0007 (dropadas). Nenhum runtime externo guarda o modelo de regra antigo.
 
 ## Common Pitfalls
 
-### Pitfall 1: `os.replace` sobrescreve — anti-colisão tem que ser a montante
-**What goes wrong:** `os.replace(src, dst)` apaga `dst` se existir, silenciosamente. Confiar nele para "não sobrescrever" viola AUT-04 e D-09.
-**Why it happens:** A semântica POSIX/`MoveFileEx(REPLACE_EXISTING)` é sobrescrever por design.
-**How to avoid:** Resolver o nome de destino para um caminho LIVRE (sufixo `_1/_2`, D-09) ou decidir PULAR (D-10) ANTES de chamar `safe_move`. Como defesa em profundidade, criar o destino exclusivo (`O_CREAT|O_EXCL`) ou checar `dst.exists()` imediatamente antes; mas a verdade é a resolução de nome.
-**Warning signs:** Teste que move dois docs diferentes para o mesmo padrão e verifica que ambos sobrevivem (nenhum sumiu).
+> Os pitfalls de operação de arquivo (1, 3, 4, 5, 6, 7) **permanecem válidos e já estão tratados** nos tijolos (`fileops.py`/`naming.py`). Listados resumidamente; os novos pitfalls do pipeline (8, 9, 10) recebem detalhe.
 
-### Pitfall 2: Comparação numérica/data de condições como string
-**What goes wrong:** Regra "valor > 3000" avaliada como string: `"500" > "3000"` é `True` (lexicográfico). Documento de R$500 é roteado errado.
-**Why it happens:** `FilledField.normalized_value` é `Text`.
-**How to avoid:** No avaliador, coerção por `field_type`: moeda/numero → `Decimal`; data → comparar ISO `YYYY-MM-DD` (já ordenável) ou objeto `date`. O `validation/money.py`/`dates.py` já produzem essas formas.
-**Warning signs:** Casos de teste com valores que invertem na ordem lexicográfica (500 vs 3000, "2026-01" vs "2026-1").
+### Pitfall 1 (MANTIDO): `os.replace` sobrescreve — anti-colisão a montante
+Tratado em `fileops.resolve_collision` (sufixo D-09 / skip D-10 antes de qualquer escrita). Teste: dois docs diferentes para o mesmo padrão → ambos sobrevivem.
 
-### Pitfall 3: `os.replace` cross-device cai em `OSError EXDEV` (errno 18)
-**What goes wrong:** Mover de `C:\` para `D:\` (ou para um share de rede) com `os.replace` levanta `OSError` errno 18 (`EXDEV`) — a operação NÃO acontece.
-**Why it happens:** `rename`/`MoveFileEx` não atravessa volumes atomicamente.
-**How to avoid:** `try os.replace` → `except OSError if errno==EXDEV` → trilha copia→fsync→verifica-hash→remove (AUT-06). NÃO usar `shutil.move` cego (esconde o EXDEV e não verifica integridade).
-**Warning signs:** Teste cross-device (simular com dois temp dirs em mounts diferentes, ou mock do errno) — `[CITED: alexwlchan.net/2019/atomic-cross-filesystem-moves-in-python]`.
+### Pitfall 2 (MANTIDO): comparação numérica/data como string
+Tratado em `rules._as_decimal` (coerção Decimal; data ISO já ordenável). **Aplica-se agora também ao filtro `size`** (tamanho do arquivo) — coerção numérica obrigatória.
 
-### Pitfall 4: Nomes reservados do Windows passam pela lista de 9 chars de D-08
-**What goes wrong:** D-08 sanitiza `\ / : * ? " < > |`, mas um campo extraído com valor `CON`, `PRN`, `NUL`, `COM1`…`LPT9` (mesmo com extensão, ex.: `NUL.pdf`) é um nome **proibido** no Windows e o `open()`/`replace()` falha ou redireciona para o device.
-**Why it happens:** A lista de D-08 cobre só caracteres, não nomes reservados.
-**How to avoid:** Após substituir os 9 chars, checar se o stem (case-insensitive) é reservado e, se for, prefixar/sufixar (ex.: `_CON`). `pathvalidate` faz isso automaticamente; à mão é uma lista de ~24 nomes.
-**Warning signs:** Teste com campo cujo valor normaliza para `CON`/`NUL`.
-`[CITED: learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file; meziantou.net/reserved-filenames-on-windows]`
+### Pitfall 3 (MANTIDO): EXDEV (errno 18) cross-device
+Tratado em `fileops` (`materialize_to_dest` do CAS torna cross-device um não-caso especial — a verificação de hash é a salvaguarda). Teste com mounts/temp dirs distintos.
 
-### Pitfall 5: MAX_PATH (260) estoura com `{cliente}/{ano-mes}/` + nome longo
-**What goes wrong:** Em Windows pré-1607 ou sem long-path habilitado, caminho > 260 chars faz a operação falhar. Padrões com várias pastas + nomes longos atingem isso.
-**Why it happens:** Limite histórico do Win32 API.
-**How to avoid:** Truncar componentes longos do nome (preservando a extensão) a um teto seguro; opcionalmente prefixar com `\\?\` no Windows para long paths. Documentar o limite. NÃO assumir long-path habilitado no cliente.
-**Warning signs:** Teste com padrão que gera caminho > 260.
-`[CITED: learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation]`
+### Pitfall 4 (MANTIDO): nomes reservados Windows
+Tratado em `naming.sanitize_component` (`_WIN_RESERVED` CON/PRN/NUL/COM1…). Teste com campo que normaliza para `NUL`.
 
-### Pitfall 6: Lock de arquivo no Windows (compartilhamento exclusivo)
-**What goes wrong:** Windows trava arquivos abertos por outro processo (ex.: o usuário abriu o PDF no Acrobat); `os.replace`/`unlink` falham com `PermissionError` (WinError 32).
-**Why it happens:** Semântica de compartilhamento do Windows (diferente do POSIX, onde rename de arquivo aberto é OK).
-**How to avoid:** Tratar `PermissionError`/`OSError` como FALHA retryável da operação (o write-ahead garante que o estado fique reconciliável); não corromper o documento — deixá-lo num estado que permita re-tentar. O projeto já tem o padrão de FALHA via `transition` + retry/dead-letter no worker.
-**Warning signs:** Operação intermitente que falha quando o arquivo está aberto.
+### Pitfall 5 (MANTIDO): MAX_PATH 260
+Tratado em `naming.sanitize_component` (truncamento preservando extensão, teto da config). Teste com caminho > 260.
 
-### Pitfall 7: Crash entre `intent` e `done` (reconciliação)
-**What goes wrong:** Worker morre depois de escrever `AuditLog(status=intent)` e fazer o `os.replace`, mas antes de marcar `done`. No restart, o estado fica ambíguo.
-**Why it happens:** Falha parcial — inerente a qualquer operação de duas etapas.
-**How to avoid:** Reconciliação no startup (espelha `requeue_running` do worker): para cada `AuditLog(status=intent)` órfão, checar o filesystem (origem ainda existe? destino existe com o hash esperado?) e decidir done/retry/rollback. A idempotência (`status=done` já existe → no-op) + a checagem de existência tornam isso seguro.
-**Warning signs:** Teste que simula crash entre as etapas e verifica que o restart converge sem perder o arquivo.
+### Pitfall 6 (MANTIDO): lock de arquivo Windows (WinError 32)
+Tratado: `safe_move`/materialização propagam `PermissionError` como FALHA retryável; o worker roteia. Não corrompe.
+
+### Pitfall 7 (MANTIDO): crash entre intent e done
+Tratado em `stage.reconcile_orphans` (startup do worker; destino íntegro → done, senão → orphaned). **Com materialização única, há um intent por doc por run — a reconciliação não muda.**
+
+### Pitfall 8 (NOVO): ordem dos steps importa — Renomear depois de Mover vs. antes
+**What goes wrong:** Se o usuário ordena Mover antes de Renomear, o caminho-alvo evolui pasta→nome; ordenar Renomear antes de Mover evolui nome→pasta. Com materialização por-etapa isso geraria arquivos intermediários; com materialização única (recomendada) a ORDEM só afeta o plano em memória — o resultado final é o mesmo conjunto `(folder, name)` desde que cada ação seja idempotente sobre seu eixo.
+**Why it happens:** D-12 (ordem definida pelo usuário) + duas ações que mutam eixos diferentes do plano-alvo.
+**How to avoid:** Manter o plano-alvo como `(target_folder, target_name)` independentes; Rename só toca `target_name`, Move só toca `target_folder`. A ordem entre eles não muda o destino final (materialização única). Documentar isso para a UI (o usuário pode pôr Renomear e Mover em qualquer ordem relativa).
+**Warning signs:** Teste: pipeline [Move, Rename] e [Rename, Move] produzem o MESMO destino final.
+
+### Pitfall 9 (NOVO): step "Rotear" deve interromper o pipeline
+**What goes wrong:** Se um step `route` (enviar a revisão / não-tratar / ignorar) não interrompe o pipeline, etapas seguintes de arquivo podem materializar um documento que deveria ter sido desviado.
+**Why it happens:** `route` é uma decisão terminal de fluxo, não uma transformação do plano-alvo.
+**How to avoid:** No executor puro, `route` retorna imediatamente um `PipelinePlan(route_to=...)` — o `apply_stage` aplica a transição (EM_REVISAO via `transition`) ou marca não-tratar/ignorar e **NÃO materializa**. Confirmar no plan a semântica de "não-tratar"/"ignorar" (provavelmente um estado/marcador, não um DocState novo — manter o enum enxuto).
+**Warning signs:** Teste: pipeline [Move, Route→revisão, Rename] → doc vai a EM_REVISAO e NÃO é materializado.
+
+### Pitfall 10 (NOVO): filtro que casa em NENHUM step ⇒ documento sem destino
+**What goes wrong:** Se nenhum step casa (todos os filtros falham), o pipeline termina sem mutar o plano-alvo. Com o default (`base_root` + nome original), o doc seria materializado para a raiz — pode não ser o desejado.
+**Why it happens:** D-12 diz "passa por todas as etapas cujo filtro casa" — pode ser zero.
+**How to avoid:** Decisão de produto a confirmar no plan: documento que não casa NENHUM step deve (a) ficar na raiz organizada (default atual), (b) ir a EM_REVISAO, ou (c) ser ignorado. Recomendação: tratar "nenhum step casou" como no-op explícito (não materializa, conclui logicamente OU permanece para revisão) — evitar materializar silenciosamente para a raiz. **Open Question.**
+**Warning signs:** Teste: doc cujos atributos não casam nenhum filtro → comportamento explícito e documentado.
 
 ## Code Examples
 
-### Resolução de token com format de data e sanitização (D-06/D-07/D-08)
+### Modelo de dados do pipeline (NOVO — substitui automation_rule.py)
 ```python
-# Source: derivado de validation/dates.py (ISO YYYY-MM-DD) [VERIFIED: codebase]
-import re
-
-_WIN_INVALID = r'\/:*?"<>|'                       # os 9 chars de D-08
-_WIN_RESERVED = {"CON","PRN","AUX","NUL",*(f"COM{i}" for i in range(1,10)),
-                 *(f"LPT{i}" for i in range(1,10))}  # Pitfall 4
-
-def _fmt_date(iso: str, spec: str) -> str:
-    # {data:aaaa-mm} sobre normalized_value ISO "2026-04-03"
-    y, m, d = iso.split("-")
-    return spec.replace("aaaa", y).replace("mm", m).replace("dd", d)
-
-def sanitize_component(value: str) -> str:
-    cleaned = "".join("_" if c in _WIN_INVALID else c for c in value)
-    cleaned = cleaned.rstrip(" .")                # trailing space/dot inválido no Win
-    if cleaned.upper().split(".")[0] in _WIN_RESERVED:
-        cleaned = "_" + cleaned                   # Pitfall 4
-    return cleaned or "_"
-
-def resolve_pattern(pattern: str, fields: dict[str, "FilledField"]) -> str | None:
-    # Retorna None se algum token referencia campo faltante/inválido (D-07 → revisão).
-    def repl(m: re.Match) -> str | None:
-        name, _, spec = m.group(1).partition(":")
-        ff = fields.get(name)
-        if ff is None or not ff.valid or not ff.normalized_value:
-            raise _MissingField(name)             # caller → transition(EM_REVISAO)
-        val = _fmt_date(ff.normalized_value, spec) if spec else ff.normalized_value
-        return sanitize_component(val)
-    try:
-        return re.sub(r"\{([^}]+)\}", lambda m: repl(m), pattern)
-    except _MissingField:
-        return None
+# backend/app/models/automation_pipeline.py (NOVO)
+# AutomationPipeline 1:N PipelineStep 1:N StepFilter (espelha Template→Field, cascade)
+#
+# class AutomationPipeline(Base):
+#     __tablename__ = "automation_pipelines"
+#     id; name (str); active (bool, default True); created_at; updated_at
+#     steps: list[PipelineStep]  (cascade="all, delete-orphan")
+#
+# class PipelineStep(Base):
+#     __tablename__ = "pipeline_steps"
+#     id; pipeline_id (FK CASCADE, index)
+#     position (Integer, index)                       # ordem D-12
+#     action_type (str)  # "move" | "rename" | "identify_type" | "route"  (D-13)
+#     conjunction (str, default "and")                # combinação dos filtros do step (D-14)
+#     params_json (Text)  # ação: {"folder_pattern": ...} | {"name_pattern": ...}
+#                         #       | {"template_id": N} | {"target": "em_revisao"|"nao_tratar"|"ignorar"}
+#     filters: list[StepFilter]  (cascade="all, delete-orphan")
+#
+# class StepFilter(Base):
+#     __tablename__ = "step_filters"
+#     id; step_id (FK CASCADE, index)
+#     filter_type (str)  # "field" | "source_folder" | "extension" | "filename" | "size" | "template" (D-14)
+#     operator (str)     # eq | gt | lt | contains   (reusa o vocabulário de rules.py)
+#     value (str)        # alvo da comparação
+#     field_name (str|None)  # só p/ filter_type="field": qual campo extraído
+#     position (Integer, default 0)
 ```
 
-### Resolução anti-colisão por hash (D-09/D-10)
+### Migração Alembic 0007 (esqueleto) — dropa regras, cria pipeline
 ```python
-# Source: reusa storage/cas.py (SHA-256 do conteúdo) [VERIFIED: backend/app/storage/cas.py]
-def resolve_collision(dst: Path, content_hash: str) -> Path | None:
-    # Retorna o caminho final livre, ou None se for duplicata idêntica (D-10 → pula).
-    if not dst.exists():
-        return dst
-    if _sha256_of_file(dst) == content_hash:      # D-10: idêntico → já-feito
-        return None
-    stem, suffix = dst.stem, dst.suffix           # D-09: diferente → sufixo
-    i = 1
-    while True:
-        cand = dst.with_name(f"{stem}_{i}{suffix}")
-        if not cand.exists():
-            return cand
-        if _sha256_of_file(cand) == content_hash:
-            return None
-        i += 1
-```
-
-### Extensão do AuditLog (migração 0006) — esqueleto
-```python
-# Source: padrão de alembic/versions/0005_confidence_review.py [VERIFIED: codebase]
-# CAVEAT (Pitfall das migrações): se NÃO tocar a tabela `documents`, o trigger
-# trg_documents_updated_at (criado na 0002) permanece intacto. Estender SÓ audit_log
-# e criar as tabelas de regra — não fazer batch_alter_table em `documents`.
+# backend/alembic/versions/0007_automation_pipeline.py (NOVO)
+# down_revision = "0006"
+# CAVEAT: NÃO tocar `documents` → trigger trg_documents_updated_at (0002) intacto.
+#         NÃO tocar `audit_log` → as colunas write-ahead da 0006 permanecem.
 def upgrade() -> None:
-    with op.batch_alter_table("audit_log") as b:
-        b.add_column(sa.Column("status", sa.String(), nullable=False, server_default="done"))
-        b.add_column(sa.Column("source_path", sa.Text(), nullable=True))
-        b.add_column(sa.Column("dest_path", sa.Text(), nullable=True))
-        b.add_column(sa.Column("run_id", sa.String(), nullable=True))   # AUT-05 batch/run
-        b.add_column(sa.Column("content_hash", sa.String(64), nullable=True))  # undo via CAS
-    op.create_table("automation_rules", ...)      # D-04/D-05 (priority, action)
-    op.create_table("rule_conditions", ...)       # campo, operador, valor, conjunção
+    # Sem dados em prod (CONTEXT): as tabelas de regra da 0006 são redesenhadas.
+    op.drop_table("rule_conditions")
+    op.drop_table("automation_rules")
+    op.create_table("automation_pipelines", ...)   # name, active, timestamps
+    op.create_table("pipeline_steps", ...)          # pipeline_id, position(idx), action_type, conjunction, params_json
+    op.create_table("step_filters", ...)            # step_id, filter_type, operator, value, field_name, position
+    op.create_index("ix_pipeline_steps_position", "pipeline_steps", ["pipeline_id", "position"])
+
+def downgrade() -> None:
+    op.drop_table("step_filters")
+    op.drop_table("pipeline_steps")
+    op.drop_table("automation_pipelines")
+    op.create_table("automation_rules", ...)        # recria a forma da 0006
+    op.create_table("rule_conditions", ...)
+```
+
+### Resolução de plano-alvo (Renomear/Mover) — REUSO de naming (INALTERADO)
+```python
+# As ações Rename/Move chamam EXATAMENTE as funções já implementadas:
+#   target_name   = naming.resolve_pattern(name_pattern, fields)        # None → D-07 bloqueia
+#   target_folder = naming.resolve_dest_folder(folder_pattern, fields, base_root=base)  # None → D-07/V4
+# Nada a reimplementar; o pipeline só ORQUESTRA a ordem dessas chamadas.
 ```
 
 ## State of the Art
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| `os.rename` (falha cross-device E ao sobrescrever no Windows) | `os.replace` (atômico same-volume, sobrescreve consistente) + fallback EXDEV explícito | Python 3.3+ | Já adotado no projeto; nada a migrar |
-| `shutil.move` opaco para cross-device | copia→fsync→verifica-hash→remove explícito | requisito AUT-06 | Controle de integridade é o requisito, não preferência |
-| Sub-templates por emissor (Fase 4 original) | Regras condicionais de automação (TPL-02 re-escopado p/ Fase 6) | 2026-06-16 | O que variava era a AUTOMAÇÃO, não a extração — modelo de regra, não de template |
+| Regra única (condição→nome+pasta, 1ª que casa vence) | **Pipeline ordenado de steps componíveis** (D-12, passa por todas que casam) | 2026-06-17 (REDESIGN) | Reescreve modelo de dados (0007), `stage.py`, `api/automations.py`; tijolos `naming`/`fileops`/`undo` intactos |
+| `name_pattern`+`folder_pattern` acoplados numa regra | Ações **Renomear** e **Mover** como steps separados encadeáveis | 2026-06-17 | Plano-alvo `(folder, name)` mutado por etapas independentes; materialização única ao final |
+| Sub-templates por emissor (Fase 4 original) | Filtros de entrada por step (D-14) sobre campos/pasta/extensão/template | 2026-06-16/17 | O que variava era a automação por etapa; modelado como filtro, não template |
+| `os.rename` | `os.replace`/`materialize_to_dest` do CAS | já adotado | Inalterado pelo REDESIGN |
 
 **Deprecated/outdated:**
-- `os.rename` para mover arquivos do cliente: substituído por `os.replace` + trilha cross-device.
-- Qualquer ideia de "sub-template por emissor": morta; agora é regra condicional (TPL-02).
+- Modelo `automation_rules`/`rule_conditions` (0006): substituído por `automation_pipelines`/`pipeline_steps`/`step_filters` (0007).
+- `first_matching_rule` (primeira-que-casa-vence): substituído por iteração ordenada com filtro por step (D-12). O avaliador `evaluate_condition` permanece (vira o filtro `field`).
+- `api/automations.py` CRUD de regras: vira CRUD de pipeline/steps/filtros (ações dry-run/apply/undo preservadas).
 
 ## Assumptions Log
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | `pathvalidate` 3.3.1 é seguro/mantido (slopcheck não rodou offline) | Standard Stack / Package Audit | Baixo — metadados oficiais verificados (MIT, repo thombashi, histórico longo); gate humano cobre. Mitigado preferindo hand-roll. |
-| A2 | O caminho físico de origem do **original** = `WatchedFolder.path / IngestedOriginal.original_filename` | Open Questions / Runtime Inventory | **ALTO** — se o original foi movido/renomeado pelo usuário entre ingestão e aplicação, o caminho reconstruído não existe mais. Ver Open Q1. |
-| A3 | `MoveFileEx` pode cair em `CopyFile` não-atômico em casos raros | Pattern 2 | Médio — reforça a necessidade do write-ahead; mesmo se nunca ocorrer, o audit-antes-de-agir é exigido por AUT-04 de qualquer forma. |
-| A4 | Comparar datas ISO `YYYY-MM-DD` lexicograficamente é equivalente a comparar cronologicamente | Pattern 4 / Pitfall 2 | Baixo — verdadeiro para datas completas ISO; cuidado com `{data:aaaa-mm}` (sem dia) que ainda ordena correto mês-a-mês. |
+| A1 | Sem dados em prod nas tabelas `automation_rules`/`rule_conditions` (a 0007 pode dropar) | Migração 0007 | Baixo — CONTEXT autoriza redesenhar a 0006; se houver dados de teste, são descartáveis |
+| A2 | Materialização ÚNICA ao final é mais segura/idempotente que por-etapa | Pattern 1 / Open Q1 | Médio — é a recomendação; se o produto exigir efeito físico visível por etapa, reavaliar (improvável p/ rename/move) |
+| A3 | O gate "Identificar tipo" pode LER o `ClassificationResult` existente (custo 0) na maioria dos casos | Pattern 3 | Baixo — o doc chega ao apply já classificado; re-classificar só quando o step força um template não confirmado |
+| A4 | "não-tratar"/"ignorar" do step Rotear são marcadores/no-op, não novos DocState | Pitfall 9 | Médio — manter o enum enxuto; o plan confirma a representação (marcador interno vs. estado) |
+| A5 | `run_id` (lote) + `document_id` agrupam o undo do pipeline inteiro sem precisar de `pipeline_run_id` distinto | Pattern 5 | Baixo — verdadeiro SE materialização única (1 audit por doc/run); por-etapa exigiria coluna nova |
+| A6 | O filtro `size` lê `os.stat`/CAS uma vez (atributo do arquivo), não a cada filtro | Pattern 2 | Baixo — detalhe de performance, não corretude |
 
 ## Open Questions
 
-1. **Qual arquivo físico é renomeado/movido — e onde está seu caminho?** (BLOQUEIA O DESIGN)
-   - **O que sabemos:** Para um documento que NÃO foi separado (imagem, ou PDF sem split), existe 1 arquivo original em `WatchedFolder.path / original_filename` — reconstruível. Mas para **blocos de um PDF separado** (ING-05), o "documento" existe APENAS como blob no CAS (`data_dir/cas/...`); **não há arquivo físico individual no diretório do cliente** `[VERIFIED: backend/app/pipeline/ingest_stage.py:150-172 — blocos só vão ao CAS, nunca ao disco do cliente]`. Além disso, **nenhuma coluna persiste o caminho absoluto de origem** — só `original_filename` (basename) + `source_folder_id` `[VERIFIED: backend/app/models/ingested_original.py, document.py]`.
-   - **O que não está claro:** O que "renomear/mover" significa para um bloco separado? Opções: (a) materializar o bloco do CAS para o destino (o destino é uma CÓPIA derivada do CAS, e o original multi-página fica/some conforme política); (b) só aplicar automação a documentos não-separados no v1; (c) mover o ORIGINAL inteiro quando `pages_per_block=None` (1 bloco = 1 arquivo) e materializar-do-CAS quando separado.
-   - **Recommendation:** Decisão de produto a confirmar no plan. **Sugestão:** materializar o destino a partir do CAS (`cas.read_bytes(content_hash)` → escreve no destino), o que torna a operação uniforme para blocos e não-blocos E intrinsecamente segura (o CAS é a fonte; o arquivo do cliente na pasta de origem pode ser removido/quarentenado por política separada). Isso muda AUT-06 de "mover o original" para "materializar do CAS + verificar hash" — o que já é a operação mais segura possível. **Persistir o caminho de origem resolvido no `AuditLog` no momento da aplicação** (não depender de reconstrução posterior) resolve A2.
+1. **Semântica do caminho-alvo no pipeline: composição incremental (materialização única) vs. operação física por etapa?** (PRINCIPAL — decide o design)
+   - **O que sabemos:** D-11 já trava que a operação materializa do CAS e verifica hash; `fileops.materialize_to_dest` faz isso uma vez. As ações Rename/Move mutam eixos independentes do plano-alvo (`name` vs. `folder`).
+   - **O que não está claro:** O pipeline deve executar uma operação física a CADA etapa de arquivo, ou resolver o plano-alvo final em memória e materializar UMA vez?
+   - **Recommendation (HIGH):** **Materialização única ao final.** Cada etapa Rename/Move é uma transformação pura do plano-alvo `(folder, name)`; o disco só é tocado quando o pipeline produz o caminho-alvo final (uma `materialize_to_dest` + um `AuditLog intent→done`). Mais seguro, idempotente, e o undo (`undo.py`) não precisa mudar. Decisão a confirmar no plan, mas com viés forte para esta opção.
 
-2. **Undo quando o destino foi alterado pelo usuário** (Claude's Discretion — confirmar abordagem)
-   - **O que sabemos:** O CAS garante o conteúdo original por hash, sempre.
-   - **O que não está claro:** Se o usuário moveu/editou/apagou o arquivo de destino, o undo deve: restaurar do CAS para a origem? falhar controladamente? avisar?
-   - **Recommendation:** Undo checa integridade do destino por hash; se bate → reverte dst→origem; se o destino sumiu/mudou → **restaura o conteúdo do CAS para a origem** (rede final) e marca o audit como `undone_from_cas`, nunca corrompendo. Falha controlada + mensagem, jamais perda.
+2. **Documento que não casa NENHUM step** (Pitfall 10)
+   - **O que sabemos:** D-12 permite zero etapas casando.
+   - **O que não está claro:** Materializar para a raiz default, ir a EM_REVISAO, ou ignorar?
+   - **Recommendation:** Tratar como no-op explícito (não materializar silenciosamente para a raiz). Confirmar no plan; provável: concluir logicamente sem mover, OU manter para revisão se o produto exigir que todo doc tenha destino.
 
-3. **Auto-aplica: qual transição de estado o documento de alta confiança faz?**
-   - **O que sabemos:** Hoje o classify_stage deixa o doc de alta confiança em `PROCESSANDO` + `last_completed_step="classificado"` e NUNCA CONCLUIDO — exatamente para a Fase 6 capturá-lo `[VERIFIED: backend/app/classification/stage.py:357-364]`. A allowlist já tem `PROCESSANDO→CONCLUIDO`.
-   - **O que não está claro:** O `apply` é enfileirado por um novo sweep (como `enqueue_pending_classifications`) que pega docs `PROCESSANDO+classificado` de alta confiança? E para os aprovados manualmente (que vão a CONCLUIDO via approve), como disparar o apply? (CONCLUIDO é terminal — sem aresta de saída).
-   - **Recommendation:** Confirmar no plan. Possível: o `apply` roda ANTES da transição final a CONCLUIDO (apply é o que CONCLUI o doc); o approve manual também enfileira o `apply`. Revisar a allowlist se o apply precisar de um estado intermediário (ex.: `PROCESSANDO`→`PROCESSANDO`+step "aplicado"→`CONCLUIDO`).
+3. **Representação de "não-tratar"/"ignorar" do step Rotear** (Pitfall 9 / A4)
+   - **O que sabemos:** O enum `DocState` é deliberadamente enxuto (RECEBIDO/PROCESSANDO/EM_REVISAO/CONCLUIDO/QUARENTENA/FALHA). "Enviar a revisão" mapeia a EM_REVISAO (aresta existe).
+   - **O que não está claro:** "não-tratar"/"ignorar" são um novo estado, um marcador interno (`last_completed_step`), ou um campo no documento?
+   - **Recommendation:** Usar um marcador interno / campo dedicado, NÃO um novo DocState — preservar o enum enxuto. O plan define. "Enviar a revisão" reusa `transition(EM_REVISAO)`.
+
+4. **Gate `identify_type`: quando re-classificar vs. ler o resultado existente** (A3)
+   - **O que sabemos:** `classify_stage` é idempotente e tem o caminho `forced_template_id`.
+   - **O que não está claro:** O step sempre confia no `ClassificationResult` existente, ou pode forçar uma re-classificação contra um template específico do step?
+   - **Recommendation:** Ler o `ClassificationResult` existente por padrão (custo 0); só usar `forced_template_id` quando o step explicitamente trava um template-alvo ainda não confirmado. Nunca re-cobrar a IA se já há classificação (idempotência/LGPD).
+
+5. **Undo quando o destino foi alterado pelo usuário** (MANTIDO — Claude's Discretion)
+   - **O que sabemos:** `undo.undo_operation` já restaura do CAS quando o destino sumiu/mudou (`undone_from_cas`).
+   - **Recommendation:** Manter o comportamento já implementado — checa integridade do destino; bate → reverte; sumiu/mudou → restaura do CAS. Falha controlada, nunca perda. Inalterado pelo REDESIGN.
 
 ## Environment Availability
 
 | Dependency | Required By | Available | Version | Fallback |
 |------------|------------|-----------|---------|----------|
-| Python stdlib (`os`,`shutil`,`hashlib`,`pathlib`) | Toda a fase | ✓ | 3.12.13 | — |
-| SQLAlchemy 2.0 + Alembic | Migração 0006 + modelos | ✓ | já instalado | — |
-| CAS / hashing do projeto | AUT-06, D-10, undo | ✓ | `storage/cas.py`, `ingest/hashing.py` | — |
-| `validation/*` (dates/money/fields) | Tokens + condições | ✓ | já instalado | — |
-| `pathvalidate` (opcional) | Sanitização robusta | ✗ (não instalado) | 3.3.1 disponível no PyPI | Hand-roll a sanitização (recomendado) |
-| Ambiente Windows real para teste NTFS | DIST-01 / Pitfalls 1,3,5,6 | ✗ (dev em WSL2/Linux) | — | Testar EXDEV/colisão com temp dirs no Linux; testes Windows-específicos (lock WinError 32, MAX_PATH, reservados) marcados para verificação manual no cliente Windows |
+| Python stdlib (`os`,`shutil`,`hashlib`,`pathlib`) | Toda a fase (via tijolos já implementados) | ✓ | 3.12.x | — |
+| SQLAlchemy 2.0 + Alembic | Migração 0007 + modelos de pipeline | ✓ | já instalado | — |
+| CAS / hashing do projeto | Materialização D-11, undo, D-10 | ✓ | `storage/cas.py`, `fileops.py` | — |
+| `automation/naming.py`, `fileops.py`, `undo.py`, `rules.py` | Ações atômicas + filtros | ✓ | **já implementados e testados** | — |
+| `classification/stage.py` (`classify_stage`, `forced_template_id`) | Gate "Identificar tipo" (D-15) | ✓ | já implementado | — |
+| `validation/*` (dates/money/fields) | Tokens + filtros numéricos | ✓ | já instalado | — |
+| Ambiente Windows real para teste NTFS | Pitfalls 1,3,5,6 (já tratados nos tijolos) | ✗ (dev em WSL2/Linux) | — | Testar EXDEV/colisão com temp dirs; testes Windows-only marcados p/ verificação manual |
 
-**Missing dependencies with no fallback:** Nenhuma bloqueia a fase. Os testes de comportamento puramente-Windows (lock de arquivo, MAX_PATH, nomes reservados) não rodam fielmente em WSL2/Linux — devem ser cobertos por testes unitários da LÓGICA (lista de reservados, truncamento) + verificação manual no Windows.
-**Missing dependencies with fallback:** `pathvalidate` → hand-roll.
+**Missing dependencies with no fallback:** Nenhuma bloqueia a fase. Testes Windows-only (lock/MAX_PATH/reservados) cobertos por testes da LÓGICA + verificação manual no cliente Windows.
+**Missing dependencies with fallback:** `pathvalidate` (opcional) → hand-roll já presente em `naming.py`.
 
 ## Validation Architecture
 
@@ -477,25 +505,25 @@ def upgrade() -> None:
 | Quick run command | `cd backend && . .venv/bin/activate && pytest tests/automation -x -q` |
 | Full suite command | `cd backend && . .venv/bin/activate && pytest -q` |
 
-### Phase Requirements → Test Map
+### Phase Requirements → Test Map (modelo de PIPELINE)
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| AUT-01 | tokens `{campo}`→nome sanitizado | unit | `pytest tests/automation/test_naming.py -x` | ❌ Wave 0 |
-| AUT-01/D-07 | campo faltante → None (→revisão) | unit | `pytest tests/automation/test_naming.py::test_missing_field_blocks -x` | ❌ Wave 0 |
-| AUT-01/D-08 | sanitiza 9 chars + reservados + `{data:aaaa-mm}` | unit | `pytest tests/automation/test_naming.py -k sanitize -x` | ❌ Wave 0 |
-| AUT-02 | tokens em pasta-destino + mkdir | unit | `pytest tests/automation/test_naming.py -k folder -x` | ❌ Wave 0 |
-| AUT-03 | dry-run resolve origem→destino sem tocar disco | unit | `pytest tests/automation/test_stage.py -k dry_run -x` | ❌ Wave 0 |
-| AUT-04 | audit `intent` escrito ANTES; nunca sobrescreve | unit | `pytest tests/automation/test_fileops.py -k no_overwrite -x` | ❌ Wave 0 |
-| AUT-04/D-09 | colisão conteúdo diferente → `_1`/`_2`, ambos sobrevivem | unit | `pytest tests/automation/test_fileops.py -k collision_suffix -x` | ❌ Wave 0 |
-| AUT-04/D-10 | colisão conteúdo idêntico (mesmo SHA) → pula | unit | `pytest tests/automation/test_fileops.py -k collision_duplicate -x` | ❌ Wave 0 |
-| AUT-05 | undo por-doc e por-run restaura origem | unit | `pytest tests/automation/test_undo.py -x` | ❌ Wave 0 |
-| AUT-05 | undo quando destino sumiu → restaura do CAS | unit | `pytest tests/automation/test_undo.py -k cas_fallback -x` | ❌ Wave 0 |
-| AUT-06 | cross-device: copia→verifica-hash→remove (EXDEV simulado) | unit | `pytest tests/automation/test_fileops.py -k cross_device -x` | ❌ Wave 0 |
-| AUT-06 | hash divergente pós-cópia → aborta, não remove origem | unit | `pytest tests/automation/test_fileops.py -k integrity -x` | ❌ Wave 0 |
-| TPL-02/D-04 | condições `=,>,<,contém` + E/OU; numérico via Decimal | unit | `pytest tests/automation/test_rules.py -x` | ❌ Wave 0 |
-| TPL-02/D-05 | primeira regra que casa vence (ordem de prioridade) | unit | `pytest tests/automation/test_rules.py -k precedence -x` | ❌ Wave 0 |
-| AUT-04/Pitfall 7 | crash entre intent/done → reconciliação no startup | unit | `pytest tests/automation/test_stage.py -k reconcile -x` | ❌ Wave 0 |
-| API | endpoints regras/dry-run/apply/undo (409/422/404) | integration | `pytest tests/test_api_automations.py -x` | ❌ Wave 0 |
+| TPL-02/D-14 | filtros por step (field/source_folder/extension/filename/size/template) + and/or | unit | `pytest tests/automation/test_pipeline.py -k filter -x` | ❌ Wave 0 |
+| D-12 | pipeline passa por TODAS as etapas cujo filtro casa, em ORDEM | unit | `pytest tests/automation/test_pipeline.py -k ordering -x` | ❌ Wave 0 |
+| D-13 | despacho por action_type (move/rename/identify_type/route) | unit | `pytest tests/automation/test_pipeline.py -k actions -x` | ❌ Wave 0 |
+| Pitfall 8 | [Move,Rename] e [Rename,Move] → MESMO destino final (materialização única) | unit | `pytest tests/automation/test_pipeline.py -k order_independent -x` | ❌ Wave 0 |
+| Pitfall 9 | step Route interrompe o pipeline e NÃO materializa | unit | `pytest tests/automation/test_pipeline.py -k route_stops -x` | ❌ Wave 0 |
+| Pitfall 10 | nenhum step casa → comportamento explícito (no-op/revisão) | unit | `pytest tests/automation/test_pipeline.py -k no_match -x` | ❌ Wave 0 |
+| D-15 | gate identify_type reusa classificação; NÃO re-cobra IA se já classificado | unit | `pytest tests/automation/test_pipeline.py -k gate -x` | ❌ Wave 0 |
+| AUT-01/D-07 | ação Rename: token faltante → bloqueia → EM_REVISAO | unit | `pytest tests/automation/test_naming.py -x` (existente, mantido) | ✅ (tijolo) |
+| AUT-02/V4 | ação Move: confinamento sob base_root | unit | `pytest tests/automation/test_naming.py -k folder -x` | ✅ (tijolo) |
+| AUT-03 | dry-run simula o pipeline inteiro sem tocar disco | unit | `pytest tests/automation/test_stage.py -k dry_run -x` | ❌ atualizar |
+| AUT-04/D-09/D-10 | write-ahead + anti-colisão sufixo/skip | unit | `pytest tests/automation/test_fileops.py -x` | ✅ (tijolo) |
+| AUT-05 | undo por-doc e por-run cobre a materialização do pipeline | unit | `pytest tests/automation/test_undo.py -x` | ✅ (tijolo) |
+| AUT-06 | cross-device verify-then-remove (EXDEV) | unit | `pytest tests/automation/test_fileops.py -k cross_device -x` | ✅ (tijolo) |
+| AUT-04/Pitfall 7 | crash entre intent/done → reconciliação no startup | unit | `pytest tests/automation/test_stage.py -k reconcile -x` | ✅ atualizar |
+| API | CRUD pipeline/steps/filtros (409/422/404) + dry-run/apply/undo | integration | `pytest tests/test_api_automations.py -x` | ❌ reescrever |
+| Migração | 0007 dropa regras, cria pipeline; trigger de documents intacto | unit | `pytest tests/test_migrations.py -x` | ❌ atualizar |
 
 ### Sampling Rate
 - **Per task commit:** `pytest tests/automation -x -q`
@@ -503,68 +531,66 @@ def upgrade() -> None:
 - **Phase gate:** Suite verde + verificação manual no Windows (lock/MAX_PATH/reservados) antes de `/gsd:verify-work`
 
 ### Wave 0 Gaps
-- [ ] `tests/automation/__init__.py` + `tests/automation/conftest.py` — fixtures de doc classificado com FilledFields + temp dirs (origem/destino, mesmo e diferente "volume")
-- [ ] `tests/automation/test_naming.py` — AUT-01/02, D-06/07/08
-- [ ] `tests/automation/test_rules.py` — TPL-02, D-04/05
-- [ ] `tests/automation/test_fileops.py` — AUT-04/06, D-09/10, EXDEV
-- [ ] `tests/automation/test_stage.py` — orquestração, dry-run, idempotência, reconciliação
-- [ ] `tests/automation/test_undo.py` — AUT-05 + fallback CAS
-- [ ] `tests/test_api_automations.py` — espelha `test_api_templates.py`
-- [ ] `tests/test_migrations.py` — estender p/ cobrir 0006 (trigger de documents intacto)
+- [ ] `tests/automation/test_pipeline.py` — **NOVO**: executor puro do pipeline (filtros D-14, ordem D-12, ações D-13, gate D-15, Pitfalls 8/9/10)
+- [ ] `tests/automation/test_stage.py` — **ATUALIZAR**: `apply_stage` executa o pipeline, dry-run do pipeline inteiro, reconciliação
+- [ ] `tests/test_api_automations.py` — **REESCREVER**: CRUD de pipeline/steps/filtros (espelha `test_api_templates.py`)
+- [ ] `tests/test_migrations.py` — **ATUALIZAR**: cobrir 0007 (drop regras + create pipeline; documents intacto)
+- [ ] `tests/automation/test_naming.py`, `test_fileops.py`, `test_undo.py`, `test_rules.py` — **MANTIDOS** (tijolos inalterados); `test_rules.py` ganha casos dos novos tipos de filtro
+- [ ] `tests/automation/conftest.py` — estender fixtures: pipeline com steps/filtros; doc com `file_attrs` (ext/size/source_folder)
 
 ## Security Domain
 
-> `security_enforcement: true`, ASVS level 1, block_on: high `[VERIFIED: .planning/config.json]`.
+> `security_enforcement: true`, ASVS level 1, block_on: high `[VERIFIED: research anterior / .planning/config.json]`. As mitigações de arquivo já estão implementadas nos tijolos; o REDESIGN adiciona superfície na configuração do pipeline (filtros/params).
 
 ### Applicable ASVS Categories
 
 | ASVS Category | Applies | Standard Control |
 |---------------|---------|-----------------|
-| V2 Authentication | no | App single-tenant local; sem contas (Out of Scope em REQUIREMENTS.md) |
+| V2 Authentication | no | App single-tenant local; sem contas |
 | V3 Session Management | no | Idem |
-| V4 Access Control | yes | **Path traversal**: o destino resolvido de tokens `{campo}` (valores vindos da IA/documento) pode conter `..` ou caminhos absolutos. O destino DEVE ser confinado sob uma raiz-base configurada (não permitir que um campo extraído escreva fora dela). Sanitização de componente já remove `\ /` mas confirmar confinamento por `resolve()` + checagem de prefixo. |
-| V5 Input Validation | yes | Padrões de regra/nome são input do operador; condições são dados estruturados (sem `eval`). Valores de campo (da IA) são tratados como não-confiáveis ao virar caminho (V4). Regex de regra: reusar o teto `_MAX_REGEX_LEN` de `validation/fields.py` se houver operador regex. |
-| V6 Cryptography | no | SHA-256 é integridade/dedup, não cripto secreta — `hashlib` stdlib, nunca hand-roll de primitiva |
-| V7/V9 Logging | yes | **Não vazar conteúdo do documento em log** — padrão já estabelecido no `classify_stage` (loga só metadados: ids/paths, nunca valores de campo) `[VERIFIED: backend/app/classification/stage.py:34]`. Audit log guarda paths (necessário p/ undo) mas não o conteúdo dos campos sensíveis além do necessário. |
+| V4 Access Control | yes | **Path traversal** via tokens `{campo}` (valores da IA/documento). `naming.resolve_dest_folder` confina o destino sob `base_root` via `is_relative_to` (já implementado). **Inalterado** — a ação Move reusa essa função. |
+| V5 Input Validation | yes | Filtros e params do step são input do operador; filtros são **dados estruturados** (`filter_type`/`operator`/`value`) — **sem eval**. `operator`/`action_type`/`filter_type` validados contra conjuntos explícitos (422 fora deles). Valores de campo (IA) tratados como não-confiáveis ao virar caminho (V4). |
+| V6 Cryptography | no | SHA-256 é integridade/dedup (hashlib stdlib) |
+| V7/V9 Logging | yes | **Não vazar conteúdo do documento em log** — padrão já estabelecido (`stage`/`naming`/`rules` logam só metadados: ids/paths/status, nunca valores de campo). O audit guarda paths (necessário ao undo), não os campos sensíveis. |
 
-### Known Threat Patterns for Python file-ops + Windows
+### Known Threat Patterns for Python file-ops + Windows (pipeline)
 
 | Pattern | STRIDE | Standard Mitigation |
 |---------|--------|---------------------|
-| Path traversal via campo extraído (`{cliente}` = `..\..\Windows\System32`) | Elevation of Privilege / Tampering | Sanitizar componentes (remove `\ / :`) + confinar destino sob raiz-base via `resolved.is_relative_to(base)` (V4) |
-| Sobrescrita destrutiva de arquivo existente | Tampering / Denial | Anti-colisão a montante (D-09) + `os.replace` só sobre caminho resolvido-livre; CAS como rede |
-| Symlink/junction no destino apontando p/ fora | Tampering | Não seguir symlinks no destino; checar `is_symlink()` (padrão já usado em `watched_folders.py:65`) |
-| TOCTOU entre checar colisão e mover | Tampering | Criação exclusiva (`O_CREAT\|O_EXCL`) ou aceitar a janela como risco baixo single-tenant + audit write-ahead reconciliável |
-| Perda por falha parcial (crash mid-move) | Denial / data loss | Audit write-ahead + CAS imutável + reconciliação no startup (Pitfall 7) |
-| ReDoS em regex de condição (se houver operador regex) | Denial | Teto de tamanho (`_MAX_REGEX_LEN`) já existente em `validation/fields.py:29` |
+| Path traversal via campo extraído (`{cliente}` = `..\..\Windows`) | Elevation / Tampering | `naming.sanitize_component` + confinamento `is_relative_to(base_root)` (já implementado) |
+| Sobrescrita destrutiva | Tampering / Denial | `resolve_collision` a montante (D-09) + CAS como rede (já implementado) |
+| Symlink/junction no destino | Tampering | Não seguir symlinks; checar `is_symlink()` (padrão de `watched_folders.py`) |
+| TOCTOU colisão→materializa | Tampering | Write-ahead reconciliável + criação verificada (já implementado) |
+| Perda por crash mid-apply | Denial / data loss | Write-ahead + CAS + `reconcile_orphans` (já implementado) |
+| Injeção via `action_type`/`filter_type`/`operator` desconhecido | Tampering | Dispatch explícito + validação contra conjuntos (falha fechada, V5) — **novo na superfície do pipeline** |
+| ReDoS em filtro (se houver operador regex) | Denial | Não há operador regex no v1; se adicionado, teto de tamanho (`validation/fields._MAX_REGEX_LEN`) |
 
-**Nota:** o vetor de segurança DOMINANTE desta fase é **integridade/perda de dados** (Tampering/Denial), não confidencialidade — alinhado à constraint "nunca pode causar perda". As mitigações primárias são CAS + audit write-ahead + anti-colisão, não controles de acesso.
+**Nota:** o vetor DOMINANTE continua sendo **integridade/perda de dados** (Tampering/Denial). O REDESIGN adiciona uma superfície menor de **validação de configuração** (filtros/params/action_type) — mitigada por dispatch explícito e validação de conjunto, exatamente como `api/automations.py` já faz com `operator`/`conjunction`.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Codebase do projeto (`backend/app/storage/cas.py`, `classification/stage.py`, `queue/worker.py`, `pipeline/state_machine.py`, `pipeline/states.py`, `models/*.py`, `validation/*.py`, `pipeline/ingest_stage.py`, `api/watched_folders.py`) — padrões, garantias e os ativos reutilizáveis citados. Lidos diretamente.
-- `.planning/phases/06-.../06-CONTEXT.md`, `.planning/REQUIREMENTS.md`, `.planning/STATE.md`, `./CLAUDE.md`, `.planning/config.json` — decisões travadas, requisitos, stack.
-- docs.python.org — `os.replace` (atômico same-volume, falha cross-device), `shutil` — semântica das primitivas.
-- PyPI (`pip index versions pathvalidate` → 3.3.1; `pypi.org/pypi/pathvalidate/json` → MIT, repo thombashi) — verificação de versão/licença da lib opcional.
+- Codebase do projeto, lido diretamente nesta re-pesquisa: `backend/app/automation/{naming,fileops,undo,stage,rules}.py`, `backend/app/api/automations.py`, `backend/app/models/{automation_rule,audit_log,enums}.py`, `backend/app/queue/worker.py`, `backend/app/classification/stage.py`, `backend/app/pipeline/states.py` — interfaces reais dos tijolos, padrões de stage/worker/transition, allowlist de estados.
+- `.planning/phases/06-.../06-CONTEXT.md` (bloco REDESIGN D-12..D-16 + decisões mantidas), `.planning/REQUIREMENTS.md` (AUT-01..06, TPL-02), `./CLAUDE.md` (stack, constraints integridade/Windows/LGPD).
+- `backend/alembic/versions/` — confirma 0001..0006 presentes (próxima = 0007).
+- docs.python.org — `os.replace`/`shutil` (semântica das primitivas; preservado da pesquisa anterior).
 
 ### Secondary (MEDIUM confidence)
-- learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file — caracteres/nomes reservados Windows (CON/PRN/NUL…).
-- learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation — MAX_PATH 260.
-- alexwlchan.net/2019/atomic-cross-filesystem-moves-in-python — EXDEV (errno 18) + padrão copy-then-replace.
+- learn.microsoft.com — caracteres/nomes reservados Windows e MAX_PATH 260 (preservado; já tratado em `naming.py`).
+- alexwlchan.net/2019/atomic-cross-filesystem-moves-in-python — EXDEV errno 18 (preservado; já tratado em `fileops.py`).
 
 ### Tertiary (LOW confidence)
-- github.com/untitaker/python-atomicwrites#25 (discussão) — `MoveFileEx` pode cair em `CopyFile` não-atômico (motiva o write-ahead; o requisito AUT-04 já o exige independentemente).
+- github.com/untitaker/python-atomicwrites#25 — `MoveFileEx` pode cair em `CopyFile` não-atômico (motiva o write-ahead; AUT-04 já o exige).
 
 ## Metadata
 
 **Confidence breakdown:**
-- Standard stack (stdlib + libs do projeto): HIGH — tudo verificado no código; zero dependência nova.
-- Arquitetura (apply_stage espelhando classify_stage, audit write-ahead, motor de regras): HIGH — segue padrões já provados e testados nas Fases 2–5.
-- Operações de arquivo Windows (os.replace/EXDEV/colisão): HIGH para a mecânica; MEDIUM para os casos Windows-only (lock/MAX_PATH/reservados) que não testamos em WSL2.
-- Undo sob estado externo mutável (Open Q2): MEDIUM — Claude's Discretion; recomendação dada, mas a abordagem final é decisão do plan.
-- Open Question 1 (qual arquivo físico): a maior incógnita — design dependente de decisão de produto; **resolver antes de planejar tarefas de fileops**.
+- Tijolos de arquivo (naming/fileops/undo/rules): HIGH — já implementados, testados, e reusados sem alteração.
+- Modelo de dados do pipeline (pipelines/steps/filters + 0007): HIGH — espelha o padrão Template→Field já provado; sem dados em prod.
+- Executor do pipeline + materialização única: HIGH para a recomendação; MEDIUM até a Open Q1 ser confirmada no plan (composição incremental vs. por-etapa).
+- Gate "Identificar tipo": HIGH — reusa `classify_stage`/`forced_template_id` existentes.
+- Filtros de entrada D-14: HIGH — generaliza `rules.evaluate_condition`; os tipos novos (pasta/ext/nome/tamanho/template) são comparações simples sobre atributos de arquivo.
+- Undo agrupado por pipeline: HIGH se materialização única (1 audit/doc/run — `undo.py` inalterado); MEDIUM se por-etapa (exigiria `pipeline_run_id`).
 
-**Research date:** 2026-06-17
-**Valid until:** ~2026-07-17 (stack estável, stdlib; reavaliar só se a decisão da Open Q1 mudar o escopo)
-```
+**Research date:** 2026-06-17 (re-pesquisa pós REDESIGN)
+**Valid until:** ~2026-07-17 (stack estável, stdlib + código do projeto; reavaliar se a Open Q1 mudar para materialização por-etapa)
