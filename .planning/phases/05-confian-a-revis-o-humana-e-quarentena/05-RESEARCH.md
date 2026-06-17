@@ -507,19 +507,21 @@ def patch_field(request: Request, document_id: int, field_name: str, body: Field
 | A3 | Auto-CONCLUIDO ao final do classify quando score alto + obrigatórios válidos | Pattern 2 / Open Q1 | **Alto** — ver Open Question 1: CONCLUIDO pode ser prematuro porque as automações de arquivo são a Fase 6. Precisa de decisão. |
 | A4 | Legados PROCESSANDO+classificado podem ficar como estão (sem backfill) | Runtime State Inventory | Baixo — projeto em dev sem dados de produção (STATE.md) |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **CONCLUIDO automático vs estado intermediário antes da Fase 6?**
+> **As 3 questões foram RESOLVIDAS no planejamento da Fase 5 (2026-06-16).** Resumo das resoluções inline abaixo; a implementação completa está nos planos 05-02 e 05-03.
+
+1. **CONCLUIDO automático vs estado intermediário antes da Fase 6?** — **RESOLVED:** o `classify_stage` NUNCA transita para CONCLUIDO. Doc que passa (score ≥ limiar + obrigatórios válidos) **permanece PROCESSANDO + last_completed_step="classificado"** (estado terminal da Fase 4, preserva o ponto de captura da Fase 6); CONCLUIDO só ocorre via `approve` humano de EM_REVISAO (Plan 03-T1). Grep-gate em 05-02-PLAN.md Task 1 acceptance_criteria confirma a AUSÊNCIA de `DocState.CONCLUIDO` no stage.
    - What we know: D-07 diz "aprovar = EM_REVISAO→CONCLUIDO" e "CONCLUIDO = pronto; automações são a Fase 6". O sucesso-critério 4 da fase fala de aprovar→CONCLUIDO. CONCLUIDO é terminal (sem saídas na allowlist).
    - What's unclear: Quando um doc passa direto (score alto + obrigatórios válidos), ele deve ir AUTO para CONCLUIDO no stage, ou permanecer num estado que a Fase 6 consome para aplicar automações? Se CONCLUIDO é terminal e a Fase 6 precisa agir sobre docs "prontos para automação", ir direto a CONCLUIDO no classify pode pular o ponto de captura da Fase 6.
    - Recommendation: **Levar isto ao planejamento/discuss.** Duas leituras válidas: (a) auto-CONCLUIDO e a Fase 6 reabre/age sobre CONCLUIDO (mas CONCLUIDO é terminal — exigiria mudar a allowlist); (b) score alto NÃO auto-conclui — vai para EM_REVISAO de qualquer forma OU para um estado "pronto" só-Fase-6. A leitura mais conservadora com a allowlist ATUAL: docs que passam ficam aptos a CONCLUIDO, mas a transição CONCLUIDO só ocorre quando há ação humana (approve) OU quando a Fase 6 define o gatilho. **Sugestão para o plano:** rotear "passou" para CONCLUIDO só se isso não conflitar com a Fase 6; caso contrário, manter EM_REVISAO ou introduzir o estado de automação na Fase 6. NÃO resolver nesta pesquisa — é decisão de produto + arquitetura cross-fase.
 
-2. **Re-enqueue de job classify viola a UNIQUE `(original_hash, step)`?**
+2. **Re-enqueue de job classify viola a UNIQUE `(original_hash, step)`?** — **RESOLVED:** novo helper `repo.requeue_step(session, *, content_hash, step, payload)` (Plan 02-T2), análogo a `requeue_running` — `UPDATE jobs SET status='pending', payload=:payload, next_run_at=:now, attempts=0 WHERE original_hash=:hash AND step=:step` — reseta a linha existente para pending, mantendo a UNIQUE. O endpoint de reclassify apaga o CR de quarentena ANTES e usa `requeue_step` (não `enqueue`).
    - What we know: `repo.enqueue` é no-op se já existe `(content_hash, "classify")`. Um doc que já passou por classify TEM esse job (provavelmente `done`).
    - What's unclear: Para reclassificar (quarentena) ou retry, precisamos de um NOVO job classify, mas a linha antiga (status `done`) ainda satisfaz a UNIQUE → `enqueue` retorna None → nada roda.
    - Recommendation: Resolver no plano. Opções: (a) apagar/atualizar o job antigo para `pending` (reset) em vez de inserir novo — `UPDATE jobs SET status='pending', next_run_at=now WHERE original_hash=X AND step='classify'`; (b) incluir um discriminador no `step` (ex.: `classify:reclassify`) — mas isso fragmenta a idempotência. **Recomendação firme: reset do job existente para pending** (novo helper em `repo.py`, ex.: `requeue_step(content_hash, step)`), análogo a `requeue_running`. Isso reusa a linha e mantém a UNIQUE. Confirmar no plano que o sweep idempotente não re-cria o job antes do reset.
 
-3. **Endpoint dedicado de atenção vs filtro em `GET /documents`?**
+3. **Endpoint dedicado de atenção vs filtro em `GET /documents`?** — **RESOLVED:** endpoint dedicado `GET /documents/attention` (Plan 03-T2) que devolve os 3 baldes (FALHA/QUARENTENA/EM_REVISAO) num payload único — para EM_REVISAO inclui os campos editáveis via join/selectinload, evitando o N+1 (Pitfall 5).
    - What we know: `GET /documents` é leve (sem classificação, por design). A visão de atenção precisa de motivo + campos editáveis (EM_REVISAO).
    - What's unclear: Criar `GET /documents/attention` (payload rico, 1 request) ou parametrizar `GET /documents` + lazy `GET /documents/{id}` por item aberto.
    - Recommendation: `GET /documents/attention` dedicado evita N+1 (Pitfall 5) e casa com o mock de "3 baldes num payload". Decidir no plano; ambos são viáveis.
