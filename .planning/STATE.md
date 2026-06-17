@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 6 context gathered
-last_updated: "2026-06-17T04:49:20.939Z"
+status: executing
+stopped_at: Phase 06 planned (5 plans, 4 waves) — ready for execute-phase
+last_updated: "2026-06-17T20:55:58.044Z"
 last_activity: 2026-06-17
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 23
-  completed_plans: 23
+  total_plans: 28
+  completed_plans: 24
   percent: 63
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-15)
 
 **Core value:** Transformar uma pilha de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados corretamente de forma automática e confiável — sem o usuário perder arquivos nem confiar cegamente na IA.
-**Current focus:** Phase 05 — confian-a-revis-o-humana-e-quarentena
+**Current focus:** Phase 06 — automa-es-de-arquivo-renomear-mover
 
 ## Current Position
 
-Phase: 05 (confian-a-revis-o-humana-e-quarentena) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 06 (automa-es-de-arquivo-renomear-mover) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-06-17
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
@@ -74,6 +74,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 05 P02 | 5 | 2 tasks | 6 files |
 | Phase 05 P03 | 8 | 3 tasks | 6 files |
 | Phase 05 P04 | 5 | 3 tasks | 9 files |
+| Phase 06 P01 | 7 | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [05-02]: classify_stage roteia EM_REVISAO (score < limiar OU obrigatório inválido, D-04) vs PROCESSANDO+classificado num commit atômico (sem commit antes do transition); NUNCA CONCLUIDO (Open Q1, T-05-05); forced_template_id (D-09) pula matcher/decide/desempate, inexistente → ValueError (T-05-03); repo.requeue_step reseta job existente para pending (Open Q2); worker repassa forced_template_id do payload.
 - [Phase ?]: [05-03]: 4 endpoints de revisão em api/documents.py com allowlist (transition) + pré-condição de estado explícita como guard (retry só FALHA, reclassify só QUARENTENA → 409); reclassify valida template (404) + apaga CR de quarentena ANTES + requeue_step com forced_template_id; patch revalida via validate_field SEM IA + manually_corrected + recalcula confidence_score; approve via _has_invalid_required (D-07); GET /documents/attention dedicado (3 baldes, selectinload evita N+1); GET/PUT /config/review-threshold persiste no .env + cache_clear (REV-02/D-03).
 - [Phase ?]: [05-04]: Frontend da triagem — visão 'Precisam de atenção' (3 baldes) molde DocumentsPage com polling sem flicker; ConfidenceBadge espelha StatusPill (faixas TRAVADAS por token --st-*, número mono, fallback neutro); gate D-07 na UI (Aprovar disabled enquanto inválido, backend guard autoritativo); S6 limiar 0-100% na Config; valores texto puro (0 dangerouslySetInnerHTML); sem visualizador (D-06); code-and-config (sem npm novo).
+- [Phase ?]: [06-01]: AuditLog estendido p/ write-ahead (status intent/done/undone + source/dest_path + run_id + content_hash) base de reversibilidade AUT-04/05; AutomationRule 1:N RuleCondition (priority D-05, operador eq/gt/lt/contains, conjunction E/OU) espelha Template/TemplateField (TPL-02); migracao 0006 estende SO audit_log + cria tabelas de regra, NUNCA toca documents (trigger trg_documents_updated_at intacto, T-06-01); aresta CONCLUIDO->PROCESSANDO unica saida nova do terminal (undo reabre doc, AUT-05); scaffold Wave 0 RED via importorskip.
 
 ### Pending Todos
 
@@ -141,6 +143,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-17T04:49:20.932Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-automa-es-de-arquivo-renomear-mover/06-CONTEXT.md
+Last session: 2026-06-17T20:55:37.923Z
+Stopped at: Phase 06 planned (5 plans, 4 waves) — ready for execute-phase
+Resume file: None
