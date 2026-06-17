@@ -160,8 +160,19 @@ async def _dispatch(engine: Engine, *, step: str, original_hash: str, payload: s
         # faltantes) → `await` DIRETO no loop, com sessão própria. NUNCA
         # `asyncio.to_thread` (não há event loop na thread → RuntimeError) nem
         # `asyncio.run` (já estamos num loop). content_hash do bloco == original_hash.
+        #
+        # `forced_template_id` (reclassify de quarentena, D-09): o endpoint de
+        # reclassify (Plan 03) usa `repo.requeue_step` com payload
+        # `{"forced_template_id": N}`; o classify NORMAL usa `{"content_hash": ...}`
+        # (sem a chave) → `.get` devolve None e o caminho atual fica INALTERADO.
+        # NOTA sweep: `requeue_step` reseta a linha existente; `_sweep_pending`/
+        # `enqueue_pending_classifications` só usa `enqueue` (no-op por UNIQUE quando
+        # a linha existe), logo NÃO sobrescreve o payload forçado.
+        forced = json.loads(payload).get("forced_template_id")
         with get_session(engine) as session:
-            await classify_stage(session, content_hash=original_hash)
+            await classify_stage(
+                session, content_hash=original_hash, forced_template_id=forced
+            )
     else:
         await asyncio.to_thread(
             _process_job_blocking,

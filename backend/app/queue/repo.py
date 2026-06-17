@@ -20,7 +20,7 @@ Garantias materializadas:
 Funções de módulo (estilo `cas.py`/`state_machine.py`), sem classe.
 
 Interface pública: enqueue, claim_next, mark_done, schedule_retry, mark_failed,
-requeue_running.
+requeue_step, requeue_running.
 """
 
 import random
@@ -180,6 +180,39 @@ def mark_failed(session: Session, job_id: int, error: str) -> None:
         {"id": job_id, "error": error},
     )
     session.commit()
+
+
+def requeue_step(
+    session: Session, *, content_hash: str, step: str, payload: str
+) -> int:
+    """Reseta o job existente (content_hash, step) para `pending` com payload novo.
+
+    Resolve a UNIQUE `uq_jobs_hash_step` na RECLASSIFICAÇÃO (Open Q2): após um job
+    de classify ficar `done`, um novo `enqueue` do mesmo (hash, step) é no-op (a
+    constraint o bloqueia). Em vez de duplicar, REUTILIZAMOS a linha existente,
+    voltando-a a `pending` com o `payload` novo (ex.: `{"forced_template_id": N}`).
+
+    `attempts=0` dá ao job reprocessado o ciclo COMPLETO de retries/backoff
+    (PROC-02) — como se fosse um job recém-enfileirado. `next_run_at=:now` o torna
+    elegível imediatamente. Retorna quantas linhas foram resetadas (0 se não havia
+    job para esta (hash, step) — o chamador pode então cair num `enqueue` normal).
+    """
+    result = session.execute(
+        text(
+            """
+            UPDATE jobs
+               SET status='pending',
+                   payload=:payload,
+                   next_run_at=:now,
+                   attempts=0,
+                   updated_at=CURRENT_TIMESTAMP
+             WHERE original_hash=:hash AND step=:step
+            """
+        ),
+        {"payload": payload, "now": _utcnow(), "hash": content_hash, "step": step},
+    )
+    session.commit()
+    return result.rowcount
 
 
 def requeue_running(session: Session) -> int:
