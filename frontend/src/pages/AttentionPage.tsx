@@ -21,9 +21,9 @@ import {
 
 type BucketKey = 'falha' | 'quarentena' | 'em_revisao'
 
-const BUCKETS: { key: BucketKey; label: string; sub: string; token: 'erro' | 'leitura' }[] = [
+const BUCKETS: { key: BucketKey; label: string; sub: string; token: 'erro' | 'leitura' | 'quarentena' }[] = [
   { key: 'falha', label: 'Falhas', sub: 'erro no processamento', token: 'erro' },
-  { key: 'quarentena', label: 'Quarentena', sub: 'nenhum template casou', token: 'leitura' },
+  { key: 'quarentena', label: 'Quarentena', sub: 'nenhum template casou', token: 'quarentena' },
   { key: 'em_revisao', label: 'Em revisão', sub: 'confiança baixa ou campo inválido', token: 'leitura' },
 ]
 

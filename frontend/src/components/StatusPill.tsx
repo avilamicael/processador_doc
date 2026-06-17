@@ -6,10 +6,10 @@ import type { DocState } from '../types'
 //    → rótulo "Aguardando extração", azul muted (reusa --st-encontrado), NUNCA verde;
 //  - "Concluído"/--st-tratado fica RESERVADO (não setado por esta fase).
 //
-// Cada estado mapeia para um dos 4 tokens visuais do design (encontrado/leitura/
-// tratado/erro) mantendo o estilo token-driven var(--st-${token}).
+// Cada estado mapeia para um token visual do design (encontrado/leitura/tratado/
+// erro/quarentena) mantendo o estilo token-driven var(--st-${token}).
 
-type PillToken = 'encontrado' | 'leitura' | 'tratado' | 'erro'
+type PillToken = 'encontrado' | 'leitura' | 'tratado' | 'erro' | 'quarentena'
 
 interface PillSpec {
   label: string
@@ -21,7 +21,7 @@ const STATE_PILL: Record<DocState, PillSpec> = {
   processando: { label: 'Processando', token: 'leitura' },
   em_revisao: { label: 'Em revisão', token: 'leitura' },
   concluido: { label: 'Concluído', token: 'tratado' },
-  quarentena: { label: 'Quarentena', token: 'leitura' },
+  quarentena: { label: 'Quarentena', token: 'quarentena' },
   falha: { label: 'Falha', token: 'erro' },
 }
 

@@ -30,6 +30,7 @@ button { font-family: inherit; }
   --st-leitura: #B45309; --st-leitura-bg: rgba(180,83,9,.12);
   --st-tratado: #15803D; --st-tratado-bg: rgba(21,128,61,.12);
   --st-erro: #DC2626; --st-erro-bg: rgba(220,38,38,.11);
+  --st-quarentena: #7C3AED; --st-quarentena-bg: rgba(124,58,237,.12);
 }
 
 [data-theme="dark"] {
@@ -44,6 +45,7 @@ button { font-family: inherit; }
   --st-leitura: #FBBF24; --st-leitura-bg: rgba(251,191,36,.15);
   --st-tratado: #4ADE80; --st-tratado-bg: rgba(74,222,128,.15);
   --st-erro: #F87171; --st-erro-bg: rgba(248,113,113,.15);
+  --st-quarentena: #A78BFA; --st-quarentena-bg: rgba(167,139,250,.16);
 }
 
 ::-webkit-scrollbar { width: 11px; height: 11px; }
