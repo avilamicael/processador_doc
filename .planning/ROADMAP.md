@@ -235,7 +235,7 @@ Plans:
 
 **Wave 2 (REPLAN)** *(blocked on 06-06)*
 
-- [ ] 06-07-PLAN.md — Executor PURO do pipeline (run_pipeline, materialização única) + filtros de entrada (D-14) + apply_stage/dry_run reescritos + API CRUD de pipeline/steps/filtros + ajuste do worker (reusa naming/fileops/undo)
+- [x] 06-07-PLAN.md — Executor PURO do pipeline (run_pipeline, materialização única) + filtros de entrada (D-14) + apply_stage/dry_run reescritos + API CRUD de pipeline/steps/filtros + ajuste do worker (reusa naming/fileops/undo)
 
 **Wave 3 (REPLAN)** *(blocked on 06-07)*
 
@@ -282,6 +282,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
-| 6. Automações de Arquivo (Renomear/Mover) | 6/8 | In Progress|  |
+| 6. Automações de Arquivo (Renomear/Mover) | 7/8 | In Progress|  |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |

@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: verifying
 stopped_at: "Fase 06 em REPLAN: modelo de automações virou PIPELINE de etapas (D-12..D-16). Re-research em curso; depois UI-SPEC + replan + re-exec. Backend testado verde no modelo antigo (será refeito p/ pipeline)."
-last_updated: "2026-06-18T01:01:49.557Z"
+last_updated: "2026-06-18T01:13:52.280Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 31
-  completed_plans: 29
+  completed_plans: 30
   percent: 63
 ---
 
@@ -78,6 +78,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 06 P02 | 9 | 2 tasks | 3 files |
 | Phase 06 P04 | 20min | 3 tasks | 6 files |
 | Phase 06 P06 | 14 | 2 tasks | 6 files |
+| Phase 06 P07 | 22 | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [06-04]: apply_stage liga rules→naming→fileops→audit write-ahead→estado idempotente; AuditLog(intent)+commit ANTES de materialize (AUT-04); idempotência por AuditLog(done); D-07 rebaixa para EM_REVISAO sem tocar disco; remove_original só após verificação (AUT-06 crit 5); reconcile_orphans adjudica intents órfãos no startup; blob ausente no CAS=conclusão lógica, blob corrompido propaga.
 - [Phase ?]: [06-04]: worker despacha APPLY_STEP como coroutine; enqueue_pending_applications auto-aplica alta confiança (D-01), baixa só após approve; FALHA por content_hash; API /automations CRUD+dry-run(AUT-03)+apply lote run_id(D-03)+undo run reabre CONCLUIDO→PROCESSANDO(AUT-05); approve dispara apply (Open Q3).
 - [Phase ?]: [06-06]: Modelo de pipeline AutomationPipeline 1:N PipelineStep 1:N StepFilter (D-12..D-14) substitui regra única; espelha Template→TemplateField (cascade delete-orphan + FK CASCADE); migração 0007 forward-only dropa regras da 0006 e cria pipeline sem tocar documents (trigger intacto) nem audit_log (write-ahead preservado); automation_rule.py deletado, stage/api ficam com import quebrado intencional até o 06-07.
+- [Phase ?]: 06-07: materialização única ao final do pipeline (Open Q1); Route não materializa (P9); no-match no-op (P10); apply_stage async; gate D-15 custo 0
 
 ### Pending Todos
 
@@ -149,6 +151,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T01:01:28.123Z
+Last session: 2026-06-18T01:13:31.582Z
 Stopped at: Fase 06 em REPLAN: modelo de automações virou PIPELINE de etapas (D-12..D-16). Re-research em curso; depois UI-SPEC + replan + re-exec. Backend testado verde no modelo antigo (será refeito p/ pipeline).
 Resume file: None
