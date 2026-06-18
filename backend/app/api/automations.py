@@ -14,8 +14,9 @@ Garantias materializadas:
   ordem das ações via `position` (drag-and-drop / ↑↓). Saída ordenada.
 - **D-24 (condições):** `field ∈ {source_folder, extension, template, field,
   filename, size}`; `operator ∈ {eq, contains, gt, lt}`; combinadas por E (AND).
-- **D-24 (ações):** `action_type ∈ {rename, move}`; param obrigatório por tipo
-  (rename→name_pattern, move→dest_folder) validado. Sem "route" (D-22).
+- **D-24 (ações):** `action_type ∈ {rename, move, copy}`; param obrigatório por tipo
+  (rename→name_pattern, move/copy→dest_folder) validado. Sem "route" (D-22). `copy`
+  (Fase 06.2) é saída ADICIONAL que NÃO remove o original (D-01).
 - **AUT-03 (dry-run):** `POST /dry-run` simula as automações por documento SEM tocar
   o disco nem escrever AuditLog (chama `stage.dry_run`).
 - **D-03 (apply por-doc e por-lote):** `POST /apply` aceita um único id OU lista; gera
@@ -56,7 +57,9 @@ from app.storage.db import get_session
 router = APIRouter(prefix="/automations", tags=["automations"])
 
 # Vocabulário validado na borda HTTP (V5). Fora dos conjuntos → 422.
-_ACTION_TYPES = frozenset({"rename", "move"})
+# copy (Fase 06.2): SAÍDA ADICIONAL que NÃO remove o original (D-01); valida como o
+# move (exige dest_folder).
+_ACTION_TYPES = frozenset({"rename", "move", "copy"})
 _CONDITION_FIELDS = frozenset(
     {"source_folder", "extension", "template", "field", "filename", "size"}
 )
@@ -99,7 +102,7 @@ class ConditionIn(BaseModel):
 
 
 class ActionIn(BaseModel):
-    """Ação ordenada: rename (name_pattern) | move (dest_folder) (D-24)."""
+    """Ação ordenada: rename (name_pattern) | move | copy (dest_folder) (D-24/06.2)."""
 
     action_type: str
     params: dict = {}
@@ -109,18 +112,20 @@ class ActionIn(BaseModel):
     def _action_known(cls, v: str) -> str:
         if v not in _ACTION_TYPES:
             raise ValueError(
-                f"action_type inválido: {v!r} (use rename/move)"
+                f"action_type inválido: {v!r} (use rename/move/copy)"
             )
         return v
 
     @model_validator(mode="after")
     def _params_required_by_action(self) -> "ActionIn":
-        """Valida o param obrigatório por `action_type` (D-24). Faltante → 422."""
+        """Valida o param obrigatório por `action_type` (D-24/06.2). Faltante → 422."""
         p = self.params or {}
         if self.action_type == "rename" and not p.get("name_pattern"):
             raise ValueError("ação 'rename' exige params.name_pattern")
         if self.action_type == "move" and not p.get("dest_folder"):
             raise ValueError("ação 'move' exige params.dest_folder")
+        if self.action_type == "copy" and not p.get("dest_folder"):
+            raise ValueError("ação 'copy' exige params.dest_folder")
         return self
 
 
@@ -362,7 +367,13 @@ class DocSelectionIn(BaseModel):
 
 
 class DryRunRow(BaseModel):
-    """Uma linha do preview de dry-run: origem→destino + sinalização (AUT-03)."""
+    """Uma linha do preview de dry-run: origem→destino + sinalização (AUT-03).
+
+    Multi-saída (Fase 06.2): uma automação copy+move gera VÁRIAS linhas para o mesmo
+    `document_id` — uma por saída. `action_kind` discrimina `"copy"`/`"move"` (None
+    em linhas blocked/no-match, que continuam 1 por doc, sem saída). `removes_original`
+    é False na cópia (D-01) e True no move — a UI mostra o badge "não remove o original".
+    """
 
     document_id: int
     original_filename: str
@@ -373,6 +384,8 @@ class DryRunRow(BaseModel):
     skipped_identical: bool
     no_match: bool
     automation_id: int | None
+    action_kind: str | None = None
+    removes_original: bool = True
 
 
 class DryRunOut(BaseModel):
@@ -445,19 +458,44 @@ def dry_run(request: Request, body: DocSelectionIn) -> DryRunOut:
             plan = stage.dry_run(session, content_hash=doc.content_hash)
             if plan is None:
                 continue
-            rows.append(
-                DryRunRow(
-                    document_id=doc.id,
-                    original_filename=doc.original_filename,
-                    source_path=plan.source_path,
-                    dest_path=plan.dest_path,
-                    blocked=plan.blocked,
-                    collision=plan.collision,
-                    skipped_identical=plan.skipped_identical,
-                    no_match=plan.no_match,
-                    automation_id=plan.automation_id,
+
+            # blocked/no-match: 1 linha por doc, sem saída (mantém o contrato anterior).
+            if plan.blocked or plan.no_match or not plan.outputs:
+                rows.append(
+                    DryRunRow(
+                        document_id=doc.id,
+                        original_filename=doc.original_filename,
+                        source_path=plan.source_path,
+                        dest_path=plan.dest_path,
+                        blocked=plan.blocked,
+                        collision=plan.collision,
+                        skipped_identical=plan.skipped_identical,
+                        no_match=plan.no_match,
+                        automation_id=plan.automation_id,
+                        action_kind=None,
+                        removes_original=False if plan.blocked or plan.no_match else True,
+                    )
                 )
-            )
+                continue
+
+            # Multi-saída (Fase 06.2): uma linha por saída (cópia(s) + move). A cópia
+            # NÃO remove o original (D-01); o move sim. A UI mostra o badge por linha.
+            for out in plan.outputs:
+                rows.append(
+                    DryRunRow(
+                        document_id=doc.id,
+                        original_filename=doc.original_filename,
+                        source_path=plan.source_path,
+                        dest_path=out.dest_path,
+                        blocked=False,
+                        collision=out.collision,
+                        skipped_identical=out.skipped_identical,
+                        no_match=False,
+                        automation_id=plan.automation_id,
+                        action_kind=out.kind,
+                        removes_original=out.removes_original,
+                    )
+                )
     return DryRunOut(rows=rows)
 
 
