@@ -172,7 +172,15 @@ export interface DocumentDetail {
 // --- etapas ordenadas: cada etapa = 1 ação atômica + 0..N filtros E/OU.         ---
 
 // Ações atômicas de uma etapa (V5: conjunto fechado no backend).
-export type StepActionType = 'move' | 'rename' | 'identify_type' | 'route'
+// `identify_file` (D-17) = gate por extensão digitável. `route` (D-22) é aceito pelo
+// backend mas NÃO é exposto na UI v1 — mantido no tipo só para tolerar pipelines
+// legados vindos do backend sem quebrar a serialização.
+export type StepActionType =
+  | 'move'
+  | 'rename'
+  | 'identify_type'
+  | 'identify_file'
+  | 'route'
 
 // Tipos de filtro de entrada de uma etapa (D-14).
 export type StepFilterType =
