@@ -294,7 +294,18 @@ export function AutomationsPage() {
   // ── Mutadores do rascunho selecionado ──
   const patchSelected = (patch: Partial<AutoDraft>) => {
     if (!selected) return
-    setDrafts((list) => list.map((d) => (d === selected ? { ...d, ...patch } : d)))
+    setDrafts((list) =>
+      list.map((d) => {
+        if (d !== selected) return d
+        const updated = { ...d, ...patch }
+        // Preserva a chave de seleção das automações novas (sem id): a chave é
+        // indexada pela identidade do objeto; ao recriar o draft, transfere a
+        // chave p/ o novo objeto — senão o editor deseleciona ao editar (bug).
+        const k = newKeys.current.get(d)
+        if (k != null) newKeys.current.set(updated, k)
+        return updated
+      }),
+    )
     setDirty(true)
     setFormError(null)
   }
