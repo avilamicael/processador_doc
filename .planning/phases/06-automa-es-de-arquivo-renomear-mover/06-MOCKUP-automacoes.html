@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Mockup — Automações (Pipeline) v2</title>
+<title>Mockup — Automações (Condições → Ações) v3</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -15,11 +15,9 @@
   --text:#141A24; --text-2:#4B5663; --text-3:#828D9C;
   --accent:#2563EB; --accent-fg:#fff; --accent-soft:rgba(37,99,235,.10); --accent-ring:rgba(37,99,235,.24);
   --shadow-card:0 1px 2px rgba(20,26,36,.04),0 8px 22px -14px rgba(20,26,36,.14);
+  --st-tratado:#15803D; --st-tratado-bg:rgba(21,128,61,.12);
   --st-encontrado:#1E5FBF; --st-encontrado-bg:rgba(30,95,191,.10);
   --st-leitura:#B45309; --st-leitura-bg:rgba(180,83,9,.12);
-  --st-tratado:#15803D; --st-tratado-bg:rgba(21,128,61,.12);
-  --st-erro:#DC2626; --st-erro-bg:rgba(220,38,38,.11);
-  --st-quarentena:#7C3AED; --st-quarentena-bg:rgba(124,58,237,.12);
 }
 [data-theme="dark"]{
   --bg:#0B1017; --surface:#141B25; --surface-2:#10161F; --surface-3:#1C2632;
@@ -27,11 +25,9 @@
   --text:#EAEFF6; --text-2:#A6B2C2; --text-3:#6E7A8A;
   --accent:#3B82F6; --accent-soft:rgba(59,130,246,.16); --accent-ring:rgba(59,130,246,.38);
   --shadow-card:0 1px 3px rgba(0,0,0,.45),0 10px 24px -14px rgba(0,0,0,.6);
+  --st-tratado:#4ADE80; --st-tratado-bg:rgba(74,222,128,.15);
   --st-encontrado:#6BA5FF; --st-encontrado-bg:rgba(107,165,255,.14);
   --st-leitura:#FBBF24; --st-leitura-bg:rgba(251,191,36,.15);
-  --st-tratado:#4ADE80; --st-tratado-bg:rgba(74,222,128,.15);
-  --st-erro:#F87171; --st-erro-bg:rgba(248,113,113,.15);
-  --st-quarentena:#A78BFA; --st-quarentena-bg:rgba(167,139,250,.16);
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);-webkit-font-smoothing:antialiased}
@@ -42,43 +38,65 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
 .btn-primary{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:var(--radius-sm);border:1px solid transparent;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:600;cursor:pointer}
 .btn-ghost{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--surface);color:var(--text-2);font-size:13px;font-weight:500;cursor:pointer}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
-.wrap{max-width:980px;margin:0 auto;padding:26px}
-.banner{font-size:12px;color:var(--text-3);background:var(--surface-3);border:1px dashed var(--border-strong);border-radius:var(--radius-sm);padding:9px 13px;margin-bottom:20px}
-.banner b{color:var(--text-2)}
+.layout{display:grid;grid-template-columns:300px 1fr;gap:18px;max-width:1120px;margin:0 auto;padding:22px 26px}
+.banner{grid-column:1/-1;font-size:12px;color:var(--text-3);background:var(--surface-3);border:1px dashed var(--border-strong);border-radius:var(--radius-sm);padding:9px 13px}
 
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);margin-bottom:18px}
-.pl-head{display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--border)}
-.pl-title{font-size:14.5px;font-weight:700;letter-spacing:-.2px}
-.pl-sub{font-size:11.5px;color:var(--text-3);margin-top:1px}
+/* lista de automações */
+.list{display:flex;flex-direction:column;gap:9px}
+.list-h{font-size:11px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--text-3);margin:2px 2px 4px}
+.auto-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:12px 13px;cursor:pointer}
+.auto-card.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-ring)}
+.auto-name{font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:8px}
+.dotg{width:7px;height:7px;border-radius:50%;background:#2FBF71;flex:none}
+.dotg.off{background:var(--text-3)}
+.auto-sum{font-size:11.5px;color:var(--text-3);margin-top:4px;line-height:1.5}
+.new-auto{display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border-radius:var(--radius);border:1px dashed var(--border-strong);color:var(--text-2);background:transparent;font-size:13px;font-weight:600;cursor:pointer}
+.new-auto:hover{border-color:var(--accent);color:var(--accent)}
+
+/* editor */
+.editor{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-card)}
+.ed-head{display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--border)}
+.ed-name{font-size:15px;font-weight:700;border:1px solid transparent;background:transparent;color:var(--text);font-family:inherit;padding:4px 6px;border-radius:7px;width:340px;outline:none}
+.ed-name:hover,.ed-name:focus{border-color:var(--border-strong);background:var(--surface-2)}
 .switch{width:34px;height:20px;border-radius:999px;background:var(--surface-3);border:1px solid var(--border-strong);position:relative;cursor:pointer;flex:none}
 .switch.on{background:var(--accent);border-color:var(--accent)}
-.switch i{position:absolute;top:1.5px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.switch i{position:absolute;top:1.5px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;transition:.15s}
 .switch.on i{left:16px}
+.sec{padding:16px 18px;border-bottom:1px solid var(--border)}
+.sec:last-child{border-bottom:0}
+.sec-t{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;margin-bottom:3px}
+.sec-tag{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:2px 7px;border-radius:999px}
+.tag-when{color:var(--st-leitura);background:var(--st-leitura-bg)}
+.tag-do{color:var(--st-tratado);background:var(--st-tratado-bg)}
+.sec-sub{font-size:11.5px;color:var(--text-3);margin:0 0 12px}
 
-.steps{padding:18px}
-.steplist .step{position:relative;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2);padding:14px 14px 14px 64px;margin-bottom:24px}
-.steplist .step:not(:last-child)::after{content:'↓';position:absolute;left:33px;bottom:-21px;transform:translateX(-50%);color:var(--text-3);font-size:15px;font-weight:700}
-.step.paused{opacity:.5}
-.step.dragging{opacity:.4;border:1px dashed var(--accent)}
-.step.dragover{box-shadow:0 -3px 0 var(--accent)}
-.drag{position:absolute;left:12px;top:13px;width:20px;height:26px;display:flex;align-items:center;justify-content:center;color:var(--text-3);cursor:grab;font-size:14px;letter-spacing:-2px}
-.drag:active{cursor:grabbing}
-.step-idx{position:absolute;left:34px;top:14px;width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700;font-family:var(--font-mono);display:flex;align-items:center;justify-content:center}
-.step-top{display:flex;align-items:center;gap:9px;margin-bottom:10px}
-.step-kind{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700}
-.kind-ico{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;flex:none}
-.k-fa{background:#B45309}.k-id{background:#1E5FBF}.k-rn{background:#7C3AED}.k-mv{background:#15803D}
-.step-actions{margin-left:auto;display:flex;align-items:center;gap:4px}
-.iconbtn{width:28px;height:28px;border-radius:7px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
-.iconbtn:hover{color:var(--accent);border-color:var(--accent)}
-
-.row{display:flex;gap:14px;flex-wrap:wrap}
-.field{flex:1;min-width:210px}
-.lbl{font-size:11px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px;display:block}
-.select,.inp{width:100%;height:36px;padding:0 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit;outline:none}
-.inp.mono{font-family:var(--font-mono);font-size:12.5px}
+/* condições */
+.cond{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.cond .andlbl{font-size:11px;font-weight:700;color:var(--text-3);width:24px;text-align:right}
+.select,.inp{height:34px;padding:0 10px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:12.5px;font-family:inherit;outline:none}
+.inp.mono{font-family:var(--font-mono);font-size:12px}
 .select:focus,.inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
+.c-field{width:170px}.c-op{width:96px}.c-val{flex:1;min-width:120px}
+.icon-x{width:30px;height:30px;border-radius:7px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-3);cursor:pointer}
+.icon-x:hover{color:#DC2626;border-color:#DC2626}
+.add-link{display:inline-flex;align-items:center;gap:6px;margin-top:4px;padding:7px 11px;border-radius:var(--radius-sm);border:1px dashed var(--border-strong);background:transparent;color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer}
+.add-link:hover{border-color:var(--accent);color:var(--accent)}
 
+/* ações */
+.act{position:relative;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2);padding:13px 13px 13px 56px;margin-bottom:20px}
+.act:not(:last-of-type)::after{content:'↓';position:absolute;left:28px;bottom:-19px;transform:translateX(-50%);color:var(--text-3);font-size:14px;font-weight:700}
+.act.dragging{opacity:.4;border:1px dashed var(--accent)}
+.drag{position:absolute;left:11px;top:13px;width:18px;height:24px;display:flex;align-items:center;justify-content:center;color:var(--text-3);cursor:grab;letter-spacing:-2px}
+.act-ico{position:absolute;left:31px;top:13px;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px}
+.k-rn{background:#7C3AED}.k-mv{background:#15803D}
+.act-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.act-kind{font-size:13px;font-weight:700}
+.act-actions{margin-left:auto;display:flex;gap:4px}
+.iconbtn{width:28px;height:28px;border-radius:7px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-3);cursor:pointer;font-size:12px}
+.iconbtn:hover{color:var(--accent);border-color:var(--accent)}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px;display:block}
+.lbl .soft{text-transform:none;letter-spacing:0;color:var(--text-3);font-weight:500}
+.full{width:100%}
 .tokbar{margin-top:11px;background:var(--surface-3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 11px}
 .tokbar-h{font-size:11.5px;color:var(--text-2);margin-bottom:8px}
 .tokbar-h b{color:var(--accent)}
@@ -86,195 +104,152 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
 .tok{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-2);font-family:var(--font-mono)}
 .tok:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .tok .plus{color:var(--text-3);font-weight:700}
+.nochip{font-size:11.5px;color:var(--text-3);font-style:italic}
 .preview{margin-top:11px;display:flex;align-items:center;gap:9px;font-size:12.5px;flex-wrap:wrap}
-.preview .arw{color:var(--text-3)}
 .preview .out{font-family:var(--font-mono);font-weight:600;color:var(--st-tratado);background:var(--st-tratado-bg);padding:3px 9px;border-radius:7px}
 .hint{font-size:11.5px;color:var(--text-3);margin-top:8px;line-height:1.5}
 .hint code{font-family:var(--font-mono);background:var(--surface-3);padding:1px 5px;border-radius:5px;color:var(--text-2)}
-
-.addstep{display:flex;gap:8px;flex-wrap:wrap;padding:2px 2px}
-.addbtn{display:inline-flex;align-items:center;gap:7px;padding:9px 13px;border-radius:var(--radius-sm);border:1px dashed var(--border-strong);background:transparent;color:var(--text-2);font-size:12.5px;font-weight:600;cursor:pointer}
-.addbtn:hover{border-color:var(--accent);color:var(--accent)}
-.addbtn .d{width:8px;height:8px;border-radius:3px}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:600}
-.pl-allfiles{background:var(--st-encontrado-bg);color:var(--st-encontrado)}
-.muted{color:var(--text-3);font-size:12px}
-.section-t{font-size:11px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--text-3);margin:26px 0 12px}
+.savebar{display:flex;justify-content:flex-end;gap:9px;padding:14px 18px;background:var(--surface-2);border-bottom-left-radius:var(--radius);border-bottom-right-radius:var(--radius)}
+@media(max-width:880px){.layout{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="header">
-  <div>
-    <h1 class="page-title">Automações</h1>
-    <div class="page-desc">Monte pipelines que decidem o que fazer com cada documento</div>
-  </div>
+  <div><h1 class="page-title">Automações</h1><div class="page-desc">Quando um documento bate nas condições, executa as ações</div></div>
   <div class="spacer"></div>
   <button class="btn-ghost" onclick="toggleTheme()">◐ Tema</button>
-  <button class="btn-primary">+ Novo pipeline</button>
 </div>
 
-<div class="wrap">
-  <div class="banner">⚠️ <b>Mockup v2</b> — protótipo visual. <b>Arraste</b> pela alça ⠿ para reordenar; clique nos chips de campo para montar o nome; cole um caminho com ou sem aspas no campo Mover (ele normaliza ao sair do campo).</div>
+<div class="layout">
+  <div class="banner">⚠️ <b>Mockup v3</b> — várias automações nomeadas. Cada uma: <b>QUANDO rodar</b> (condições E) → <b>O QUE fazer</b> (ações em ordem). Clique numa automação à esquerda; clique nos chips p/ montar nome; cole caminho com aspas no Mover (normaliza ao sair).</div>
 
-  <!-- PIPELINE 1 -->
-  <div class="card">
-    <div class="pl-head">
-      <div style="flex:1">
-        <div class="pl-title">Holerites dos colaboradores</div>
-        <div class="pl-sub">4 etapas · aplicado automaticamente em documentos de alta confiança</div>
-      </div>
-      <span class="muted">Ativo</span>
-      <div class="switch on" onclick="this.classList.toggle('on')"><i></i></div>
-    </div>
-
-    <div class="steps">
-      <div class="steplist" id="stepList">
-
-        <!-- STEP: Identificar arquivo (tipo de arquivo) -->
-        <div class="step" draggable="true">
-          <div class="drag" title="Arraste para reordenar">⠿</div>
-          <div class="step-idx">1</div>
-          <div class="step-top">
-            <span class="step-kind"><span class="kind-ico k-fa">▣</span> Identificar arquivo</span>
-            <div class="step-actions">
-              <button class="iconbtn" title="Mover para cima" aria-label="Mover para cima">↑</button>
-              <button class="iconbtn" title="Mover para baixo" aria-label="Mover para baixo">↓</button>
-              <button class="iconbtn" title="Remover etapa" aria-label="Remover etapa">✕</button>
-            </div>
-          </div>
-          <div class="row">
-            <div class="field">
-              <span class="lbl">Tipo de arquivo</span>
-              <select class="select"><option>PDF</option><option>Excel (.xlsx)</option><option>Imagem</option><option>Texto</option><option>Qualquer</option></select>
-            </div>
-            <div class="field">
-              <span class="lbl">Pasta de origem (opcional)</span>
-              <input class="inp mono pathinp" value="Downloads/" onblur="normPath(this)"/>
-            </div>
-          </div>
-          <div class="hint">Identificador independente do template: só seguem os arquivos <b>PDF</b> (desta pasta). Você pode parar aqui (ex.: "todo PDF → Análise") ou encadear com um "Identificar tipo" depois.</div>
-        </div>
-
-        <!-- STEP: Identificar tipo (template) -->
-        <div class="step" draggable="true">
-          <div class="drag" title="Arraste para reordenar">⠿</div>
-          <div class="step-idx">2</div>
-          <div class="step-top">
-            <span class="step-kind"><span class="kind-ico k-id">⊚</span> Identificar tipo</span>
-            <div class="step-actions">
-              <button class="iconbtn" title="Mover para cima" aria-label="Mover para cima">↑</button>
-              <button class="iconbtn" title="Mover para baixo" aria-label="Mover para baixo">↓</button>
-              <button class="iconbtn" title="Remover etapa" aria-label="Remover etapa">✕</button>
-            </div>
-          </div>
-          <div class="row">
-            <div class="field">
-              <span class="lbl">Template</span>
-              <select class="select" id="tmplSel" onchange="onTemplateChange()">
-                <option value="holerite">Holerite</option><option value="boleto">Boleto</option><option value="nf">Nota Fiscal</option>
-              </select>
-            </div>
-          </div>
-          <div class="hint">Porteiro por <b>conteúdo</b>: só os documentos identificados como <b id="tmplName">Holerite</b> seguem. Os campos disponíveis para renomear/mover passam a ser os <b>campos desse template</b>.</div>
-        </div>
-
-        <!-- STEP: Renomear -->
-        <div class="step" draggable="true">
-          <div class="drag" title="Arraste para reordenar">⠿</div>
-          <div class="step-idx">3</div>
-          <div class="step-top">
-            <span class="step-kind"><span class="kind-ico k-rn">✎</span> Renomear</span>
-            <div class="step-actions">
-              <button class="iconbtn" title="Mover para cima" aria-label="Mover para cima">↑</button>
-              <button class="iconbtn" title="Mover para baixo" aria-label="Mover para baixo">↓</button>
-              <button class="iconbtn" title="Remover etapa" aria-label="Remover etapa">✕</button>
-            </div>
-          </div>
-          <span class="lbl">Padrão do nome</span>
-          <input class="inp mono" id="nameInp" value="{colaborador}_{data_referencia}" oninput="renderPreview()"/>
-          <div class="tokbar">
-            <div class="tokbar-h">Campos do template <b id="tokTmpl">Holerite</b> — clique para inserir:</div>
-            <div class="chips" id="chipsName"></div>
-          </div>
-          <div class="preview"><span class="muted">Prévia:</span> <span class="arw">→</span> <span class="out" id="namePrev"></span></div>
-          <div class="hint"><code>{campo}</code> é trocado pelo <b>valor lido do documento</b>. Os campos vêm do template da etapa anterior — não são fixos; mudam conforme você cria/edita templates.</div>
-        </div>
-
-        <!-- STEP: Mover -->
-        <div class="step" draggable="true">
-          <div class="drag" title="Arraste para reordenar">⠿</div>
-          <div class="step-idx">4</div>
-          <div class="step-top">
-            <span class="step-kind"><span class="kind-ico k-mv">→</span> Mover</span>
-            <div class="step-actions">
-              <button class="iconbtn" title="Mover para cima" aria-label="Mover para cima">↑</button>
-              <button class="iconbtn" title="Mover para baixo" aria-label="Mover para baixo">↓</button>
-              <button class="iconbtn" title="Remover etapa" aria-label="Remover etapa">✕</button>
-            </div>
-          </div>
-          <span class="lbl">Pasta de destino &nbsp;<span class="muted" style="text-transform:none;letter-spacing:0">— aceita com ou sem aspas</span></span>
-          <input class="inp mono pathinp" id="folderInp" value="Documentos/{colaborador}/{data_referencia}/" oninput="renderPreview()" onblur="normPath(this)"/>
-          <div class="tokbar">
-            <div class="tokbar-h">Campos do template <b>Holerite</b> — clique para inserir:</div>
-            <div class="chips" id="chipsFolder"></div>
-          </div>
-          <div class="preview"><span class="muted">Prévia:</span> <span class="arw">→</span> <span class="out" id="folderPrev" style="color:var(--st-encontrado);background:var(--st-encontrado-bg)"></span></div>
-          <div class="hint">Cole o caminho como vier do Windows — <code>"C:\Users\...\Análise"</code> ou <code>C:\Users\...\Análise</code>: as aspas são removidas automaticamente.</div>
-        </div>
-
-      </div>
-
-      <div class="addstep">
-        <button class="addbtn"><span class="d" style="background:#B45309"></span> Identificar arquivo</button>
-        <button class="addbtn"><span class="d" style="background:#1E5FBF"></span> Identificar tipo</button>
-        <button class="addbtn"><span class="d" style="background:#7C3AED"></span> Renomear</button>
-        <button class="addbtn"><span class="d" style="background:#15803D"></span> Mover</button>
-      </div>
-    </div>
+  <!-- LISTA -->
+  <div>
+    <div class="list-h">Minhas automações</div>
+    <div class="list" id="list"></div>
+    <button class="new-auto" style="margin-top:9px" onclick="alert('(mockup) criaria uma nova automação em branco')">+ Nova automação</button>
   </div>
 
-  <div class="muted" style="text-align:center;margin-top:8px">Removido do v1: a ação "Decidir tratativa". · Reordenação por arraste (HTML nativo, sem dependência nova) + botões ↑/↓ para acessibilidade.</div>
+  <!-- EDITOR -->
+  <div class="editor" id="editor"></div>
 </div>
 
 <script>
 const TEMPLATES = {
-  holerite:{ name:'Holerite', fields:[['colaborador','Maria Santos'],['data_referencia','2026-05'],['valor_liquido','4.812,30'],['valor_bruto','6.140,00'],['cpf','123.456.789-00'],['matricula','00482']]},
-  boleto:{ name:'Boleto', fields:[['pagador','Maria Santos'],['vencimento','2026-06-10'],['valor','1.250,00'],['linha_digitavel','34191.79001…']]},
-  nf:{ name:'Nota Fiscal', fields:[['emissor','ACME LTDA'],['numero','004821'],['data_emissao','2026-05-22'],['valor_total','9.900,00'],['cnpj','12.345.678/0001-90']]},
+  holerite:{ name:'Holerite', fields:[['colaborador','Maria Santos'],['data_referencia','2026-05'],['valor_liquido','4.812,30'],['valor_bruto','6.140,00'],['cpf','123.456.789-00']]},
+  nf:{ name:'Nota Fiscal', fields:[['emissor','ACME LTDA'],['numero','004821'],['data_emissao','2026-05-22'],['valor_total','9.900,00']]},
 };
-let current='holerite';
-function sample(){ const m={}; TEMPLATES[current].fields.forEach(([k,v])=>m[k]=v); return m; }
-function fill(p){ const m=sample(); return p.replace(/\{(\w+)\}/g,(_,k)=> m[k]!==undefined? m[k] : '⟨'+k+'?⟩'); }
-function renderChips(){
-  const mk=(t,i)=>{ const box=document.getElementById(t); box.innerHTML=''; TEMPLATES[current].fields.forEach(([k])=>{ const b=document.createElement('button'); b.className='tok'; b.innerHTML='<span class="plus">+</span> {'+k+'}'; b.onclick=()=>{ document.getElementById(i).value+='{'+k+'}'; renderPreview(); }; box.appendChild(b); }); };
-  mk('chipsName','nameInp'); mk('chipsFolder','folderInp');
-}
-function renderPreview(){
-  document.getElementById('namePrev').textContent = fill(document.getElementById('nameInp').value)+'.pdf';
-  document.getElementById('folderPrev').textContent = fill(document.getElementById('folderInp').value);
-}
-function onTemplateChange(){
-  current=document.getElementById('tmplSel').value; const nm=TEMPLATES[current].name;
-  document.getElementById('tmplName').textContent=nm; document.getElementById('tokTmpl').textContent=nm;
-  const f=TEMPLATES[current].fields;
-  document.getElementById('nameInp').value='{'+f[0][0]+'}_{'+f[1][0]+'}';
-  document.getElementById('folderInp').value='Documentos/{'+f[0][0]+'}/{'+f[1][0]+'}/';
-  renderChips(); renderPreview();
-}
-function normPath(el){ el.value = el.value.trim().replace(/^["']+|["']+$/g,''); renderPreview && renderPreview(); }
-function toggleTheme(){ const r=document.documentElement; r.dataset.theme = r.dataset.theme==='dark'?'light':'dark'; }
+const FIELD_OPTS = [
+  ['source_folder','Pasta de origem'],['extension','Tipo de arquivo'],['template','Tipo de documento'],
+  ['field','Valor de campo'],['filename','Nome do arquivo'],['size','Tamanho']
+];
+// dados de exemplo (3 automações que batem com os casos descritos)
+const AUTOS = [
+  { name:'Triagem Downloads (PDF)', active:true,
+    conds:[['source_folder','é','Downloads'],['extension','é','.pdf']],
+    acts:[['move','Análise/']] },
+  { name:'Holerites dos colaboradores', active:true,
+    conds:[['source_folder','é','Downloads'],['extension','é','.pdf'],['template','é','holerite']],
+    acts:[['rename','{colaborador}_{data_referencia}'],['move','Documentos/{colaborador}/{data_referencia}/']] },
+  { name:'Planilhas (Excel)', active:false,
+    conds:[['source_folder','é','Downloads'],['extension','é','.xlsx']],
+    acts:[['move','Planilhas/']] },
+];
+let sel=1;
 
-// --- Drag & drop reorder (HTML5 nativo, sem libs) ---
-const list=document.getElementById('stepList'); let dragEl=null;
-list.querySelectorAll('.step').forEach(st=>{
-  st.addEventListener('dragstart',e=>{ dragEl=st; st.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
-  st.addEventListener('dragend',()=>{ st.classList.remove('dragging'); list.querySelectorAll('.step').forEach(s=>s.classList.remove('dragover')); renumber(); });
-  st.addEventListener('dragover',e=>{ e.preventDefault(); const after=belowMid(st,e.clientY); list.querySelectorAll('.step').forEach(s=>s.classList.remove('dragover')); if(dragEl&&dragEl!==st){ st.classList.add('dragover'); if(after) st.after(dragEl); else st.before(dragEl);} });
-});
-function belowMid(el,y){ const r=el.getBoundingClientRect(); return y > r.top + r.height/2; }
-function renumber(){ list.querySelectorAll('.step .step-idx').forEach((b,i)=> b.textContent=i+1); }
+function tmplOfAuto(a){ const c=a.conds.find(c=>c[0]==='template'); return c?TEMPLATES[c[2]]:null; }
+function fillVals(a){ const t=tmplOfAuto(a); const m={}; if(t) t.fields.forEach(([k,v])=>m[k]=v); return m; }
+function fill(p,a){ const m=fillVals(a); return p.replace(/\{(\w+)\}/g,(_,k)=> m[k]!==undefined?m[k]:'⟨'+k+'?⟩'); }
 
-renderChips(); renderPreview();
+function renderList(){
+  document.getElementById('list').innerHTML = AUTOS.map((a,i)=>{
+    const condTxt = a.conds.map(c=>{
+      const fld=FIELD_OPTS.find(f=>f[0]===c[0])[1];
+      const val = c[0]==='template'? (TEMPLATES[c[2]]?.name||c[2]) : c[2];
+      return fld+' '+c[1]+' '+val;
+    }).join(' · ');
+    return `<div class="auto-card ${i===sel?'sel':''}" onclick="sel=${i};render()">
+      <div class="auto-name"><span class="dotg ${a.active?'':'off'}"></span>${a.name}</div>
+      <div class="auto-sum">${condTxt}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderEditor(){
+  const a=AUTOS[sel]; const t=tmplOfAuto(a);
+  const condRows = a.conds.map((c,ci)=>{
+    const isTmpl=c[0]==='template';
+    const valCtl = isTmpl
+      ? `<select class="select c-val">${Object.entries(TEMPLATES).map(([k,v])=>`<option ${c[2]===k?'selected':''} value="${k}">${v.name}</option>`).join('')}</select>`
+      : `<input class="inp c-val ${c[0]==='source_folder'?'pathinp mono':''}" value="${c[2]}" ${c[0]==='source_folder'?'onblur="normPath(this)"':''}/>`;
+    return `<div class="cond">
+      <span class="andlbl">${ci===0?'SE':'E'}</span>
+      <select class="c-field select">${FIELD_OPTS.map(f=>`<option ${f[0]===c[0]?'selected':''}>${f[1]}</option>`).join('')}</select>
+      <select class="c-op select">${['é','contém','>','<'].map(o=>`<option ${o===c[1]?'selected':''}>${o}</option>`).join('')}</select>
+      ${valCtl}
+      <button class="icon-x" title="Remover condição">✕</button>
+    </div>`;
+  }).join('');
+
+  const actBlocks = a.acts.map((ac,ai)=>{
+    const kind=ac[0]; const isRn=kind==='rename';
+    const chips = t
+      ? t.fields.map(([k])=>`<button class="tok" onclick="insTok(${ai},'${k}')"><span class="plus">+</span> {${k}}</button>`).join('')
+      : `<span class="nochip">Adicione a condição "Tipo de documento" para usar campos do template como tokens.</span>`;
+    const prev = fill(ac[1],a)+(isRn?'.pdf':'');
+    return `<div class="act" draggable="true">
+      <div class="drag" title="Arraste para reordenar">⠿</div>
+      <div class="act-ico ${isRn?'k-rn':'k-mv'}">${isRn?'✎':'→'}</div>
+      <div class="act-top"><span class="act-kind">${isRn?'Renomear':'Mover'}</span>
+        <div class="act-actions"><button class="iconbtn" title="Subir">↑</button><button class="iconbtn" title="Descer">↓</button><button class="iconbtn" title="Remover">✕</button></div>
+      </div>
+      <span class="lbl">${isRn?'Padrão do nome':'Pasta de destino'} ${isRn?'':'<span class="soft">— aceita com ou sem aspas</span>'}</span>
+      <input class="inp mono full ${isRn?'':'pathinp'}" id="act${ai}" value="${ac[1]}" oninput="livep(${ai})" ${isRn?'':'onblur="normPath(this)"'}/>
+      <div class="tokbar"><div class="tokbar-h">${t?`Campos do template <b>${t.name}</b> — clique para inserir:`:'Tokens'}</div><div class="chips">${chips}</div></div>
+      <div class="preview"><span style="color:var(--text-3)">Prévia:</span> → <span class="out" id="prev${ai}" ${isRn?'':'style="color:var(--st-encontrado);background:var(--st-encontrado-bg)"'}>${prev}</span></div>
+      ${isRn?'<div class="hint"><code>{campo}</code> é trocado pelo valor lido do documento. Os campos vêm do template da condição "Tipo de documento".</div>':''}
+    </div>`;
+  }).join('');
+
+  document.getElementById('editor').innerHTML = `
+    <div class="ed-head">
+      <input class="ed-name" value="${a.name}"/>
+      <div class="spacer" style="flex:1"></div>
+      <span style="font-size:12px;color:var(--text-3)">${a.active?'Ativa':'Pausada'}</span>
+      <div class="switch ${a.active?'on':''}" onclick="AUTOS[${sel}].active=!AUTOS[${sel}].active;render()"><i></i></div>
+    </div>
+    <div class="sec">
+      <div class="sec-t"><span class="sec-tag tag-when">Quando rodar</span> Condições</div>
+      <p class="sec-sub">O documento precisa atender a TODAS as condições (E) para esta automação rodar.</p>
+      ${condRows}
+      <button class="add-link">+ Adicionar condição</button>
+    </div>
+    <div class="sec">
+      <div class="sec-t"><span class="sec-tag tag-do">O que fazer</span> Ações</div>
+      <p class="sec-sub">Executadas em ordem, de cima para baixo. Arraste ⠿ para reordenar.</p>
+      ${actBlocks}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+        <button class="add-link"><span style="color:#7C3AED">●</span> Renomear</button>
+        <button class="add-link"><span style="color:#15803D">●</span> Mover</button>
+      </div>
+    </div>
+    <div class="savebar"><button class="btn-ghost">Excluir</button><button class="btn-primary">Salvar automação</button></div>`;
+  bindDnd();
+}
+function insTok(ai,k){ const inp=document.getElementById('act'+ai); inp.value+='{'+k+'}'; AUTOS[sel].acts[ai][1]=inp.value; livep(ai); }
+function livep(ai){ const inp=document.getElementById('act'+ai); AUTOS[sel].acts[ai][1]=inp.value; const isRn=AUTOS[sel].acts[ai][0]==='rename'; document.getElementById('prev'+ai).textContent=fill(inp.value,AUTOS[sel])+(isRn?'.pdf':''); }
+function normPath(el){ el.value=el.value.trim().replace(/^["']+|["']+$/g,''); }
+function toggleTheme(){ const r=document.documentElement; r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'; }
+function bindDnd(){
+  const ed=document.getElementById('editor'); let drag=null;
+  ed.querySelectorAll('.act').forEach(el=>{
+    el.addEventListener('dragstart',()=>{drag=el;el.classList.add('dragging')});
+    el.addEventListener('dragend',()=>{el.classList.remove('dragging')});
+    el.addEventListener('dragover',e=>{e.preventDefault(); if(!drag||drag===el)return; const r=el.getBoundingClientRect(); (e.clientY>r.top+r.height/2)?el.after(drag):el.before(drag);});
+  });
+}
+function render(){ renderList(); renderEditor(); }
+render();
 </script>
 </body>
 </html>

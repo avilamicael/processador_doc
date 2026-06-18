@@ -37,6 +37,18 @@ Escopo: AUT-01..AUT-06 + TPL-02. **Fora de escopo:** automações além de renom
 - **D-21:** **Campos de caminho** (Mover destino, pasta de origem, qualquer path) **aceitam com ou sem aspas** — normalizar removendo aspas nas pontas (front-end ao sair do campo + back-end defensivo). Usuário cola caminho do Windows (`"C:\...\Análise"`).
 - **D-22:** A ação **"Rotear/decidir tratativa"** (revisão/não-tratar/ignorar) **REMOVIDA do v1** (sem caso de uso claro; volta quando houver). Backend pode manter dormente, UI não expõe.
 
+### ⭐ MODELO FINAL — Várias automações "Condições → Ações" (aprovado via mockup v3, 2026-06-18)
+> APROVADO pelo usuário ("é isso que eu quero mesmo"). Este é o modelo definitivo da UI/dados. SUBSTITUI a semântica de gate-por-etapa (D-18) e as ações de gate (identify_file/identify_type como etapas, D-13/D-17): identificação vira CONDIÇÃO, não etapa. Referência visual: `06-MOCKUP-automacoes.html`.
+
+- **D-23:** Existem **VÁRIAS automações nomeadas** (a UI lista N; o backend já suporta N pipelines). A tela antiga hardcodava uma só (`data[0]`) — corrigir. Cada automação tem: nome, ativo/pausado, condições, ações.
+- **D-24:** Cada automação = **CONDIÇÕES (quando rodar) → AÇÕES (o que fazer)**.
+  - **Condições** no NÍVEL da automação, combinadas por **E (AND)**. Tipos de campo: **pasta de origem, tipo de arquivo (extensão digitável .pdf/.xlsx), tipo de documento (template), valor de campo extraído, nome do arquivo, tamanho**. A pasta é só mais uma condição — a automação NÃO é atrelada a uma pasta. (As antigas "etapas de identificar arquivo/tipo" viram condições.)
+  - **Ações** ordenadas (drag-and-drop + ↑/↓): **Renomear** (padrão com tokens), **Mover** (pasta destino com tokens). "Rotear/decidir tratativa" continua FORA do v1 (D-22).
+- **D-25:** **Resolução entre automações:** avaliadas na ORDEM definida pelo usuário; a **PRIMEIRA automação cujas condições TODAS casam executa suas ações** (primeira-que-casa-vence por automação). O usuário ordena as específicas antes das genéricas. Evita conflito de mover o mesmo arquivo duas vezes. (Decisão de Claude 2026-06-18 — revisitar se o usuário quiser que várias rodem encadeadas.)
+- **D-26:** **Tokens** (renomear/mover) = campos do template referenciado pela condição "Tipo de documento"; sem essa condição, não há tokens (coerente). Resolução do valor usa os campos extraídos do próprio documento. **Materialização única** mantida (D-11/Open Q1): Renomear compõe o NOME-alvo, Mover compõe a PASTA-alvo, uma única escrita do CAS no fim. Aspas em paths normalizadas (D-21). Campo faltante no nome → bloqueia/revisão (D-07).
+
+**Impacto no código:** backend remodela de "pipeline de steps com filtros por step + gates" para "automação = condições (nível automação) + ações (rename/move)"; migração nova; executor avalia condições → primeira automação que casa → executa ações (materialização única). Frontend reescreve a tela conforme o mockup (lista de automações + editor Condições/Ações). naming/fileops/undo seguem reusados.
+
 ### Disparo da automação
 - **D-01:** **Auto-aplica para documentos de alta confiança** (acima do `review_confidence_threshold` da Fase 5 — i.e., os que NÃO caíram em EM_REVISAO). Documentos de baixa confiança / em revisão só têm a automação aplicada **após** aprovação humana.
 - **D-02:** Mesmo no auto-aplica, as garantias de segurança NÃO são puladas: log-antes-de-agir e undo continuam valendo. O que o auto-aplica dispensa é o clique humano de confirmação para os de alta confiança.
