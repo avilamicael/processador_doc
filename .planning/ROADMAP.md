@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Templates, Sub-templates e Classificação** - Construtor schema-first de templates e classificação automática contra eles (completed 2026-06-16)
 - [x] **Phase 5: Confiança, Revisão Humana e Quarentena** - Score de confiança determinístico, limiar, fila de revisão lado-a-lado e quarentena visível (completed 2026-06-17)
 - [ ] **Phase 6: Automações de Arquivo (Renomear/Mover)** - Renomear/mover por tokens com dry-run, audit log write-ahead, anti-colisão e undo
-- [ ] **Phase 7: Módulo Determinístico Opcional e Roteamento de Custo** - Parsing plugável de tipos conhecidos (boleto/NF-e) e cascata determinístico→nativo→IA
+- [ ] **Phase 7: Módulo Determinístico Opcional e Roteamento de Custo** - Parsing plugável de tipos conhecidos (boleto/NF-e) e cascata determinístico→nativo→IA — **ADIADA** (otimização opcional; revisitar após medir custo real de tokens em uso)
 - [ ] **Phase 8: Distribuição, Atualização e Documentação** - Releases versionadas, update com migração segura e guias de instalação/atualização/uso/operação
 
 ## Phase Details
@@ -278,7 +278,9 @@ Plans:
   3. Com o módulo desabilitado, o motor continua funcionando integralmente pela extração genérica via IA (o determinístico é otimização, não dependência)
   4. Documentos resolvidos localmente não geram consumo de tokens (refletido na medição de uso)
 
-**Plans**: TBD
+**Status (2026-06-18, discuss-phase): ADIADA por decisão do usuário.** O motor com IA já está funcional de ponta a ponta (Fases 1–6.1) e a Fase 7 é **pura otimização de custo** — não altera o que o usuário vê e, por design do roadmap, é "otimização, não dependência" (com o módulo desligado, o estado de hoje continua válido — SC3). Decisão: **deixar rodar 100% pela IA primeiro, medir o custo real de tokens em uso, e só então decidir se os parsers determinísticos (boleto via linha digitável/Módulo 10-11; NF-e via chave de 44 dígitos/Módulo 11) valem o esforço.** Gatilho para revisitar: custo de tokens observado na prática justificar a economia em boleto/NF-e. Nenhuma decisão de implementação foi capturada (sem CONTEXT.md) — as 4 áreas de decisão (escopo & entrada NF-e XML vs. só chave do DANFE; posição na cascata determinístico→nativo→IA via seam `router.choose`/D-03; gatilho da detecção e fallback de DV; toggle global vs. por-tipo + reflexo de custo-zero na medição `Usage`) ficam abertas para o discuss-phase futuro. Assets prontos para reuso quando revisitada: `backend/app/extraction/router.py` (seam D-03), `backend/app/validation/doc_ids.py` (Módulo 11 CNPJ/CPF próprio), `backend/app/models/usage.py` (medição por `step`).
+
+**Plans**: TBD (adiada)
 
 ### Phase 8: Distribuição, Atualização e Documentação
 
@@ -309,5 +311,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 7 �
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
 | 6. Automações de Arquivo (Renomear/Mover) | 7/8 | In Progress|  |
 | 6.1. Redesign de Templates e Classificação por Sinais | 4/4 | Complete    | 2026-06-18 |
-| 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
+| 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Deferred (2026-06-18) | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
