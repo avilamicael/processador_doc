@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: Completed 06.2-01-PLAN.md (ação Copiar — saída multi-output no executor PURO)
-last_updated: "2026-06-18T23:05:42.129Z"
+last_updated: "2026-06-18T23:26:09.934Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 10
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 38
-  completed_plans: 41
-  percent: 70
+  completed_plans: 42
+  percent: 80
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 
 Phase: 06.2 (a-es-de-automa-o-copiar-e-cortar-split-por-template) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-18
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
@@ -86,6 +86,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 06.1 P03 | 6 | 2 tasks | 3 files |
 | Phase 06.1 P04 | 3 | 3 tasks | 5 files |
 | Phase 06.2 P02 | 18 | 3 tasks | 6 files |
+| Phase 06.2 P03 | 25 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -138,6 +139,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [06.1-02]: API /templates com sinais como GRUPOS E/OU (list[list[SignalConditionIn]], D-T2); _loads_signals_groups forward-compatible réplica de matcher._parse_groups; mode por Literal → 422 sem eval (T-06.1-07); regex string-only no endpoint sem import re (T-04-10); doc_type rebaixado a coluna dormente (D-T5) sem migração; field.name preservado byte-a-byte (D-T9); documents/trigger intactos.
 - [Phase ?]: [06.1-03]: Frontend de Templates redesenhado 1:1 com o mockup — Passo 1 'Como reconhecer' (sem IA, grupos OU de condições E texto|regex, D-T0/D-T3/D-T4) + Passo 2 'O que extrair' (com IA, linhas densas com ⚙ Avançado revelando regex+dica, D-T7); tooltips ⓘ via CSS :hover puro zero-lib (D-T8); doc_type removido do form (D-T5); field.name preservado (D-T6/D-T9); types.ts espelha signals=list[list[{mode,value}]] do Plano 02; npm run build verde fecha o gate de drift T-06.1-13.
 - [Phase ?]: [06.2-02]: apply_stage MULTI-SAÍDA — materializa N cópias (write-ahead action='copy' por cópia) SEM remove_original (D-01); move por ÚLTIMO e só então remove a origem (D-03); copy-only conclui o doc sem mover. undo discrimina action='copy' (apaga a cópia, nunca toca o original/CAS, D-06); undo por-run reverte copy+move juntos. API valida copy (exige dest_folder, V5) e dry-run emite 1 linha por saída (action_kind/removes_original). Sem migração; suíte inteira verde (399), zero regressão (D-04).
+- [Phase ?]: [06.2-03]: Ação Copiar exposta na UI de forma estritamente aditiva — reusa o caminho do move (input/validação/mapeamento, pattern=dest_folder genérico) com toCreateBody preservando a.action_type; diferenciação mínima (dot --st-encontrado + nota D-05 'o original permanece'); dry-run dispara badge 'Copiado — original mantido' por action_kind/removes_original do backend (Plano 02). Fluxo criar→dry-run→aplicar→desfazer verificado ao vivo (cópia no destino, original intacto, undo apaga só a cópia, nada se perde — D-01/D-06). Phase 06.2 (Copiar) encerrada; Cortar adiada p/ v2.
 
 ### Pending Todos
 
@@ -163,6 +165,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T23:05:16.995Z
+Last session: 2026-06-18T23:25:47.353Z
 Stopped at: Completed 06.2-01-PLAN.md (ação Copiar — saída multi-output no executor PURO)
 Resume file: None

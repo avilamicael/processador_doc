@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Templates, Sub-templates e Classificação** - Construtor schema-first de templates e classificação automática contra eles (completed 2026-06-16)
 - [x] **Phase 5: Confiança, Revisão Humana e Quarentena** - Score de confiança determinístico, limiar, fila de revisão lado-a-lado e quarentena visível (completed 2026-06-17)
 - [x] **Phase 6: Automações de Arquivo (Renomear/Mover)** - Renomear/mover por tokens com dry-run, audit log write-ahead, anti-colisão e undo (modelo final Condições→Ações; verificado por testes 2026-06-18, 1 item de verificação ao vivo pendente)
-- [ ] **Phase 6.2: Ação de Automação Copiar** (INSERTED) - Ação Copiar nas automações (copia ao destino deixando o original); Cortar/split por template adiado para v2
+- [x] **Phase 6.2: Ação de Automação Copiar** (INSERTED) - Ação Copiar nas automações (copia ao destino deixando o original); Cortar/split por template adiado para v2 (completed 2026-06-18)
 - [ ] **Phase 7: Módulo Determinístico Opcional e Roteamento de Custo** - Parsing plugável de tipos conhecidos (boleto/NF-e) e cascata determinístico→nativo→IA — **ADIADA** (otimização opcional; revisitar após medir custo real de tokens em uso)
 - [ ] **Phase 8: Distribuição, Atualização e Documentação** - Releases versionadas, update com migração segura e guias de instalação/atualização/uso/operação
 
@@ -282,7 +282,7 @@ Plans:
 
 **Escopo (decisão 2026-06-18, discuss-phase):** a Fase 6.2 cobre **somente a ação Copiar**. A ação **Cortar / split por template foi ADIADA para a v2** — a separação por pasta monitorada (`pages_per_block`) já existe e o split dirigido por template (re-entrada de pedaços no pipeline vs. saída de arquivo; onde a regra de corte mora) precisa de mais reflexão. Ver memória de projeto `automacoes-acoes-copiar-cortar`.
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 **Wave 1**
 
@@ -294,7 +294,7 @@ Plans:
 
 **Wave 3** *(blocked on 06.2-02)*
 
-- [ ] 06.2-03-PLAN.md — Frontend: ActionType/DryRunRow + opção "Copiar" no editor (nota "o original permanece") + badge "Copiado — original mantido" no dry-run + verificação visual ao vivo
+- [x] 06.2-03-PLAN.md — Frontend: ActionType/DryRunRow + opção "Copiar" no editor (nota "o original permanece") + badge "Copiado — original mantido" no dry-run + verificação visual ao vivo
 
 ### Phase 7: Módulo Determinístico Opcional e Roteamento de Custo
 
@@ -341,6 +341,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 6.2
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
 | 6. Automações de Arquivo (Renomear/Mover) | 8/8 (+06-09..06-12 refino) | Complete (test-verified) | 2026-06-18 |
 | 6.1. Redesign de Templates e Classificação por Sinais | 4/4 | Complete    | 2026-06-18 |
-| 6.2. Ação de Automação Copiar | 2/3 | In Progress|  |
+| 6.2. Ação de Automação Copiar | 3/3 | Complete   | 2026-06-18 |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Deferred (2026-06-18) | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
