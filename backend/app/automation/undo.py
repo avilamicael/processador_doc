@@ -6,12 +6,18 @@ contraparte da operação física: devolve o arquivo do DESTINO para a ORIGEM,
 com uma rede de segurança no CAS quando o destino foi alterado/apagado pelo
 usuário entre o apply e o undo.
 
-Mecânica central (por `AuditLog(status="done")`):
-- DESTINO PRESENTE → o arquivo no destino é o artefato aplicado: move-o de volta
-  para `source_path` (escrita verificada) e remove o destino; `status="undone"`.
-- DESTINO SUMIU/MUDOU → restaura o conteúdo imutável do CAS
-  (`read_bytes_from_cas(content_hash)`) para `source_path`; `status="undone_from_cas"`
-  (Open Q2 / AUT-05). NUNCA perde: o CAS guarda o conteúdo para sempre.
+Mecânica central (por `AuditLog(status="done")`, discriminada por `action`):
+- MOVE (`action="apply"`):
+  - DESTINO PRESENTE → o arquivo no destino é o artefato aplicado: move-o de volta
+    para `source_path` (escrita verificada) e remove o destino; `status="undone"`.
+  - DESTINO SUMIU/MUDOU → restaura o conteúdo imutável do CAS
+    (`read_bytes_from_cas(content_hash)`) para `source_path`; `status="undone_from_cas"`
+    (Open Q2 / AUT-05). NUNCA perde: o CAS guarda o conteúdo para sempre.
+- CÓPIA (`action="copy"`, Fase 06.2 / D-06) → APAGA a cópia em `dest_path` e NUNCA
+  toca o `source_path` (o original nunca foi movido pela cópia). Seguro: apagar a
+  cópia jamais causa perda (o CAS preserva o conteúdo). NÃO restaura do CAS.
+  `undo_run`/`undo_document` iteram todos os `done` do run/doc → revertem cópias E
+  move JUNTOS (D-06: "o undo reverte a execução inteira").
 
 Orquestradores:
 - `undo_document(session, document_id)` — reverte os `done` de um documento e o
@@ -80,19 +86,35 @@ def read_bytes_from_cas(content_hash: str) -> bytes:
 def undo_operation(session: Session, audit: AuditLog) -> str:
     """Reverte UMA automação registrada em `audit`; devolve o status resultante.
 
-    - destino presente (`dest_path` existe) → é o artefato aplicado: escreve-o de
-      volta na `source_path` (escrita verificada por hash do próprio conteúdo do
-      destino) e remove o destino; retorna `"undone"`;
-    - destino sumiu/mudou → restaura `read_bytes_from_cas(content_hash)` para a
-      `source_path` (rede final); retorna `"undone_from_cas"`.
+    Discrimina pelo `audit.action` (Fase 06.2 — D-06):
+    - `action="copy"` → a saída é uma CÓPIA ADICIONAL; o original NUNCA foi movido
+      por ela. Undo = APAGAR a cópia em `dest_path` (`unlink(missing_ok=True)`) e
+      NUNCA tocar a `source_path`. Seguro porque o CAS preserva o conteúdo (apagar
+      a cópia jamais causa perda); NÃO restaura do CAS (diferente do move). Retorna
+      `"undone"`.
+    - move (`action="apply"`, comportamento da Fase 6, IDÊNTICO):
+      - destino presente (`dest_path` existe) → é o artefato aplicado: escreve-o de
+        volta na `source_path` (escrita verificada por hash do próprio conteúdo do
+        destino) e remove o destino; retorna `"undone"`;
+      - destino sumiu/mudou → restaura `read_bytes_from_cas(content_hash)` para a
+        `source_path` (rede final); retorna `"undone_from_cas"`.
 
-    Persiste `audit.status` no commit. NUNCA perde: se o destino existe usa-o;
-    senão recorre ao CAS imutável. Falha de disco (`PermissionError`) propaga sem
-    corromper o audit (não vira "done" inconsistente). NÃO loga conteúdo.
+    Persiste `audit.status` no commit. NUNCA perde: o move usa o destino ou o CAS;
+    a cópia só apaga a si mesma (o original e o CAS são intocados). Falha de disco
+    (`PermissionError`) propaga sem corromper o audit. NÃO loga conteúdo.
     """
     source = Path(audit.source_path) if audit.source_path else None
     dest = Path(audit.dest_path) if audit.dest_path else None
     content_hash = audit.content_hash
+
+    # Undo de CÓPIA (D-06): apaga SÓ a cópia; o original nunca foi tocado por ela,
+    # então não há restauração de origem nem fallback de CAS. ANTES do fluxo move.
+    if audit.action == "copy":
+        if dest is not None:
+            dest.unlink(missing_ok=True)  # cópia apagada; CAS preserva o conteúdo
+        audit.status = "undone"
+        session.commit()
+        return "undone"
 
     if source is None:
         # Sem origem registrada não há para onde reverter — falha controlada, sem

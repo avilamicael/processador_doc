@@ -172,13 +172,11 @@ def test_undo_run_copy_and_move_reverts_all(
     copy_dst.write_bytes(b"a-copia")
     move_dst = dst_dir / "movido.pdf"
     move_dst.write_bytes(b"movido")
+    ch = classified_doc.content_hash
+    did = classified_doc.document_id
     with get_session(schema_engine) as session:
-        _seed_copy_done(
-            session, classified_doc.document_id, classified_doc.content_hash, src, copy_dst, "run-mix"
-        )
-        _seed_done(
-            session, classified_doc.document_id, classified_doc.content_hash, src, move_dst, "run-mix"
-        )
+        _seed_copy_done(session, did, ch, src, copy_dst, "run-mix")
+        _seed_done(session, did, ch, src, move_dst, "run-mix")
         session.commit()
     with get_session(schema_engine) as session:
         reverted = undo.undo_run(session, run_id="run-mix")
