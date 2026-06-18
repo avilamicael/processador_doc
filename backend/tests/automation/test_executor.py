@@ -306,8 +306,9 @@ def test_copy_blocked_missing_field_emits_no_copy():
     assert plan.copies == ()
 
 
-def test_copy_blocked_escapes_base_root_emits_no_copy():
-    # V4/D-07: destino que escaparia da raiz-base → blocked, 0 cópias.
+def test_copy_dest_confined_under_base_root_no_escape():
+    # V4: copy reusa resolve_dest_folder → um literal "../" é NEUTRALIZADO (vira
+    # segmento "_"), NUNCA escapa da raiz-base. Espelha exatamente o move (D-04).
     autos = [
         _auto(
             conditions=[_cond("extension", "eq", ".pdf")],
@@ -315,8 +316,10 @@ def test_copy_blocked_escapes_base_root_emits_no_copy():
         )
     ]
     plan = evaluate_automations(autos, FIELDS, ATTRS, base_root=BASE)
-    assert plan.blocked is True
-    assert plan.copies == ()
+    assert plan.blocked is False
+    assert len(plan.copies) == 1
+    # O destino permanece confinado sob a raiz-base (não navegou para cima).
+    assert plan.copies[0].folder.is_relative_to(BASE.resolve())
 
 
 def test_copy_unknown_action_type_stays_inert():

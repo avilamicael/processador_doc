@@ -13,7 +13,9 @@ Semântica (D-25 primeira-que-casa-vence; D-26 materialização única):
   (sem eval, V5). A condição `template` lê o `ClassificationResult` existente (custo
   0, NÃO re-cobra a IA — o `template_id` chega em `file_attrs`).
 - **Ações (D-24):** `rename` muta SÓ o nome-alvo, `move` muta SÓ a pasta-alvo — EM
-  MEMÓRIA, na ordem. O caller materializa o par final UMA vez (D-26).
+  MEMÓRIA, na ordem. O caller materializa o par final UMA vez (D-26). `copy`
+  (Fase 06.2, D-01/D-03) é SAÍDA ADICIONAL: acumula uma `PlannedCopy` (N por
+  documento) com o nome-alvo corrente, sem mutar o alvo nem remover o original.
 - **Bloqueio (D-07):** um token referenciou campo faltante/inválido (ou o destino
   escaparia da raiz-base, V4) → `blocked=True`; o caller rebaixa para revisão SEM
   materializar.
@@ -32,13 +34,35 @@ from app.automation.rules import ConditionSpec, automation_conditions_match
 
 
 @dataclass(frozen=True)
-class AutomationPlan:
-    """Decisão das automações para UM documento (D-23..D-26).
+class PlannedCopy:
+    """UMA saída de cópia planejada (Fase 06.2 — D-01/D-03).
 
-    - `target_folder`/`target_name`: o plano-alvo final (materializado UMA vez pelo
-      caller) quando uma automação casa e suas ações resolvem sem bloquear;
+    Cópia = saída ADICIONAL por documento: materializa o conteúdo no `folder`
+    confinado (raiz-base, V4) com o `name`-alvo CORRENTE no ponto da ação (rename
+    antes → a cópia herda o nome renomeado; ordem D-03). O kind é implícito (=copy):
+    diferente do move, a cópia NÃO muta o alvo do documento e o original fica intacto
+    (D-01). Frozen/hashable para caber numa tupla dentro do `AutomationPlan` frozen.
+    """
+
+    folder: Path
+    name: str
+
+
+@dataclass(frozen=True)
+class AutomationPlan:
+    """Decisão das automações para UM documento (D-23..D-26; multi-saída em 06.2).
+
+    Cardinalidade: N cópias (`copies`) + 0..1 alvo de move (`target_folder`/
+    `target_name`). Antes da Fase 06.2 o plano era single-output; `copies` default
+    vazio preserva esse contrato quando não há ação copy (não-regressão D-04).
+
+    - `target_folder`/`target_name`: o plano-alvo final do MOVE (materializado UMA
+      vez pelo caller) quando uma automação casa e suas ações resolvem sem bloquear;
+    - `copies`: saídas de cópia ADICIONAIS (D-01/D-03) — cada `PlannedCopy` tem seu
+      `folder` confinado e o nome-alvo corrente; cópia NÃO muta o alvo do documento;
     - `blocked=True`: um token referenciou campo faltante/inválido OU o destino
-      escaparia da raiz-base (D-07/V4) → o caller rebaixa para revisão SEM materializar;
+      escaparia da raiz-base (D-07/V4) → o caller rebaixa para revisão SEM
+      materializar (nenhuma cópia é emitida quando bloqueia, como o move);
     - `matched=False`: nenhuma automação casou (D-25 no-match) → no-op explícito;
     - `automation_id`: id da automação que casou (diagnóstico/auditoria; None se nenhuma).
     """
@@ -48,6 +72,7 @@ class AutomationPlan:
     blocked: bool = False
     matched: bool = False
     automation_id: int | None = None
+    copies: tuple[PlannedCopy, ...] = ()
 
 
 @dataclass
@@ -87,16 +112,20 @@ def _apply_actions(
     base_root: Path,
     default_folder: Path,
     default_name: str | None,
-) -> tuple[Path | None, str | None, bool]:
+) -> tuple[Path | None, str | None, bool, tuple[PlannedCopy, ...]]:
     """Aplica as AÇÕES ordenadas, mutando nome/pasta-alvo em memória (D-24/D-26).
 
     rename → `resolve_pattern` muta SÓ o nome; move → `resolve_dest_folder`
-    (confinado V4) muta SÓ a pasta. Token p/ campo faltante/inválido ou destino fora
-    da raiz → devolve `blocked=True` (terceiro elemento). Retorna `(folder, name,
-    blocked)`. NÃO loga valores.
+    (confinado V4) muta SÓ a pasta. copy (Fase 06.2, D-01/D-03) → `resolve_dest_folder`
+    resolve o destino confinado, mas NÃO muta o alvo do documento: acumula uma
+    `PlannedCopy` (saída ADICIONAL) com o `name` CORRENTE (rename antes → a cópia
+    herda o nome renomeado; ordem D-03). Token p/ campo faltante/inválido ou destino
+    fora da raiz → devolve `blocked=True` (mesma regra do move, D-07/V4) e SEM cópias.
+    Retorna `(folder, name, blocked, copies)`. NÃO loga valores (V7/V9).
     """
     folder: Path | None = default_folder
     name: str | None = default_name
+    copies: list[PlannedCopy] = []
 
     for action in sorted(actions, key=lambda a: a.position):
         if action.action_type == "rename":
@@ -104,18 +133,28 @@ def _apply_actions(
                 action.params.get("name_pattern", ""), fields
             )
             if resolved_name is None:
-                return None, None, True  # D-07
+                return None, None, True, ()  # D-07
             name = resolved_name
         elif action.action_type == "move":
             resolved_folder = naming.resolve_dest_folder(
                 action.params.get("dest_folder", ""), fields, base_root=base_root
             )
             if resolved_folder is None:
-                return None, None, True  # D-07 / V4
+                return None, None, True, ()  # D-07 / V4
             folder = resolved_folder
+        elif action.action_type == "copy":
+            # D-01/D-03: cópia é SAÍDA ADICIONAL — resolve/bloqueia como o move, mas
+            # NÃO muta o (folder, name) corrente. Captura o `name` corrente (herda o
+            # rename anterior; ordem D-03). Destino confinado na raiz-base (V4).
+            resolved_copy_folder = naming.resolve_dest_folder(
+                action.params.get("dest_folder", ""), fields, base_root=base_root
+            )
+            if resolved_copy_folder is None:
+                return None, None, True, ()  # D-07 / V4 (mesma regra do move)
+            copies.append(PlannedCopy(folder=resolved_copy_folder, name=name))
         # action_type desconhecido: ignora (ação inerte) — falha fechada (V5).
 
-    return folder, name, False
+    return folder, name, False, tuple(copies)
 
 
 def evaluate_automations(
@@ -131,8 +170,9 @@ def evaluate_automations(
     do arquivo. As automações ATIVAS são avaliadas por `position` (menor primeiro);
     para a PRIMEIRA cujas TODAS as condições casam (E, `automation_conditions_match`):
       - executa suas AÇÕES em ordem (`_apply_actions`): rename muta só o nome, move
-        muta só a pasta; campo faltante/destino fora da raiz → `blocked` (D-07/V4);
-      - devolve o plano-alvo com `matched=True`.
+        muta só a pasta, copy acumula uma saída ADICIONAL (N cópias, D-01/D-03) sem
+        mutar o alvo; campo faltante/destino fora da raiz → `blocked` (D-07/V4);
+      - devolve o plano multi-saída (N cópias + 0..1 alvo de move) com `matched=True`.
     Nenhuma automação casa → `matched=False` e o plano fica no DEFAULT (o caller faz
     o no-op explícito, NÃO materializa para a raiz). NUNCA `eval`. NÃO loga valores.
     """
@@ -150,7 +190,7 @@ def evaluate_automations(
             continue
 
         # Primeira automação que casa (D-25): executa suas ações e PARA.
-        folder, name, blocked = _apply_actions(
+        folder, name, blocked, copies = _apply_actions(
             automation.actions,
             fields,
             base_root=base_root,
@@ -158,6 +198,7 @@ def evaluate_automations(
             default_name=default_name,
         )
         if blocked:
+            # Bloqueio não materializa nada (consistente com o move): SEM cópias.
             return AutomationPlan(
                 blocked=True, matched=True, automation_id=automation.automation_id
             )
@@ -166,6 +207,7 @@ def evaluate_automations(
             target_name=name,
             matched=True,
             automation_id=automation.automation_id,
+            copies=copies,
         )
 
     # Nenhuma automação casou (D-25 no-match): plano default, no-op no caller.
