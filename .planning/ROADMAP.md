@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Templates, Sub-templates e Classificação** - Construtor schema-first de templates e classificação automática contra eles (completed 2026-06-16)
 - [x] **Phase 5: Confiança, Revisão Humana e Quarentena** - Score de confiança determinístico, limiar, fila de revisão lado-a-lado e quarentena visível (completed 2026-06-17)
 - [x] **Phase 6: Automações de Arquivo (Renomear/Mover)** - Renomear/mover por tokens com dry-run, audit log write-ahead, anti-colisão e undo (modelo final Condições→Ações; verificado por testes 2026-06-18, 1 item de verificação ao vivo pendente)
-- [ ] **Phase 6.2: Ações de Automação: Copiar e Cortar (split por template)** (INSERTED) - Ações Copiar e Cortar nas automações (mantendo Mover/Renomear); corte do PDF por pasta monitorada OU por template
+- [ ] **Phase 6.2: Ação de Automação Copiar** (INSERTED) - Ação Copiar nas automações (copia ao destino deixando o original); Cortar/split por template adiado para v2
 - [ ] **Phase 7: Módulo Determinístico Opcional e Roteamento de Custo** - Parsing plugável de tipos conhecidos (boleto/NF-e) e cascata determinístico→nativo→IA — **ADIADA** (otimização opcional; revisitar após medir custo real de tokens em uso)
 - [ ] **Phase 8: Distribuição, Atualização e Documentação** - Releases versionadas, update com migração segura e guias de instalação/atualização/uso/operação
 
@@ -269,19 +269,18 @@ Plans:
 
 - [x] 06.1-04-PLAN.md — Fechar ReDoS real (timeout via lib `regex` + falha-fechada) e falha-fechada de `decide()` com threshold ≤ 0; docstring corrigida; testes reforçados (D-T1/D-T2)
 
-### Phase 06.2: Ações de Automação: Copiar e Cortar (split por template) (INSERTED)
+### Phase 06.2: Ação de Automação Copiar (INSERTED)
 
-**Goal:** Estender o conjunto de **ações de automação** mantendo Mover e Renomear (sem regressão) e adicionando duas ações novas — **Copiar** (copia o arquivo para o destino e **deixa o original na origem**, mais seguro que Mover) e **Cortar** (separa o PDF por número de páginas como ação de automação). Com isso o corte do PDF passa a poder acontecer de **dois modos coexistentes**: na **pasta monitorada** (`pages_per_block`, como hoje — antes de ler) OU na **automação** (depois de ler/identificar o tipo, conforme o template), porque nem todo documento deve ser cortado — depende do tipo.
-**Requirements**: estende AUT-* / TPL-02 (sem REQ-IDs formais novos; cobertura por decision-coverage do CONTEXT, como a 06.1)
+**Goal:** Adicionar a ação **Copiar** ao modelo Condições→Ações da Fase 6, mantendo Mover e Renomear sem regressão. Copiar materializa o arquivo no destino e **deixa o original na origem** (não remove) — mais seguro que Mover, atende ao objetivo do usuário de "não perder o documento". Reusa a infraestrutura da Fase 6 (`fileops.materialize_to_dest`, anti-colisão, audit write-ahead, undo, dry-run).
+**Requirements**: estende AUT-* (sem REQ-IDs formais novos; cobertura por decision-coverage do CONTEXT, como a 06.1)
 **Depends on:** Phase 6
 **Success Criteria** (rascunho — refinar no discuss-phase):
 
-  1. O usuário adiciona a ação **Copiar** a uma automação e, após aplicar, o arquivo aparece no destino E o original permanece na pasta de origem
-  2. O usuário adiciona a ação **Cortar** e um PDF multipágina é separado em N arquivos conforme a configuração de páginas por bloco
-  3. Mover e Renomear continuam funcionando sem regressão; o split por pasta monitorada (`pages_per_block`) continua disponível
-  4. Dry-run, audit log write-ahead, anti-colisão e undo cobrem as novas ações (nenhum arquivo se perde)
+  1. O usuário adiciona a ação **Copiar** (com pasta de destino, tokens de campo) a uma automação e, após aplicar, o arquivo aparece no destino E o original permanece na origem
+  2. Mover e Renomear continuam funcionando sem regressão
+  3. Dry-run, audit log write-ahead, anti-colisão e undo cobrem a ação Copiar (nenhum arquivo se perde)
 
-**Questão arquitetural a resolver no discuss-phase (NÃO decidida ainda):** quando **Cortar** roda como automação (após a leitura), os pedaços gerados são documentos novos — (a) **re-entram no pipeline** (cada pedaço extraído/classificado/automatizado individualmente; mais poderoso, mais complexo) vs. (b) **Cortar é só saída de arquivo** (gera N arquivos no destino e encerra, sem re-processar). Também definir **onde a regra de corte mora no template** e a ordem ingestão→split→extração. Ver memória de projeto `automacoes-acoes-copiar-cortar`.
+**Escopo (decisão 2026-06-18, discuss-phase):** a Fase 6.2 cobre **somente a ação Copiar**. A ação **Cortar / split por template foi ADIADA para a v2** — a separação por pasta monitorada (`pages_per_block`) já existe e o split dirigido por template (re-entrada de pedaços no pipeline vs. saída de arquivo; onde a regra de corte mora) precisa de mais reflexão. Ver memória de projeto `automacoes-acoes-copiar-cortar`.
 
 **Plans:** TBD (run /gsd:plan-phase 06.2 to break down)
 
@@ -330,6 +329,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 6.2
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
 | 6. Automações de Arquivo (Renomear/Mover) | 8/8 (+06-09..06-12 refino) | Complete (test-verified) | 2026-06-18 |
 | 6.1. Redesign de Templates e Classificação por Sinais | 4/4 | Complete    | 2026-06-18 |
-| 6.2. Ações de Automação: Copiar e Cortar (split por template) | 0/TBD | Not started | - |
+| 6.2. Ação de Automação Copiar | 0/TBD | Not started | - |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Deferred (2026-06-18) | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
