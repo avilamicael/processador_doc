@@ -139,8 +139,13 @@ class Settings(BaseSettings):
     # (discretion D-03; um limiar por-template é v2/INT2-05). Score do matcher ACIMA
     # do limiar → casa o template sem custo de IA; zona cinzenta abaixo → a IA
     # desempata (chamada paga); zero sinais → quarentena (template_id null).
+    # Faixa restrita a [0.0, 1.0] (WR-01): a confiança do matcher é booleana (0.0/1.0),
+    # então um threshold fora dessa faixa não tem sentido — e a falha-fechada de
+    # decide() já barra confiança 0.0 mesmo com threshold 0/negativo.
     classify_match_threshold: float = Field(
         default=0.5,
+        ge=0.0,
+        le=1.0,
         validation_alias=AliasChoices("CLASSIFY_MATCH_THRESHOLD", "classify_match_threshold"),
     )
     # `review_confidence_threshold` (Fase 5, D-03): limiar GLOBAL de QUALIDADE DE

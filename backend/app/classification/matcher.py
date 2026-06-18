@@ -19,10 +19,15 @@ Semântica booleana (D-T1):
 
 Condições (D-T2), avaliadas sobre o `full_text` do documento (alvo primário A2):
 - `texto` (default): substring case-insensitive (`value.lower() in haystack`);
-- `regex`: `re.search` com `IGNORECASE`. Endurecida contra ReDoS/regex colada pelo
-  operador (single-tenant, T-06.1-01/02): teto de PATTERN (`_MAX_SIGNAL_REGEX_LEN`)
-  antes de compilar, teto de INPUT (`_MAX_HAYSTACK_LEN`) cortando o haystack antes
-  do `.search`, e `try/except re.error` → não casa (falha fechada, V5). NUNCA `eval`.
+- `regex`: `regex.search` (lib `regex`, drop-in do `re`) com `IGNORECASE`. Endurecida
+  contra ReDoS/regex colada pelo operador (single-tenant, T-06.1-01/02): a proteção
+  REAL é o `timeout=_REGEX_TIMEOUT_S` no `.search` — aborta o backtracking catastrófico
+  (que os tetos de tamanho NÃO impedem, pois o custo vem da estrutura LOCAL do pattern,
+  não do tamanho do input) e levanta `TimeoutError`, tratado como não casa (falha
+  fechada, V5). Os tetos de PATTERN (`_MAX_SIGNAL_REGEX_LEN`) e de INPUT
+  (`_MAX_HAYSTACK_LEN`) permanecem apenas como defesa em profundidade (cheap pre-check
+  que descarta patterns/inputs absurdos antes do compile/search). `regex.error` também
+  → não casa. NUNCA `eval`.
 
 O parser é forward-compatible (T-06.1-03): JSON malformado → []; a forma legada
 plana `list[str]` é mapeada para 1 grupo OU por termo (preserva "qualquer termo
@@ -37,18 +42,25 @@ LGPD/V7: o matcher NÃO loga `full_text` nem valores de sinal.
 """
 
 import json
-import re
 from dataclasses import dataclass
+
+import regex  # drop-in do `re` com timeout REAL de casamento (CR-01)
 
 from app.models.template import Template
 
-# Teto do PATTERN de regex colado pelo operador (caracteres). Acima disto não
-# compilamos — corta patterns absurdos antes do `re.compile` (T-06.1-01).
+# Teto do PATTERN de regex colado pelo operador (caracteres). Defesa em profundidade:
+# corta patterns absurdos antes do `regex.compile` (cheap pre-check, T-06.1-06).
 _MAX_SIGNAL_REGEX_LEN = 512
-# Teto do INPUT (haystack) antes de aplicar a regex. `full_text` pode ser enorme;
-# cortar o input neutraliza patterns catastróficos (ReDoS) — `re` stdlib sem timeout
-# é aceito pelo threat model single-tenant (A5/T-06.1-01).
+# Teto do INPUT (haystack) antes de aplicar a regex. Defesa em profundidade: `full_text`
+# pode ser enorme, então cortamos o input como cheap pre-check. NÃO neutraliza ReDoS —
+# o backtracking catastrófico vem da estrutura LOCAL do pattern, não do tamanho do input
+# (CR-01). A proteção REAL contra ReDoS é o `timeout=_REGEX_TIMEOUT_S` no `.search`.
 _MAX_HAYSTACK_LEN = 200_000
+# Deadline REAL de casamento por condição regex (segundos), via lib `regex`. Aborta o
+# backtracking catastrófico que os tetos de tamanho NÃO impedem → `TimeoutError`, tratado
+# como não casa (falha fechada). Single-tenant: 0.25s é folgado p/ patterns legítimos;
+# calibrável se algum cliente tiver regex/full_text muito grandes (T-06.1-01).
+_REGEX_TIMEOUT_S = 0.25
 # Margem mínima entre os dois melhores para considerar a decisão NÃO-ambígua. Abaixo
 # disto (ambos acima do piso) a IA desempata (D-03). PRESERVAR.
 _AMBIGUITY_MARGIN = 0.1
@@ -106,21 +118,29 @@ def _parse_groups(raw: str | None) -> list[list[dict]]:
 def _condition_matches(cond: dict, haystack: str) -> bool:
     """Avalia UMA condição contra o haystack (já em lower). Falha fechada.
 
-    `texto`/default: substring case-insensitive. `regex`: `re.search` IGNORECASE
-    com teto de pattern + teto de input + `try/except re.error` (V5/T-06.1-01/02).
-    Valor vazio → não casa. NUNCA `eval` (dispatch explícito por etiqueta).
+    `texto`/default: substring case-insensitive. `regex`: `regex.search` IGNORECASE
+    com timeout REAL (`_REGEX_TIMEOUT_S`) que aborta backtracking catastrófico, tetos
+    de pattern/input como defesa em profundidade, e `try/except (regex.error,
+    TimeoutError)` → não casa (V5/T-06.1-01/02). Valor vazio → não casa. NUNCA `eval`
+    (dispatch explícito por etiqueta).
     """
     value = str(cond.get("value", ""))
     mode = cond.get("mode", "texto")
 
     if mode == "regex":
+        # Defesa em profundidade (cheap pre-check): teto do pattern antes de compilar.
         if not value or len(value) > _MAX_SIGNAL_REGEX_LEN:
             return False
         try:
-            pattern = re.compile(value, re.IGNORECASE)
-        except re.error:
-            return False
-        return pattern.search(haystack[:_MAX_HAYSTACK_LEN]) is not None
+            pattern = regex.compile(value, regex.IGNORECASE)
+            # Defesa em profundidade: corte do haystack (cheap pre-check). Proteção
+            # REAL contra ReDoS: timeout que aborta o backtracking → TimeoutError.
+            return (
+                pattern.search(haystack[:_MAX_HAYSTACK_LEN], timeout=_REGEX_TIMEOUT_S)
+                is not None
+            )
+        except (regex.error, TimeoutError):
+            return False  # falha fechada (regex inválida OU ReDoS estourado)
 
     # "texto" e desconhecidos: substring case-insensitive.
     needle = value.strip().lower()
@@ -173,12 +193,22 @@ def match_templates(
 def decide(matches: list[TemplateMatch], *, threshold: float) -> MatchDecision:
     """Aplica a política de roteamento (D-03) sobre os matches já ordenados.
 
-    - lista vazia ou melhor confiança < `threshold` → "quarantine";
+    - lista vazia, melhor confiança 0.0 (NENHUM sinal casou) ou melhor < `threshold`
+      → "quarantine";
     - melhor ≥ `threshold` e o segundo está dentro de `_AMBIGUITY_MARGIN` (também
       ≥ threshold) → "ambiguous" (a IA desempata);
     - caso contrário → "matched" no melhor template.
+
+    Falha fechada (WR-01): exige confiança ESTRITAMENTE positiva — um documento sem
+    nenhum sinal (confiança 0.0) NUNCA é "matched"/"ambiguous", independente do
+    threshold (incluindo 0 e negativo). A faixa válida do threshold ([0.0, 1.0]) é
+    garantida na borda por `config.classify_match_threshold`.
     """
-    if not matches or matches[0].confidence < threshold:
+    if (
+        not matches
+        or matches[0].confidence <= 0.0
+        or matches[0].confidence < threshold
+    ):
         return MatchDecision(status="quarantine", template_id=None)
 
     best = matches[0]

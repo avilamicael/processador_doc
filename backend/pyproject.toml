@@ -16,6 +16,7 @@ dependencies = [
     "openai==2.41.*",
     "pymupdf==1.27.*",
     "python-dateutil==2.9.0.post0",
+    "regex==2026.5.9",
 ]
 
 [dependency-groups]
