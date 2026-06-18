@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6.2 context gathered (ação Copiar; Cortar adiado p/ v2)
-last_updated: "2026-06-18T22:41:56.163Z"
-last_activity: 2026-06-18 -- Phase 06.2 planning complete
+stopped_at: Completed 06.2-01-PLAN.md (ação Copiar — saída multi-output no executor PURO)
+last_updated: "2026-06-18T22:49:51.154Z"
+last_activity: 2026-06-18
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 38
-  completed_plans: 39
+  completed_plans: 40
   percent: 70
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-15)
 
 **Core value:** Transformar uma pilha de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados corretamente de forma automática e confiável — sem o usuário perder arquivos nem confiar cegamente na IA.
-**Current focus:** Phase 06.1 — redesign-de-templates-e-classifica-o-por-sinais-e-ou-regex
+**Current focus:** Phase 06.2 — a-es-de-automa-o-copiar-e-cortar-split-por-template
 
 ## Current Position
 
-Phase: 7
-Plan: Not started
+Phase: 06.2 (a-es-de-automa-o-copiar-e-cortar-split-por-template) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-06-18 -- Phase 06.2 planning complete
+Last activity: 2026-06-18
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -49,6 +49,7 @@ Progress: [█░░░░░░░░░] 13%
 | 02 | 5 | - | - |
 | 03 | 4 | - | - |
 | 06.1 | 4 | - | - |
+| 06.2 | 1 (de 3) | 4 min | 4 min |
 
 **Recent Trend:**
 
@@ -92,6 +93,7 @@ Progress: [█░░░░░░░░░] 13%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [06.2-01]: Executor das automações passa a plano MULTI-SAÍDA — PlannedCopy(folder,name) acumulado em AutomationPlan.copies (tuple, default vazio preserva single-output). copy espelha o move (confinamento V4 / bloqueio D-07) mas é ADITIVO: não muta o alvo, não remove o original (D-01/D-03). action_type segue String livre — ZERO migração. Contrato puro pronto para o stage (Plano 02) materializar.
 - [Roadmap]: Motor é GENÉRICO — extração por IA dirigida pelo template (EXT-02) é o núcleo e vem primeiro (Phase 3); parsing determinístico (EXT-05) é módulo opcional/plugável movido para depois (Phase 7).
 - [Roadmap]: Windows é plataforma primária; modo padrão usa fila in-process (SQLite), sem broker externo (refletido nas Phases 1 e 2).
 - [Roadmap]: Reversibilidade (dry-run + audit write-ahead + undo + anti-colisão) é definição de pronto da Phase 6, não extra posterior.
@@ -159,6 +161,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T21:14:20.269Z
-Stopped at: Phase 6.2 context gathered (ação Copiar; Cortar adiado p/ v2)
-Resume file: .planning/phases/06.2-a-es-de-automa-o-copiar-e-cortar-split-por-template/06.2-CONTEXT.md
+Last session: 2026-06-18T22:49:51.148Z
+Stopped at: Completed 06.2-01-PLAN.md (ação Copiar — saída multi-output no executor PURO)
+Resume file: None

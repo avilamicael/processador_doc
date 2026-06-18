@@ -282,11 +282,11 @@ Plans:
 
 **Escopo (decisão 2026-06-18, discuss-phase):** a Fase 6.2 cobre **somente a ação Copiar**. A ação **Cortar / split por template foi ADIADA para a v2** — a separação por pasta monitorada (`pages_per_block`) já existe e o split dirigido por template (re-entrada de pedaços no pipeline vs. saída de arquivo; onde a regra de corte mora) precisa de mais reflexão. Ver memória de projeto `automacoes-acoes-copiar-cortar`.
 
-**Plans:** 3 plans (3 waves)
+**Plans:** 1/3 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 06.2-01-PLAN.md — Executor PURO multi-saída: AutomationPlan carrega N cópias planejadas + alvo de move; ramo `copy` espelha `move` (resolução/bloqueio) sem mutar o alvo; docstring de modelo (sem migração)
+- [x] 06.2-01-PLAN.md — Executor PURO multi-saída: AutomationPlan carrega N cópias planejadas + alvo de move; ramo `copy` espelha `move` (resolução/bloqueio) sem mutar o alvo; docstring de modelo (sem migração)
 
 **Wave 2** *(blocked on 06.2-01)*
 
@@ -341,6 +341,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 6.2
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
 | 6. Automações de Arquivo (Renomear/Mover) | 8/8 (+06-09..06-12 refino) | Complete (test-verified) | 2026-06-18 |
 | 6.1. Redesign de Templates e Classificação por Sinais | 4/4 | Complete    | 2026-06-18 |
-| 6.2. Ação de Automação Copiar | 0/TBD | Not started | - |
+| 6.2. Ação de Automação Copiar | 1/3 | In Progress|  |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Deferred (2026-06-18) | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
