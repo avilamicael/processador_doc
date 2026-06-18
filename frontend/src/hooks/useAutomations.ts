@@ -1,53 +1,55 @@
-// Hooks TanStack Query para as automações da Fase 6 (TPL-02/AUT-03/AUT-05).
+// Hooks TanStack Query para o PIPELINE de automações (Fase 6 REDESIGN, TPL-02/
+// AUT-03/AUT-05).
 //
-// Espelha useTemplates.ts: a query lista as regras; as mutations de CRUD invalidam
-// ['automations']. As AÇÕES (dry-run/apply/undo) invalidam também ['documents'] e
-// ['attention'] porque mudam o estado dos documentos (auto-aplicado → CONCLUIDO,
-// bloqueado → EM_REVISAO, undo reabre PROCESSANDO). Fonte de verdade é a API — sem
-// otimismo que mascare falha de operação (T-06-18).
+// Espelha useTemplates.ts: a query lista os pipelines (com etapas/filtros
+// aninhados); as mutations de CRUD invalidam ['automations']. As AÇÕES
+// (dry-run/apply/undo) invalidam também ['documents'] e ['attention'] porque mudam
+// o estado dos documentos (auto-aplicado → CONCLUIDO, bloqueado → EM_REVISAO, undo
+// reabre PROCESSANDO). Fonte de verdade é a API — sem otimismo que mascare falha de
+// operação (T-06-18).
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  createAutomationRule,
-  deleteAutomationRule,
-  getAutomationRules,
+  createPipeline,
+  deletePipeline,
+  getPipelines,
   postApply,
   postDryRun,
   postUndo,
-  updateAutomationRule,
+  updatePipeline,
 } from '../lib/api'
-import type { RuleCreate, RulePatch } from '../types'
+import type { PipelineCreate, PipelinePatch } from '../types'
 
 const AUTOMATIONS_KEY = ['automations'] as const
 
 export function useAutomations() {
   return useQuery({
     queryKey: AUTOMATIONS_KEY,
-    queryFn: getAutomationRules,
+    queryFn: getPipelines,
   })
 }
 
-export function useCreateRule() {
+export function useCreatePipeline() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: RuleCreate) => createAutomationRule(body),
+    mutationFn: (body: PipelineCreate) => createPipeline(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: AUTOMATIONS_KEY }),
   })
 }
 
-export function useUpdateRule() {
+export function useUpdatePipeline() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, body }: { id: number; body: RulePatch }) =>
-      updateAutomationRule(id, body),
+    mutationFn: ({ id, body }: { id: number; body: PipelinePatch }) =>
+      updatePipeline(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: AUTOMATIONS_KEY }),
   })
 }
 
-export function useDeleteRule() {
+export function useDeletePipeline() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) => deleteAutomationRule(id),
+    mutationFn: (id: number) => deletePipeline(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: AUTOMATIONS_KEY }),
   })
 }

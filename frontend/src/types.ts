@@ -167,69 +167,102 @@ export interface DocumentDetail {
   classification: Classification | null
 }
 
-// --- Automações (forma REAL da API /automations — Fase 6, TPL-02) ---
+// --- Automações: PIPELINE (forma REAL da API /automations — Fase 6 REDESIGN, ---
+// --- D-12..D-16, TPL-02). Substitui o modelo de regra única por um PIPELINE de  ---
+// --- etapas ordenadas: cada etapa = 1 ação atômica + 0..N filtros E/OU.         ---
 
-// Operadores de condição aceitos pelo backend (V5: conjunto fechado).
+// Ações atômicas de uma etapa (V5: conjunto fechado no backend).
+export type StepActionType = 'move' | 'rename' | 'identify_type' | 'route'
+
+// Tipos de filtro de entrada de uma etapa (D-14).
+export type StepFilterType =
+  | 'field'
+  | 'source_folder'
+  | 'extension'
+  | 'filename'
+  | 'size'
+  | 'template'
+
+// Operadores de filtro aceitos pelo backend (V5: conjunto fechado).
 export type RuleOperator = 'eq' | 'gt' | 'lt' | 'contains'
 
-// Conjunção entre condições de uma regra (E/OU — D-04).
+// Conjunção entre os filtros de uma etapa (E/OU — D-14).
 export type RuleConjunction = 'and' | 'or'
 
-// Condição `{field_name} {operator} {value}` de uma regra (ConditionOut do backend).
-export interface RuleCondition {
+// Alvo da ação `route` (Decidir tratativa — interrompe o pipeline).
+export type RouteTarget = 'em_revisao' | 'nao_tratar' | 'ignorar'
+
+// Filtro `{filter_type} {operator} {value}` de uma etapa (StepFilterOut do backend).
+// `field_name` só é usado quando `filter_type === 'field'`.
+export interface StepFilter {
   id: number
-  field_name: string
+  filter_type: StepFilterType
   operator: RuleOperator
   value: string
+  field_name: string | null
   position: number
 }
 
-// Regra de automação exposta por GET /automations (RuleOut do backend).
-// Listadas em ordem de `priority` (primeira-que-casa-vence, D-05).
-export interface AutomationRule {
-  id: number
-  name: string
-  priority: number
-  conjunction: RuleConjunction
-  name_pattern: string | null
-  folder_pattern: string | null
-  active: boolean
-  conditions: RuleCondition[]
-}
-
-// Body de condição no POST/PATCH (ConditionIn — sem id/position, server-gerados).
-export interface RuleConditionCreate {
-  field_name: string
+// Body de filtro no POST/PATCH (StepFilterIn — sem id/position, server-gerados).
+export interface StepFilterCreate {
+  filter_type: StepFilterType
   operator: RuleOperator
   value: string
+  field_name: string | null
 }
 
-// Body de criação de regra (POST /automations — RuleIn).
-export interface RuleCreate {
-  name: string
-  priority: number
+// Etapa do pipeline (StepOut do backend): 1 ação + 0..N filtros combinados por
+// `conjunction`. `params` depende da ação (move→folder_pattern, rename→name_pattern,
+// identify_type→template_id, route→target). Etapas vêm ordenadas por `position` (D-12).
+export interface PipelineStep {
+  id: number
+  position: number
+  action_type: StepActionType
   conjunction: RuleConjunction
-  name_pattern: string | null
-  folder_pattern: string | null
+  params: Record<string, unknown>
   active: boolean
-  conditions: RuleConditionCreate[]
+  filters: StepFilter[]
 }
 
-// Body de edição parcial (PATCH /automations/{id} — RulePatch).
-// `conditions` informado SUBSTITUI a coleção inteira; omitido preserva as atuais.
-export interface RulePatch {
+// Body de criação de etapa (StepIn — sem id/position, server-gerados).
+// `position` é dada pela ordem da lista enviada (D-12).
+export interface PipelineStepCreate {
+  action_type: StepActionType
+  conjunction: RuleConjunction
+  params: Record<string, unknown>
+  active: boolean
+  filters: StepFilterCreate[]
+}
+
+// Pipeline de automação exposto por GET /automations (PipelineOut do backend).
+// `steps` em ordem de execução (D-12).
+export interface AutomationPipeline {
+  id: number
+  name: string
+  active: boolean
+  steps: PipelineStep[]
+}
+
+// Body de criação de pipeline (POST /automations — PipelineIn).
+export interface PipelineCreate {
+  name: string
+  active: boolean
+  steps: PipelineStepCreate[]
+}
+
+// Body de edição parcial (PATCH /automations/{id} — PipelinePatch).
+// `steps` informado SUBSTITUI a coleção inteira; omitido preserva as etapas atuais.
+export interface PipelinePatch {
   name?: string
-  priority?: number
-  conjunction?: RuleConjunction
-  name_pattern?: string | null
-  folder_pattern?: string | null
   active?: boolean
-  conditions?: RuleConditionCreate[]
+  steps?: PipelineStepCreate[]
 }
 
-// Uma linha do preview de dry-run (DryRunRow do backend, AUT-03).
-// Sinalização por flags booleanas (NÃO enum): blocked (D-07, vermelho),
-// collision (D-09, sufixo, âmbar) e skipped_identical (D-10, duplicata, azul).
+// Uma linha do preview de dry-run (DryRunRow do backend, AUT-03). UM par
+// origem→destino-final por documento (materialização única, P8). Sinalização por
+// flags booleanas: blocked (D-07, vermelho), collision (D-09, sufixo, âmbar),
+// skipped_identical (D-10, duplicata, azul), routed (P9, informativo, com
+// route_target), no_match (P10, neutro — mantido na origem).
 export interface DryRunRow {
   document_id: number
   original_filename: string
@@ -238,6 +271,9 @@ export interface DryRunRow {
   blocked: boolean
   collision: boolean
   skipped_identical: boolean
+  routed: boolean
+  route_target: RouteTarget | string | null
+  no_match: boolean
 }
 
 // Resultado de POST /automations/dry-run (DryRunOut).

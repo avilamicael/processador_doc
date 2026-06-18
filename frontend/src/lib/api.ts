@@ -12,7 +12,7 @@
 import type {
   ApplyResult,
   AttentionList,
-  AutomationRule,
+  AutomationPipeline,
   Doc,
   DocumentDetail,
   DocumentList,
@@ -20,9 +20,9 @@ import type {
   Folder,
   FolderCreate,
   FolderPatch,
+  PipelineCreate,
+  PipelinePatch,
   ReviewThreshold,
-  RuleCreate,
-  RulePatch,
   Template,
   TemplateCreate,
   TemplatePatch,
@@ -175,27 +175,32 @@ export function deleteTemplate(id: number): Promise<void> {
   return request<void>(`/templates/${id}`, { method: 'DELETE' })
 }
 
-// --- Automações (CRUD de regras + dry-run/apply/undo — Fase 6, TPL-02/AUT-03/AUT-05) ---
+// --- Automações: PIPELINE (CRUD aninhado pipeline→steps→filtros + dry-run/apply/ ---
+// --- undo — Fase 6 REDESIGN, TPL-02/AUT-03/AUT-05) ---
 
-export function getAutomationRules(): Promise<AutomationRule[]> {
-  return request<AutomationRule[]>('/automations')
+export function getPipelines(): Promise<AutomationPipeline[]> {
+  return request<AutomationPipeline[]>('/automations')
 }
 
-export function createAutomationRule(body: RuleCreate): Promise<AutomationRule> {
-  return request<AutomationRule>('/automations', {
+export function getPipeline(id: number): Promise<AutomationPipeline> {
+  return request<AutomationPipeline>(`/automations/${id}`)
+}
+
+export function createPipeline(body: PipelineCreate): Promise<AutomationPipeline> {
+  return request<AutomationPipeline>('/automations', {
     method: 'POST',
     body: JSON.stringify(body),
   })
 }
 
-export function updateAutomationRule(id: number, body: RulePatch): Promise<AutomationRule> {
-  return request<AutomationRule>(`/automations/${id}`, {
+export function updatePipeline(id: number, body: PipelinePatch): Promise<AutomationPipeline> {
+  return request<AutomationPipeline>(`/automations/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
   })
 }
 
-export function deleteAutomationRule(id: number): Promise<void> {
+export function deletePipeline(id: number): Promise<void> {
   return request<void>(`/automations/${id}`, { method: 'DELETE' })
 }
 
