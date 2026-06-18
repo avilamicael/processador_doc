@@ -10,8 +10,19 @@ import { useApply, useDryRun, useUndo } from '../hooks/useAutomations'
 //
 // Sem visualizador de documento (restrição absoluta): só caminhos como texto mono.
 
-// Badge de sinalização da linha (informativo vs bloqueio). Texto puro.
-function CollisionBadge({ row }: { row: DryRunRow }) {
+// Rótulos do alvo de roteamento (P9 — pipeline desviou, não materializa).
+const ROUTE_SITUATION: Record<string, string> = {
+  em_revisao: 'Enviado para revisão',
+  nao_tratar: 'Marcado para não tratar',
+  ignorar: 'Ignorado pelo pipeline',
+}
+
+// Badge de sinalização da situação da linha. Texto puro. Cores SEMPRE via tokens
+// --st-* (06-UI-SPEC §Cores semânticas): vermelho só bloqueio (D-07); colisão âmbar
+// (D-09); duplicata azul (D-10); roteado âmbar/violeta (P9, informativo); sem-etapa
+// neutro (P10); pronto verde. Ordem de precedência: bloqueio → roteado → sem-etapa →
+// duplicata → colisão → pronto.
+function SituationBadge({ row }: { row: DryRunRow }) {
   if (row.blocked) {
     return (
       <span
@@ -20,6 +31,32 @@ function CollisionBadge({ row }: { row: DryRunRow }) {
         title="Campo usado no nome/pasta está faltando ou inválido. Enviado para revisão antes de aplicar."
       >
         Campo faltando — enviado para revisão
+      </span>
+    )
+  }
+  if (row.routed) {
+    const target = row.route_target ?? ''
+    // "não tratar"/"ignorar" usam o violeta de quarentena; "revisão" usa âmbar.
+    const isQuar = target === 'nao_tratar' || target === 'ignorar'
+    const color = isQuar ? 'var(--st-quarentena)' : 'var(--st-leitura)'
+    const bg = isQuar ? 'var(--st-quarentena-bg)' : 'var(--st-leitura-bg)'
+    return (
+      <span
+        className="badge"
+        style={{ color, background: bg }}
+        title="O pipeline desviou este documento — ele não é movido nem renomeado."
+      >
+        {ROUTE_SITUATION[target] ?? 'Roteado pelo pipeline'}
+      </span>
+    )
+  }
+  if (row.no_match) {
+    return (
+      <span
+        className="badge badge-off"
+        title="Nenhuma etapa do pipeline se aplica a este documento — ele permanece no local de origem."
+      >
+        Nenhuma etapa se aplica — mantido na origem
       </span>
     )
   }
@@ -39,14 +76,18 @@ function CollisionBadge({ row }: { row: DryRunRow }) {
       <span
         className="badge"
         style={{ color: 'var(--st-leitura)', background: 'var(--st-leitura-bg)' }}
-        title="Já existe um arquivo diferente com esse nome — será salvo com sufixo para evitar colisão."
+        title="Já existe um arquivo diferente com esse nome — será salvo com sufixo (ex.: nome_1)."
       >
         Renomeado p/ evitar colisão
       </span>
     )
   }
   return (
-    <span className="badge" style={{ color: 'var(--st-tratado)', background: 'var(--st-tratado-bg)' }}>
+    <span
+      className="badge"
+      style={{ color: 'var(--st-tratado)', background: 'var(--st-tratado-bg)' }}
+      title="O documento está pronto para ser movido/renomeado conforme o pipeline."
+    >
       Pronto
     </span>
   )
@@ -79,8 +120,10 @@ export function DryRunPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Linhas aplicáveis = não bloqueadas e não duplicatas idênticas (essas são no-op).
-  const applicable = rows.filter((r) => !r.blocked)
+  // Aplicável = vai tocar o disco. Bloqueado (D-07), roteado (P9) e sem-etapa (P10)
+  // NÃO materializam — ficam fora da seleção (checkbox disabled).
+  const isApplicable = (r: DryRunRow) => !r.blocked && !r.routed && !r.no_match
+  const applicable = rows.filter(isApplicable)
   const applicableIds = applicable.map((r) => r.document_id)
   const allSel = applicable.length > 0 && selected.length === applicable.length
 
@@ -88,8 +131,9 @@ export function DryRunPage() {
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
   const toggleAll = () => setSelected((s) => (s.length === applicableIds.length ? [] : applicableIds.slice()))
 
-  const movedCount = applicable.filter((r) => !r.skipped_identical).length
-  const skippedCount = rows.filter((r) => r.skipped_identical).length
+  const readyCount = applicable.filter((r) => !r.skipped_identical).length
+  const skippedCount = rows.filter((r) => r.skipped_identical && isApplicable(r)).length
+  const routedCount = rows.filter((r) => r.routed || r.no_match).length
   const blockedCount = rows.filter((r) => r.blocked).length
 
   // "Aplicar" só habilita após o preview carregar (AUT-03) e havendo o que aplicar.
@@ -152,10 +196,10 @@ export function DryRunPage() {
         <div className="stat-grid" style={{ marginBottom: 16 }}>
           <div className="card stat-card">
             <div className="stat-head">
-              <span className="stat-label">Serão movidos</span>
+              <span className="stat-label">Prontos</span>
               <span className="stat-dot" style={{ background: 'var(--st-tratado)' }} />
             </div>
-            <div className="stat-num">{movedCount}</div>
+            <div className="stat-num">{readyCount}</div>
           </div>
           <div className="card stat-card">
             <div className="stat-head">
@@ -163,6 +207,13 @@ export function DryRunPage() {
               <span className="stat-dot" style={{ background: 'var(--st-encontrado)' }} />
             </div>
             <div className="stat-num">{skippedCount}</div>
+          </div>
+          <div className="card stat-card">
+            <div className="stat-head">
+              <span className="stat-label">Roteados / sem etapa</span>
+              <span className="stat-dot" style={{ background: 'var(--st-leitura)' }} />
+            </div>
+            <div className="stat-num">{routedCount}</div>
           </div>
           <div className="card stat-card">
             <div className="stat-head">
@@ -273,15 +324,16 @@ export function DryRunPage() {
               {previewLoaded &&
                 rows.map((r) => {
                   const sel = selected.includes(r.document_id)
+                  const selectable = isApplicable(r)
                   return (
                     <tr key={r.document_id} className={sel ? 'selected' : undefined}>
                       <td>
                         <button
                           className={sel ? 'checkbox on' : 'checkbox'}
                           onClick={() => toggleSel(r.document_id)}
-                          disabled={r.blocked}
+                          disabled={!selectable}
                           aria-label={`Selecionar ${r.original_filename}`}
-                          style={{ opacity: r.blocked ? 0.35 : 1 }}
+                          style={{ opacity: selectable ? 1 : 0.35 }}
                         >
                           <Icon name="check" size={11} stroke="#fff" style={{ opacity: sel ? 1 : 0 }} />
                         </button>
@@ -293,7 +345,7 @@ export function DryRunPage() {
                         {r.dest_path ?? '—'}
                       </td>
                       <td>
-                        <CollisionBadge row={r} />
+                        <SituationBadge row={r} />
                       </td>
                     </tr>
                   )
