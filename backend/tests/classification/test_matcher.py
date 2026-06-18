@@ -1,11 +1,15 @@
-"""Testes do `matcher` local por sinais (Fase 4, D-02) — função pura, custo 0.
+"""Testes do `matcher` local por sinais (Fase 06.1, D-T1/D-T2) — função pura, custo 0.
 
-Cobre o `<behavior>` do Task 2:
-- sinais presentes na extração → confiança alta (fração presente ~1.0);
-- sinais ausentes → confiança baixa;
-- `doc_type_guess` casando com `Template.doc_type` soma pontos;
-- maior confiança vence (D-03); zona cinzenta entre top-2 → "ambíguo" (precisa IA);
+Cobre o seam `decide()` (D-03) sobre a pontuação BOOLEANA do redesign:
+- algum sinal (grupo OU) presente no full_text → confiança 1.0;
+- nenhum sinal presente → confiança 0.0;
+- `doc_type_guess` NÃO influencia a pontuação (bônus removido — D-T5/A3);
+- maior confiança vence (D-03); dois templates a 1.0 → "ambíguo" (precisa IA);
 - nenhum sinal/abaixo do piso → não casa (quarentena).
+
+Estes testes usam a forma legada plana `list[str]` (cada termo = 1 grupo OU de
+texto), exercitada via o parser forward-compatible. A suite de grupos E/OU vive em
+`test_matcher_groups.py`.
 
 `Template`/`TemplateField` são montados em memória (sem DB) — o matcher recebe os
 templates já carregados (função pura de módulo, estilo router.choose).
@@ -56,22 +60,24 @@ def test_sinais_ausentes_dao_confianca_baixa() -> None:
     assert matches[0].confidence < 0.5
 
 
-def test_doc_type_guess_casando_soma_pontos() -> None:
+def test_doc_type_guess_nao_influencia_pontuacao() -> None:
+    # Bônus por doc_type REMOVIDO (D-T5/A3): com os mesmos sinais e full_text, o
+    # doc_type (e o doc_type_guess) não deve mudar a confiança.
     signals = ["linha digitável", "cnpj", "valor", "vencimento"]
     full_text = "linha digitável e cnpj presentes"
     fields = _fields_json()
-    tpl_match = _tpl(1, doc_type="boleto", signals=signals)
-    tpl_no_match = _tpl(2, doc_type="nota_fiscal", signals=signals)
-    m_with = matcher.match_templates(
+    tpl_a = _tpl(1, doc_type="boleto", signals=signals)
+    tpl_b = _tpl(2, doc_type="nota_fiscal", signals=signals)
+    m_a = matcher.match_templates(
         fields_json=fields, full_text=full_text, doc_type_guess="boleto",
-        templates=[tpl_match],
+        templates=[tpl_a],
     )
-    m_without = matcher.match_templates(
+    m_b = matcher.match_templates(
         fields_json=fields, full_text=full_text, doc_type_guess="boleto",
-        templates=[tpl_no_match],
+        templates=[tpl_b],
     )
-    # mesma fração de sinais; só muda o doc_type → o que casa pontua mais
-    assert m_with[0].confidence > m_without[0].confidence
+    # doc_type diferente, mas ambos têm "linha digitável" no full_text → ambos 1.0
+    assert m_a[0].confidence == m_b[0].confidence == 1.0
 
 
 # --- ordenação e política de desempate ---

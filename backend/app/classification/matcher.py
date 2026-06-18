@@ -1,32 +1,56 @@
-"""Matcher local por sinais (Fase 4, D-02) — motor de classificação CUSTO ZERO.
+"""Matcher local por sinais (Fase 06.1, D-T1/D-T2) — motor CUSTO ZERO.
 
 Função PURA de módulo (estilo `extraction/router.choose`: sem DB, sem IA dentro —
-recebe os templates já carregados). É a peça que resolve a MAIORIA dos documentos
-sem custo de IA (Pitfall 5 / T-04-08): pontua cada template pela fração de sinais
-identificadores presentes na extração já feita (Fase 3).
+recebe os templates já carregados). Resolve a MAIORIA dos documentos sem custo de
+IA pontuando cada template por **avaliação booleana de grupos E/OU** de condições.
 
-Pontuação (Open Question 2): `Template.signals_json` é uma lista de termos. A
-confiança de um template = fração desses termos presentes (case-insensitive) em
-ALGUMA `key` de `fields_json` OU no `full_text`. Some-se um bônus quando
-`doc_type_guess` casa com `Template.doc_type` (atalho D-01).
+Forma canônica de `signals_json` (definida nesta fase, consumida pelos Planos 02 e
+03) — lista de GRUPOS; cada grupo é uma lista de CONDIÇÕES:
 
-Política de desempate (D-03) vive em `decide()` — separada de `match_templates`
-para preservar o seam: maior confiança ≥ limiar → casa direto (custo 0); zona
-cinzenta entre os dois melhores → "ambíguo" (a IA desempata, Plan seguinte); zero
-sinais / abaixo do piso → "quarentena" (template_id null). NÃO embutir isto em
+    [
+      [ {"mode": "texto", "value": "DANFE"}, {"mode": "regex", "value": "\\\\d{44}"} ],
+      [ {"mode": "texto", "value": "12.345.678/0001-99"} ]
+    ]
+
+Semântica booleana (D-T1):
+- **OU** entre grupos (qualquer grupo que case já basta);
+- **E** dentro do grupo (todas as condições do grupo precisam casar);
+- grupo vazio NÃO casa e ausência de grupos NÃO casa (falha fechada).
+
+Condições (D-T2), avaliadas sobre o `full_text` do documento (alvo primário A2):
+- `texto` (default): substring case-insensitive (`value.lower() in haystack`);
+- `regex`: `re.search` com `IGNORECASE`. Endurecida contra ReDoS/regex colada pelo
+  operador (single-tenant, T-06.1-01/02): teto de PATTERN (`_MAX_SIGNAL_REGEX_LEN`)
+  antes de compilar, teto de INPUT (`_MAX_HAYSTACK_LEN`) cortando o haystack antes
+  do `.search`, e `try/except re.error` → não casa (falha fechada, V5). NUNCA `eval`.
+
+O parser é forward-compatible (T-06.1-03): JSON malformado → []; a forma legada
+plana `list[str]` é mapeada para 1 grupo OU por termo (preserva "qualquer termo
+basta"); grupos são normalizados mantendo só `dict`.
+
+A confiança é BOOLEANA: 1.0 se algum grupo casa, senão 0.0. A política de desempate
+(D-03) vive em `decide()` — separada de `match_templates` para PRESERVAR o seam que
+a Fase 5 e o pipeline de revisão consomem. NÃO embutir isto em
 `extraction/router.choose` (mata o seam D-03 — Anti-Pattern).
+
+LGPD/V7: o matcher NÃO loga `full_text` nem valores de sinal.
 """
 
 import json
+import re
 from dataclasses import dataclass
 
 from app.models.template import Template
 
-# Bônus somado à fração de sinais quando `doc_type_guess` casa com `Template.doc_type`
-# (atalho D-01). Mantido pequeno para não dominar a evidência dos sinais.
-_DOC_TYPE_BONUS = 0.15
+# Teto do PATTERN de regex colado pelo operador (caracteres). Acima disto não
+# compilamos — corta patterns absurdos antes do `re.compile` (T-06.1-01).
+_MAX_SIGNAL_REGEX_LEN = 512
+# Teto do INPUT (haystack) antes de aplicar a regex. `full_text` pode ser enorme;
+# cortar o input neutraliza patterns catastróficos (ReDoS) — `re` stdlib sem timeout
+# é aceito pelo threat model single-tenant (A5/T-06.1-01).
+_MAX_HAYSTACK_LEN = 200_000
 # Margem mínima entre os dois melhores para considerar a decisão NÃO-ambígua. Abaixo
-# disto (ambos acima do piso) a IA desempata (D-03).
+# disto (ambos acima do piso) a IA desempata (D-03). PRESERVAR.
 _AMBIGUITY_MARGIN = 0.1
 
 
@@ -52,28 +76,67 @@ class MatchDecision:
     template_id: int | None
 
 
-def _signals(template: Template) -> list[str]:
-    """Lê `Template.signals_json` como lista de termos (tolerante a vazio/inválido)."""
-    raw = template.signals_json or "[]"
+def _parse_groups(raw: str | None) -> list[list[dict]]:
+    """Lê `signals_json` como lista de grupos de condições (forward-compatible).
+
+    - JSON inválido/ausente → [] (T-06.1-03: nunca propaga erro);
+    - forma legada plana `list[str]` → cada termo vira `[{"mode":"texto","value":s}]`
+      (1 grupo OU por termo, preserva "qualquer termo basta");
+    - forma de grupos `list[list[dict]]` → normaliza mantendo só os `dict`.
+    """
     try:
-        parsed = json.loads(raw)
+        parsed = json.loads(raw or "[]")
     except (ValueError, TypeError):
         return []
     if not isinstance(parsed, list):
         return []
-    return [str(s) for s in parsed]
+
+    # Forma legada plana: lista de strings → 1 grupo OU por termo.
+    if all(isinstance(item, str) for item in parsed):
+        return [[{"mode": "texto", "value": item}] for item in parsed]
+
+    # Forma de grupos: lista de listas de condições (dict).
+    groups: list[list[dict]] = []
+    for group in parsed:
+        if isinstance(group, list):
+            groups.append([cond for cond in group if isinstance(cond, dict)])
+    return groups
 
 
-def _haystack(fields_json: str, full_text: str) -> str:
-    """Junta as `key` dos pares extraídos + o full_text num texto único (lower)."""
-    keys: list[str] = []
-    try:
-        pairs = json.loads(fields_json or "[]")
-        if isinstance(pairs, list):
-            keys = [str(p.get("key", "")) for p in pairs if isinstance(p, dict)]
-    except (ValueError, TypeError):
-        keys = []
-    return (" ".join(keys) + " " + (full_text or "")).lower()
+def _condition_matches(cond: dict, haystack: str) -> bool:
+    """Avalia UMA condição contra o haystack (já em lower). Falha fechada.
+
+    `texto`/default: substring case-insensitive. `regex`: `re.search` IGNORECASE
+    com teto de pattern + teto de input + `try/except re.error` (V5/T-06.1-01/02).
+    Valor vazio → não casa. NUNCA `eval` (dispatch explícito por etiqueta).
+    """
+    value = str(cond.get("value", ""))
+    mode = cond.get("mode", "texto")
+
+    if mode == "regex":
+        if not value or len(value) > _MAX_SIGNAL_REGEX_LEN:
+            return False
+        try:
+            pattern = re.compile(value, re.IGNORECASE)
+        except re.error:
+            return False
+        return pattern.search(haystack[:_MAX_HAYSTACK_LEN]) is not None
+
+    # "texto" e desconhecidos: substring case-insensitive.
+    needle = value.strip().lower()
+    if not needle:
+        return False
+    return needle in haystack
+
+
+def _group_matches(group: list[dict], haystack: str) -> bool:
+    """E: todas as condições do grupo casam. Grupo vazio NÃO casa (falha fechada)."""
+    return bool(group) and all(_condition_matches(cond, haystack) for cond in group)
+
+
+def _template_matches(groups: list[list[dict]], haystack: str) -> bool:
+    """OU: algum grupo casa. Sem grupos NÃO casa (falha fechada)."""
+    return any(_group_matches(group, haystack) for group in groups)
 
 
 def match_templates(
@@ -83,27 +146,25 @@ def match_templates(
     doc_type_guess: str,
     templates: list[Template],
 ) -> list[TemplateMatch]:
-    """Pontua cada template por sinais + bônus de doc_type (D-02). PURA.
+    """Avalia cada template por grupos E/OU texto|regex (D-T1/D-T2). PURA.
 
-    Confiança = fração de sinais presentes (case-insensitive em key/full_text) +
-    `_DOC_TYPE_BONUS` se `doc_type_guess` casar com `Template.doc_type` (limitada a
-    1.0). Resultado ORDENADO por confiança desc — maior vence (D-03). Templates
-    sem sinais ficam com confiança 0 (só o eventual bônus).
+    Confiança BOOLEANA: 1.0 se algum grupo do template casa o `full_text`, senão
+    0.0. Resultado ORDENADO por confiança desc — maior vence (D-03).
+
+    `doc_type_guess` é mantido na assinatura por compat (a Fase 5 e `stage.py`
+    passam o parâmetro), mas é IGNORADO: o doc_type saiu do formulário de templates
+    (D-T5/A3) e o bônus por doc_type foi removido. `fields_json` também não compõe
+    mais o alvo dos sinais — os sinais casam contra o `full_text` (A2/D-T2).
     """
-    haystack = _haystack(fields_json, full_text)
-    guess = (doc_type_guess or "").strip().lower()
+    del fields_json, doc_type_guess  # mantidos na assinatura por compat; não usados.
+
+    haystack = (full_text or "").lower()
 
     matches: list[TemplateMatch] = []
     for tpl in templates:
-        signals = _signals(tpl)
-        if signals:
-            present = sum(1 for s in signals if s.strip().lower() in haystack)
-            score = present / len(signals)
-        else:
-            score = 0.0
-        if guess and tpl.doc_type and guess == tpl.doc_type.strip().lower():
-            score += _DOC_TYPE_BONUS
-        matches.append(TemplateMatch(template_id=tpl.id, confidence=min(score, 1.0)))
+        groups = _parse_groups(tpl.signals_json)
+        confidence = 1.0 if _template_matches(groups, haystack) else 0.0
+        matches.append(TemplateMatch(template_id=tpl.id, confidence=confidence))
 
     matches.sort(key=lambda m: m.confidence, reverse=True)
     return matches
