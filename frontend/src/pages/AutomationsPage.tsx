@@ -1,13 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
-  PipelineStep,
   PipelineStepCreate,
-  RuleConjunction,
-  RuleOperator,
-  RouteTarget,
   StepActionType,
-  StepFilterCreate,
-  StepFilterType,
+  Template,
 } from '../types'
 import { Icon } from '../components/Icon'
 import type { IconName } from '../components/Icon'
@@ -18,268 +13,253 @@ import {
   useDeletePipeline,
   useUpdatePipeline,
 } from '../hooks/useAutomations'
+import { useTemplates } from '../hooks/useTemplates'
 
-// ─── Vocabulário travado (06-UI-SPEC §Vocabulário) ────────────────────────────
+// ─── Construtor de PIPELINE (mockup 06-MOCKUP-automacoes.html, D-12..D-22) ─────
+//
+// Cada documento percorre TODAS as etapas cujo filtro casa, na ORDEM definida pelo
+// usuário (D-12). 4 ações no v1 (D-13/D-17): Identificar arquivo (gate por extensão
+// digitável), Identificar tipo (gate por template), Renomear (padrão com tokens),
+// Mover (pasta destino com tokens). A ação "Decidir tratativa" (route) foi REMOVIDA
+// do v1 (D-22) — não é exposta aqui.
+//
+// Edição INLINE por etapa (espelha o mockup): cada etapa renderiza seus próprios
+// campos no card; o "Salvar" persiste a lista inteira de etapas (PATCH substitui a
+// coleção). Reordenação por DRAG-AND-DROP nativo + botões ↑/↓ (D-20). Os chips de
+// token são os CAMPOS REAIS do template escolhido no gate "Identificar tipo" do
+// pipeline (D-19), buscados via API. Paths normalizam aspas ao sair do campo (D-21).
+//
+// Sem visualizador de documento; valores como texto puro (0 dangerouslySetInnerHTML).
 
-// As 4 AÇÕES atômicas de uma etapa (D-13), com rótulo pt-BR, ícone e hint do
-// Copywriting Contract.
-const ACTIONS: {
-  value: StepActionType
+// ─── Catálogo das 4 ações do v1 (D-13/D-17) ───────────────────────────────────
+
+type EditableAction = 'identify_file' | 'identify_type' | 'rename' | 'move'
+
+interface ActionMeta {
+  value: EditableAction
   label: string
   icon: IconName
-  hint: string
-}[] = [
-  {
-    value: 'identify_type',
-    label: 'Identificar tipo',
-    icon: 'grid',
-    hint: 'Classifica o documento contra um template. As etapas seguintes podem filtrar por esse tipo.',
-  },
-  {
-    value: 'rename',
-    label: 'Renomear',
-    icon: 'docMini',
-    hint: 'Renomeia o arquivo seguindo um padrão de nome com tokens dos campos.',
-  },
-  {
-    value: 'move',
-    label: 'Mover',
-    icon: 'folder',
-    hint: 'Move o arquivo para uma pasta de destino que você define com tokens dos campos.',
-  },
-  {
-    value: 'route',
-    label: 'Decidir tratativa',
-    icon: 'arrowRight',
-    hint: 'Envia o documento para revisão, marca para não tratar ou ignora — e interrompe o pipeline.',
-  },
+  // cor sólida do quadradinho do tipo (espelha k-fa/k-id/k-rn/k-mv do mockup)
+  dot: string
+}
+
+const ACTIONS: ActionMeta[] = [
+  { value: 'identify_file', label: 'Identificar arquivo', icon: 'filter', dot: 'var(--st-leitura)' },
+  { value: 'identify_type', label: 'Identificar tipo', icon: 'grid', dot: 'var(--st-encontrado)' },
+  { value: 'rename', label: 'Renomear', icon: 'docMini', dot: 'var(--st-quarentena)' },
+  { value: 'move', label: 'Mover', icon: 'folder', dot: 'var(--st-tratado)' },
 ]
 
-const ACTION_LABEL: Record<StepActionType, string> = {
-  identify_type: 'Identificar tipo',
-  rename: 'Renomear',
-  move: 'Mover',
-  route: 'Decidir tratativa',
+const ACTION_META: Record<EditableAction, ActionMeta> = {
+  identify_file: ACTIONS[0],
+  identify_type: ACTIONS[1],
+  rename: ACTIONS[2],
+  move: ACTIONS[3],
 }
 
-const ACTION_ICON: Record<StepActionType, IconName> = {
-  identify_type: 'grid',
-  rename: 'docMini',
-  move: 'folder',
-  route: 'arrowRight',
+// Rótulo de qualquer ação (inclui `route` legado, que não é editável na UI v1).
+function actionLabel(action: StepActionType): string {
+  if (action in ACTION_META) return ACTION_META[action as EditableAction].label
+  return 'Etapa'
 }
 
-// Tipos de filtro de entrada (D-14) → rótulo pt-BR no select.
-const FILTER_TYPES: { value: StepFilterType; label: string }[] = [
-  { value: 'field', label: 'Campo extraído' },
-  { value: 'source_folder', label: 'Pasta de origem' },
-  { value: 'extension', label: 'Tipo de arquivo (extensão)' },
-  { value: 'filename', label: 'Nome do arquivo' },
-  { value: 'size', label: 'Tamanho do arquivo' },
-  { value: 'template', label: 'Tipo classificado' },
-]
+// ─── Estado de rascunho do pipeline (draft) ───────────────────────────────────
 
-const FILTER_LABEL: Record<StepFilterType, string> = {
-  field: 'Campo extraído',
-  source_folder: 'Pasta de origem',
-  extension: 'Tipo de arquivo',
-  filename: 'Nome do arquivo',
-  size: 'Tamanho',
-  template: 'Tipo classificado',
+let nextKey = 1
+
+// Uma etapa em edição. Mantemos os params em campos planos (mais fácil de editar) e
+// serializamos conforme a ação no submit. Cada etapa carrega uma `key` estável para
+// o React (drag-and-drop reordena o array; ids do backend não bastam para etapas
+// novas ainda-não-persistidas).
+interface StepDraft {
+  key: number
+  action_type: EditableAction
+  active: boolean
+  // identify_file
+  extensions: string
+  source_folder: string
+  // identify_type
+  template_id: string
+  // rename
+  name_pattern: string
+  // move
+  folder_pattern: string
 }
 
-const OPERATORS: { value: RuleOperator; label: string }[] = [
-  { value: 'eq', label: '=' },
-  { value: 'gt', label: '>' },
-  { value: 'lt', label: '<' },
-  { value: 'contains', label: 'contém' },
-]
-
-const OP_LABEL: Record<RuleOperator, string> = {
-  eq: '=',
-  gt: '>',
-  lt: '<',
-  contains: 'contém',
-}
-
-// Alvos da ação route (Decidir tratativa) → rótulo pt-BR.
-const ROUTE_TARGETS: { value: RouteTarget; label: string }[] = [
-  { value: 'em_revisao', label: 'Enviar para revisão' },
-  { value: 'nao_tratar', label: 'Não tratar' },
-  { value: 'ignorar', label: 'Ignorar' },
-]
-
-const ROUTE_LABEL: Record<string, string> = {
-  em_revisao: 'Enviar para revisão',
-  nao_tratar: 'Não tratar',
-  ignorar: 'Ignorar',
-}
-
-// ─── Editor de token (S3): pré-visualização ao vivo ───────────────────────────
-
-// Tokens {campo} de exemplo oferecidos no editor de padrão (S3). Inseríveis por
-// clique. O backend resolve com os campos reais do documento; aqui é só auxílio de
-// composição + a pré-visualização usa dados de exemplo.
-const SAMPLE_TOKENS = ['cliente', 'numero', 'data', 'tipo', 'valor']
-
-// Dados de exemplo para a pré-visualização ao vivo (S3). NÃO são dados reais — só
-// ilustram o padrão resolvido. `{data:aaaa-mm}` é tratado como sufixo de formato.
-const SAMPLE_VALUES: Record<string, string> = {
-  cliente: 'ACME Ltda',
-  numero: '12345',
-  data: '2026-06',
-  tipo: 'holerite',
-  valor: '3500',
-}
-
-// Sanitização: remove caracteres inválidos no Windows (D-08). Espelha a regra do
-// backend (naming) só para a PRÉ-VISUALIZAÇÃO — a autoridade é o servidor.
-const WINDOWS_INVALID = /[<>:"|?* -]/g
-
-// Lista de tokens ausentes no padrão (campos que podem vir vazios — S3 microcopy).
-function missingTokens(pattern: string): string[] {
-  const found = new Set<string>()
-  for (const m of pattern.matchAll(/\{([^}]+)\}/g)) {
-    const name = String(m[1]).split(':')[0].trim()
-    if (!(name in SAMPLE_VALUES)) found.add(name)
+function newStepDraft(action: EditableAction): StepDraft {
+  return {
+    key: nextKey++,
+    action_type: action,
+    active: true,
+    extensions: '',
+    source_folder: '',
+    template_id: '',
+    name_pattern: '',
+    folder_pattern: '',
   }
-  return [...found]
 }
 
-function resolvePattern(pattern: string): string {
-  // Substitui {campo} e {campo:fmt} pelos valores de exemplo; sanitiza cada
-  // segmento de nome (não as barras de pasta) contra caracteres inválidos no Windows.
+// Converte uma etapa persistida (PipelineStep) em rascunho editável. Etapas com ação
+// `route` (legado D-22) são mapeadas para um rascunho neutro mas marcadas (filtradas
+// fora do editor — preservamos no submit via stepToCreate sobre o original).
+function persistedToDraft(s: {
+  action_type: StepActionType
+  active: boolean
+  params: Record<string, unknown>
+}): StepDraft {
+  const p = s.params ?? {}
+  const action: EditableAction =
+    (s.action_type in ACTION_META ? s.action_type : 'identify_file') as EditableAction
+  const exts = p.extensions
+  return {
+    key: nextKey++,
+    action_type: action,
+    active: s.active,
+    extensions: Array.isArray(exts)
+      ? exts.join(', ')
+      : typeof exts === 'string'
+        ? exts
+        : '',
+    source_folder: typeof p.source_folder === 'string' ? p.source_folder : '',
+    template_id: p.template_id != null ? String(p.template_id) : '',
+    name_pattern: typeof p.name_pattern === 'string' ? p.name_pattern : '',
+    folder_pattern: typeof p.folder_pattern === 'string' ? p.folder_pattern : '',
+  }
+}
+
+// Serializa um rascunho → body de etapa para a API (params conforme a ação, D-13).
+function draftToCreate(d: StepDraft): PipelineStepCreate {
+  const params: Record<string, unknown> = {}
+  const filters: PipelineStepCreate['filters'] = []
+  if (d.action_type === 'identify_file') {
+    // D-17: extensões digitáveis, múltiplas (vírgula/espaço). O backend
+    // (normalize_extensions) tolera string ou lista; enviamos a string crua.
+    params.extensions = d.extensions.trim()
+    const folder = stripQuotes(d.source_folder).trim()
+    if (folder) {
+      params.source_folder = folder
+      // Filtro opcional de pasta de origem (D-14): só seguem arquivos dessa pasta.
+      filters.push({ filter_type: 'source_folder', operator: 'eq', value: folder, field_name: null })
+    }
+  }
+  if (d.action_type === 'identify_type') {
+    const n = Number(d.template_id)
+    if (Number.isFinite(n) && d.template_id.trim() !== '') params.template_id = n
+  }
+  if (d.action_type === 'rename') params.name_pattern = d.name_pattern.trim()
+  if (d.action_type === 'move') params.folder_pattern = stripQuotes(d.folder_pattern).trim()
+  return {
+    action_type: d.action_type,
+    conjunction: 'and',
+    params,
+    active: d.active,
+    filters,
+  }
+}
+
+// ─── Tokens e pré-visualização (D-19) ─────────────────────────────────────────
+
+// Remove aspas (simples/duplas) nas pontas — espelha o strip_quotes do backend (D-21).
+function stripQuotes(value: string): string {
+  return value.trim().replace(/^["']+|["']+$/g, '')
+}
+
+// Sanitiza um valor de exemplo contra caracteres inválidos no Windows (D-08), só para
+// a pré-visualização. A autoridade é o backend.
+const WINDOWS_INVALID = /[<>:"|?*]/g
+
+// Valor de exemplo de um campo do template (placeholder/hint, ou o nome capitalizado).
+function sampleValue(field: { name: string; hint: string | null }): string {
+  if (field.hint && field.hint.trim()) return field.hint.trim()
+  return field.name
+}
+
+// Resolve um padrão {campo} com valores de exemplo dos campos do template (D-19).
+function resolvePattern(
+  pattern: string,
+  fields: { name: string; hint: string | null }[],
+): string {
+  const byName = new Map(fields.map((f) => [f.name, sampleValue(f)]))
   return pattern.replace(/\{([^}]+)\}/g, (_m, token: string) => {
     const name = String(token).split(':')[0].trim()
-    const value = SAMPLE_VALUES[name] ?? `«${name}?»`
+    const value = byName.get(name)
+    if (value === undefined) return `⟨${name}?⟩`
     return value.replace(WINDOWS_INVALID, '')
   })
 }
 
-// ─── Estado do form (draft) ───────────────────────────────────────────────────
+// ─── Estilos inline reutilizados ──────────────────────────────────────────────
 
-const labelStyle = { fontSize: 12, fontWeight: 600, color: 'var(--text-2)' } as const
-const hintStyle = { fontSize: 12, color: 'var(--text-3)' } as const
-
-type FilterDraft = StepFilterCreate & { key: number }
-
-type StepDraft = {
-  key: number
-  action_type: StepActionType
-  conjunction: RuleConjunction
-  active: boolean
-  filters: FilterDraft[]
-  // params em campos planos para o form; serializados conforme a ação no submit.
-  name_pattern: string
-  folder_pattern: string
-  template_id: string
-  route_target: RouteTarget
+const lblStyle = {
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '.3px',
+  textTransform: 'uppercase' as const,
+  color: 'var(--text-3)',
+  marginBottom: 6,
+  display: 'block',
 }
-
-let nextKey = 1
-
-const newFilter = (): FilterDraft => ({
-  key: nextKey++,
-  filter_type: 'field',
-  operator: 'eq',
-  value: '',
-  field_name: '',
-})
-
-const newStepDraft = (): StepDraft => ({
-  key: nextKey++,
-  action_type: 'identify_type',
-  conjunction: 'and',
-  active: true,
-  filters: [],
-  name_pattern: '',
-  folder_pattern: '',
-  template_id: '',
-  route_target: 'em_revisao',
-})
-
-// Converte uma StepDraft → o body PipelineStepCreate (serializando params).
-function draftToStepCreate(d: StepDraft): PipelineStepCreate {
-  const params: Record<string, unknown> = {}
-  if (d.action_type === 'rename') params.name_pattern = d.name_pattern.trim()
-  if (d.action_type === 'move') params.folder_pattern = d.folder_pattern.trim()
-  if (d.action_type === 'identify_type') {
-    const n = Number(d.template_id)
-    if (Number.isFinite(n)) params.template_id = n
-  }
-  if (d.action_type === 'route') params.target = d.route_target
-  return {
-    action_type: d.action_type,
-    conjunction: d.conjunction,
-    params,
-    active: d.active,
-    filters: d.filters
-      .filter((f) => f.value.trim() || f.filter_type === 'field')
-      .map((f) => ({
-        filter_type: f.filter_type,
-        operator: f.operator,
-        value: f.value.trim(),
-        field_name: f.filter_type === 'field' ? (f.field_name?.trim() || null) : null,
-      })),
-  }
-}
-
-// Converte uma etapa persistida → StepDraft (para edição).
-function stepToDraft(s: PipelineStep): StepDraft {
-  const p = s.params ?? {}
-  return {
-    key: nextKey++,
-    action_type: s.action_type,
-    conjunction: s.conjunction,
-    active: s.active,
-    filters: s.filters.map((f) => ({
-      key: nextKey++,
-      filter_type: f.filter_type,
-      operator: f.operator,
-      value: f.value,
-      field_name: f.field_name,
-    })),
-    name_pattern: typeof p.name_pattern === 'string' ? p.name_pattern : '',
-    folder_pattern: typeof p.folder_pattern === 'string' ? p.folder_pattern : '',
-    template_id: p.template_id != null ? String(p.template_id) : '',
-    route_target: (p.target as RouteTarget) ?? 'em_revisao',
-  }
-}
-
-// Resumo legível dos params de uma etapa (S1, card).
-function paramSummary(s: PipelineStep): string {
-  const p = s.params ?? {}
-  if (s.action_type === 'rename') return String(p.name_pattern ?? '—')
-  if (s.action_type === 'move') return String(p.folder_pattern ?? '—')
-  if (s.action_type === 'identify_type')
-    return p.template_id != null ? `template #${p.template_id}` : '—'
-  if (s.action_type === 'route') return ROUTE_LABEL[String(p.target)] ?? '—'
-  return '—'
-}
-
-// Resumo de um filtro de etapa (S1, pílula neutra).
-function filterSummary(f: PipelineStep['filters'][number]): string {
-  const left = f.filter_type === 'field' ? f.field_name || 'campo' : FILTER_LABEL[f.filter_type]
-  return `${left} ${OP_LABEL[f.operator]} ${f.value}`
-}
+const inpStyle = {
+  width: '100%',
+  height: 36,
+  padding: '0 11px',
+  border: '1px solid var(--border-strong)',
+  borderRadius: 'var(--radius-sm)',
+  background: 'var(--surface)',
+  color: 'var(--text)',
+  fontSize: 13,
+  fontFamily: 'inherit',
+  outline: 'none',
+} as const
+const monoInpStyle = { ...inpStyle, fontFamily: 'var(--font-mono)', fontSize: 12.5 } as const
+const hintStyle = { fontSize: 11.5, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 } as const
 
 export function AutomationsPage() {
   const pipelinesQuery = useAutomations()
+  const templatesQuery = useTemplates()
   const createPipeline = useCreatePipeline()
   const updatePipeline = useUpdatePipeline()
   const deletePipeline = useDeletePipeline()
 
-  // Modelo v1: UM pipeline (o primeiro). O construtor edita suas ETAPAS. Se não
-  // existir, o primeiro "Salvar etapa" cria o pipeline com a etapa.
+  // Modelo v1: UM pipeline (o primeiro). O construtor edita suas ETAPAS.
   const pipeline = pipelinesQuery.data?.[0] ?? null
-  const steps = pipeline ? [...pipeline.steps].sort((a, b) => a.position - b.position) : []
 
-  // Form de etapa: editIndex = índice da etapa em edição, ou -1 = nova etapa, ou
-  // null = fechado.
-  const [draft, setDraft] = useState<StepDraft | null>(null)
-  const [editIndex, setEditIndex] = useState<number | null>(null)
-  const [confirmRemove, setConfirmRemove] = useState<number | null>(null)
+  // Rascunho local das etapas (fonte de verdade do editor). Sincronizado com o
+  // backend ao carregar/alterar o pipeline. Drag-and-drop e edição mexem aqui;
+  // "Salvar pipeline" persiste a lista inteira.
+  const [steps, setSteps] = useState<StepDraft[]>([])
+  const [dirty, setDirty] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [confirmRemove, setConfirmRemove] = useState<number | null>(null)
+  // posição arrastada atualmente (índice) para o feedback visual.
+  const dragIndex = useRef<number | null>(null)
+  const [dragOver, setDragOver] = useState<number | null>(null)
+
+  // Hidrata o rascunho a partir do backend quando o pipeline carrega/muda, exceto se
+  // houver alterações locais não salvas (dirty) — não sobrescreve o trabalho.
+  const pipelineSig = pipeline
+    ? `${pipeline.id}:${pipeline.steps.map((s) => `${s.id}@${s.position}`).join(',')}`
+    : 'none'
+  useEffect(() => {
+    if (dirty) return
+    if (pipeline) {
+      const ordered = [...pipeline.steps].sort((a, b) => a.position - b.position)
+      setSteps(ordered.map(persistedToDraft))
+    } else {
+      setSteps([])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelineSig])
+
+  const templates = templatesQuery.data ?? []
+
+  // D-19: o template "vigente" do pipeline = o do PRIMEIRO gate "Identificar tipo".
+  // Os chips de campo (renomear/mover) vêm dos campos desse template.
+  const activeTemplate: Template | null = useMemo(() => {
+    const gate = steps.find((s) => s.action_type === 'identify_type' && s.template_id.trim())
+    if (!gate) return null
+    return templates.find((t) => String(t.id) === gate.template_id) ?? null
+  }, [steps, templates])
 
   const isInitialLoading = pipelinesQuery.isLoading && !pipelinesQuery.data
   const isError = pipelinesQuery.isError && !pipelinesQuery.data
@@ -288,141 +268,452 @@ export function AutomationsPage() {
   const saving = createPipeline.isPending || updatePipeline.isPending
   const busy = saving || deletePipeline.isPending
 
-  // ── Persistência: salva a lista inteira de etapas (substitui a coleção) ──
-  // `nextSteps` = StepCreate[] na ordem desejada; cria o pipeline se não existir.
-  const persistSteps = (nextSteps: PipelineStepCreate[], onDone?: () => void) => {
-    if (pipeline) {
-      updatePipeline.mutate(
-        { id: pipeline.id, body: { steps: nextSteps } },
-        { onSuccess: onDone, onError: () => setFormError('Não foi possível salvar a etapa. Confira os dados e tente novamente.') },
-      )
-    } else {
-      createPipeline.mutate(
-        { name: 'Pipeline de automação', active: true, steps: nextSteps },
-        { onSuccess: onDone, onError: () => setFormError('Não foi possível salvar a etapa. Confira os dados e tente novamente.') },
-      )
-    }
-  }
-
-  // Lista atual de etapas como StepCreate[] (base para inserir/editar/reordenar).
-  const currentAsCreate = (): PipelineStepCreate[] =>
-    steps.map((s) => ({
-      action_type: s.action_type,
-      conjunction: s.conjunction,
-      params: s.params,
-      active: s.active,
-      filters: s.filters.map((f) => ({
-        filter_type: f.filter_type,
-        operator: f.operator,
-        value: f.value,
-        field_name: f.field_name,
-      })),
-    }))
-
-  const openAdd = () => {
-    setFormError(null)
-    setEditIndex(-1)
-    setDraft(newStepDraft())
-  }
-
-  const openEdit = (index: number) => {
-    setFormError(null)
-    setEditIndex(index)
-    setDraft(stepToDraft(steps[index]))
-  }
-
-  const closeForm = () => {
-    setDraft(null)
-    setEditIndex(null)
+  // ── Mutadores do rascunho ──
+  const patchStep = (key: number, patch: Partial<StepDraft>) => {
+    setSteps((list) => list.map((s) => (s.key === key ? { ...s, ...patch } : s)))
+    setDirty(true)
     setFormError(null)
   }
 
-  // ── Mutadores do draft ──
-  const patchFilter = (key: number, patch: Partial<FilterDraft>) => {
-    if (!draft) return
-    setDraft({
-      ...draft,
-      filters: draft.filters.map((f) => (f.key === key ? { ...f, ...patch } : f)),
-    })
-  }
-  const addFilter = () => {
-    if (!draft) return
-    setDraft({ ...draft, filters: [...draft.filters, newFilter()] })
-  }
-  const removeFilter = (key: number) => {
-    if (!draft) return
-    setDraft({ ...draft, filters: draft.filters.filter((f) => f.key !== key) })
-  }
-
-  // Insere um token {campo} no fim do padrão indicado (S3).
-  const insertToken = (target: 'name_pattern' | 'folder_pattern', token: string) => {
-    if (!draft) return
-    setDraft({ ...draft, [target]: `${draft[target]}{${token}}` })
-  }
-
-  const submitForm = () => {
-    if (!draft || editIndex == null) return
-    // Validação por ação (espelha o backend; o servidor é a autoridade).
-    if (draft.action_type === 'rename' && !draft.name_pattern.trim()) {
-      setFormError('Defina o padrão de nome (use tokens {campo}).')
-      return
-    }
-    if (draft.action_type === 'move' && !draft.folder_pattern.trim()) {
-      setFormError('Defina o padrão da pasta de destino (use tokens {campo}).')
-      return
-    }
-    if (draft.action_type === 'identify_type' && !draft.template_id.trim()) {
-      setFormError('Informe o template para identificar o tipo.')
-      return
-    }
-    if (draft.filters.some((f) => f.filter_type === 'field' && !f.field_name?.trim())) {
-      setFormError('Informe o campo de cada filtro do tipo "Campo extraído".')
-      return
-    }
+  const addStep = (action: EditableAction) => {
+    setSteps((list) => [...list, newStepDraft(action)])
+    setDirty(true)
     setFormError(null)
-
-    const list = currentAsCreate()
-    const stepBody = draftToStepCreate(draft)
-    if (editIndex === -1) {
-      list.push(stepBody)
-    } else {
-      list[editIndex] = stepBody
-    }
-    persistSteps(list, closeForm)
   }
 
-  const confirmDelete = () => {
-    if (confirmRemove == null) return
-    const list = currentAsCreate().filter((_, i) => i !== confirmRemove)
-    persistSteps(list, () => setConfirmRemove(null))
+  const removeStep = (index: number) => {
+    setSteps((list) => list.filter((_, i) => i !== index))
+    setDirty(true)
+    setConfirmRemove(null)
   }
 
-  // Ativar/pausar uma etapa direto do card (sem abrir o editor).
-  const toggleActive = (index: number) => {
-    const list = currentAsCreate()
-    list[index] = { ...list[index], active: !list[index].active }
-    persistSteps(list)
-  }
-
-  // Reordenação por botões ↑/↓ (code-and-config, sem lib de arrastar). Troca a
-  // etapa com a vizinha (D-12).
-  const move = (index: number, dir: -1 | 1) => {
+  // Reordenação por botões ↑/↓ (acessibilidade, D-20).
+  const moveStep = (index: number, dir: -1 | 1) => {
     const j = index + dir
     if (j < 0 || j >= steps.length) return
-    const list = currentAsCreate()
-    ;[list[index], list[j]] = [list[j], list[index]]
-    persistSteps(list)
+    setSteps((list) => {
+      const next = list.slice()
+      ;[next[index], next[j]] = [next[j], next[index]]
+      return next
+    })
+    setDirty(true)
   }
 
-  // Padrão da etapa em edição usado na pré-visualização (S3): nome p/ rename, pasta
-  // p/ move.
-  const previewPattern =
-    draft?.action_type === 'rename'
-      ? draft.name_pattern
-      : draft?.action_type === 'move'
-        ? draft.folder_pattern
-        : ''
-  const previewMissing = previewPattern ? missingTokens(previewPattern) : []
+  // ── Drag-and-drop nativo (HTML5, sem libs — D-20) ──
+  const onDragStart = (index: number) => (e: React.DragEvent) => {
+    dragIndex.current = index
+    e.dataTransfer.effectAllowed = 'move'
+  }
+  const onDragOver = (index: number) => (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragIndex.current != null && dragIndex.current !== index) setDragOver(index)
+  }
+  const onDrop = (index: number) => (e: React.DragEvent) => {
+    e.preventDefault()
+    const from = dragIndex.current
+    setDragOver(null)
+    dragIndex.current = null
+    if (from == null || from === index) return
+    setSteps((list) => {
+      const next = list.slice()
+      const [moved] = next.splice(from, 1)
+      next.splice(index, 0, moved)
+      return next
+    })
+    setDirty(true)
+  }
+  const onDragEnd = () => {
+    dragIndex.current = null
+    setDragOver(null)
+  }
+
+  // ── Persistência: valida e salva a lista inteira de etapas (D-12) ──
+  const validate = (): string | null => {
+    for (const s of steps) {
+      if (s.action_type === 'identify_file' && !s.extensions.trim()) {
+        return 'Em "Identificar arquivo", informe ao menos uma extensão (ex.: .pdf, .xlsx).'
+      }
+      if (s.action_type === 'identify_type' && !s.template_id.trim()) {
+        return 'Em "Identificar tipo", escolha um template.'
+      }
+      if (s.action_type === 'rename' && !s.name_pattern.trim()) {
+        return 'Em "Renomear", defina o padrão do nome (use os campos do template).'
+      }
+      if (s.action_type === 'move' && !stripQuotes(s.folder_pattern).trim()) {
+        return 'Em "Mover", defina a pasta de destino.'
+      }
+    }
+    return null
+  }
+
+  const save = () => {
+    const err = validate()
+    if (err) {
+      setFormError(err)
+      return
+    }
+    setFormError(null)
+    const body = steps.map(draftToCreate)
+    const onSuccess = () => setDirty(false)
+    const onError = () =>
+      setFormError('Não foi possível salvar o pipeline. Confira os dados e tente novamente.')
+    if (pipeline) {
+      updatePipeline.mutate({ id: pipeline.id, body: { steps: body } }, { onSuccess, onError })
+    } else {
+      createPipeline.mutate(
+        { name: 'Pipeline de automação', active: true, steps: body },
+        { onSuccess, onError },
+      )
+    }
+  }
+
+  const discard = () => {
+    setDirty(false)
+    setFormError(null)
+    if (pipeline) {
+      const ordered = [...pipeline.steps].sort((a, b) => a.position - b.position)
+      setSteps(ordered.map(persistedToDraft))
+    } else {
+      setSteps([])
+    }
+  }
+
+  // Liga/desliga o pipeline inteiro (header switch). Persiste direto.
+  const togglePipelineActive = () => {
+    if (!pipeline) return
+    updatePipeline.mutate({ id: pipeline.id, body: { active: !pipeline.active } })
+  }
+
+  // Insere um token {campo} no fim do padrão da etapa (D-19).
+  const insertToken = (key: number, field: 'name_pattern' | 'folder_pattern', token: string) => {
+    setSteps((list) =>
+      list.map((s) => (s.key === key ? { ...s, [field]: `${s[field]}{${token}}` } : s)),
+    )
+    setDirty(true)
+  }
+
+  // ─── Render de UMA etapa (card) ─────────────────────────────────────────────
+  const renderStep = (s: StepDraft, index: number) => {
+    const meta = ACTION_META[s.action_type]
+    const isOver = dragOver === index
+    return (
+      <div
+        key={s.key}
+        className="card"
+        draggable
+        onDragStart={onDragStart(index)}
+        onDragOver={onDragOver(index)}
+        onDrop={onDrop(index)}
+        onDragEnd={onDragEnd}
+        style={{
+          position: 'relative',
+          padding: '14px 14px 14px 64px',
+          background: 'var(--surface-2)',
+          opacity: s.active ? 1 : 0.5,
+          boxShadow: isOver ? 'inset 0 3px 0 var(--accent)' : undefined,
+          borderColor: isOver ? 'var(--accent)' : undefined,
+        }}
+      >
+        {/* alça de arraste */}
+        <div
+          title="Arraste para reordenar"
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: 12,
+            top: 14,
+            width: 20,
+            color: 'var(--text-3)',
+            cursor: 'grab',
+            fontSize: 15,
+            lineHeight: 1,
+            userSelect: 'none',
+          }}
+        >
+          ⠿
+        </div>
+        {/* número da etapa */}
+        <span
+          className="chip-count"
+          style={{
+            position: 'absolute',
+            left: 34,
+            top: 14,
+            width: 24,
+            height: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--accent-soft)',
+            color: 'var(--accent)',
+            borderRadius: 7,
+          }}
+        >
+          {index + 1}
+        </span>
+
+        {/* topo: tipo + ações ↑/↓/✕ */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+          <span
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 6,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: meta.dot,
+              color: '#fff',
+              flex: 'none',
+            }}
+          >
+            <Icon name={meta.icon} size={13} stroke="#fff" />
+          </span>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>{meta.label}</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Switch
+              on={s.active}
+              onToggle={() => patchStep(s.key, { active: !s.active })}
+              title={s.active ? 'Pausar etapa' : 'Ativar etapa'}
+            />
+            <button
+              className="row-action"
+              aria-label="Mover etapa para cima"
+              title="Mover etapa para cima"
+              disabled={index === 0}
+              onClick={() => moveStep(index, -1)}
+              style={{ opacity: index === 0 ? 0.35 : 1 }}
+            >
+              <Icon name="arrowUp" size={15} />
+            </button>
+            <button
+              className="row-action"
+              aria-label="Mover etapa para baixo"
+              title="Mover etapa para baixo"
+              disabled={index === steps.length - 1}
+              onClick={() => moveStep(index, 1)}
+              style={{ opacity: index === steps.length - 1 ? 0.35 : 1 }}
+            >
+              <Icon name="arrowDown" size={15} />
+            </button>
+            <button
+              className="row-action"
+              aria-label="Remover etapa"
+              title="Remover etapa"
+              style={{ color: 'var(--st-erro)' }}
+              onClick={() => setConfirmRemove(index)}
+            >
+              <Icon name="alert" size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* corpo conforme a ação */}
+        {s.action_type === 'identify_file' && (
+          <>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 210 }}>
+                <span style={lblStyle}>Tipo de arquivo (extensão)</span>
+                <input
+                  className="cell-mono"
+                  style={monoInpStyle}
+                  placeholder=".pdf, .xlsx"
+                  value={s.extensions}
+                  onChange={(e) => patchStep(s.key, { extensions: e.target.value })}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 210 }}>
+                <span style={lblStyle}>Pasta de origem (opcional)</span>
+                <input
+                  className="cell-mono"
+                  style={monoInpStyle}
+                  placeholder="Downloads/"
+                  value={s.source_folder}
+                  onChange={(e) => patchStep(s.key, { source_folder: e.target.value })}
+                  onBlur={(e) => patchStep(s.key, { source_folder: stripQuotes(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div style={hintStyle}>
+              Porteiro independente do template: só seguem os arquivos com essas extensões. Digite
+              uma ou mais, separadas por vírgula (ex.: <code>.pdf, .xlsx</code>). Se não casar, o
+              documento para aqui.
+            </div>
+          </>
+        )}
+
+        {s.action_type === 'identify_type' && (
+          <>
+            <div style={{ maxWidth: 320 }}>
+              <span style={lblStyle}>Template</span>
+              <select
+                className="select"
+                style={{ width: '100%' }}
+                value={s.template_id}
+                onChange={(e) => patchStep(s.key, { template_id: e.target.value })}
+              >
+                <option value="">Escolha um template…</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={hintStyle}>
+              Porteiro por <b>conteúdo</b>: só seguem os documentos identificados com esse template.
+              Os campos disponíveis para renomear/mover passam a ser os <b>campos desse template</b>.
+              {templates.length === 0 && (
+                <> Nenhum template cadastrado ainda — crie um na aba Templates.</>
+              )}
+            </div>
+          </>
+        )}
+
+        {s.action_type === 'rename' && (
+          <>
+            <span style={lblStyle}>Padrão do nome</span>
+            <input
+              className="cell-mono"
+              style={monoInpStyle}
+              placeholder="{cliente}_{numero}"
+              value={s.name_pattern}
+              onChange={(e) => patchStep(s.key, { name_pattern: e.target.value })}
+            />
+            {renderTokenBar(s, 'name_pattern')}
+            {renderPreview(s.name_pattern, 'name')}
+            <div style={hintStyle}>
+              <code>{'{campo}'}</code> é trocado pelo <b>valor lido do documento</b>. Os campos vêm
+              do template do gate "Identificar tipo" — não são fixos; mudam conforme você cria/edita
+              templates.
+            </div>
+          </>
+        )}
+
+        {s.action_type === 'move' && (
+          <>
+            <span style={lblStyle}>
+              Pasta de destino{' '}
+              <span style={{ textTransform: 'none', letterSpacing: 0, color: 'var(--text-3)' }}>
+                — aceita com ou sem aspas
+              </span>
+            </span>
+            <input
+              className="cell-mono"
+              style={monoInpStyle}
+              placeholder="Documentos/{cliente}/{data}/"
+              value={s.folder_pattern}
+              onChange={(e) => patchStep(s.key, { folder_pattern: e.target.value })}
+              onBlur={(e) => patchStep(s.key, { folder_pattern: stripQuotes(e.target.value) })}
+            />
+            {renderTokenBar(s, 'folder_pattern')}
+            {renderPreview(s.folder_pattern, 'folder')}
+            <div style={hintStyle}>
+              Cole o caminho como vier do Windows — <code>"C:\Users\…\Análise"</code> ou{' '}
+              <code>C:\Users\…\Análise</code>: as aspas são removidas automaticamente ao sair do
+              campo.
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // Barra de chips de token = campos do template vigente (D-19). Sem template no
+  // pipeline, não há chips (coerente).
+  const renderTokenBar = (s: StepDraft, field: 'name_pattern' | 'folder_pattern') => {
+    if (!activeTemplate) {
+      return (
+        <div
+          style={{
+            marginTop: 11,
+            background: 'var(--surface-3)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '10px 11px',
+            fontSize: 11.5,
+            color: 'var(--text-3)',
+          }}
+        >
+          Adicione um gate <b>Identificar tipo</b> com um template para ver os campos disponíveis
+          como chips.
+        </div>
+      )
+    }
+    return (
+      <div
+        style={{
+          marginTop: 11,
+          background: 'var(--surface-3)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '10px 11px',
+        }}
+      >
+        <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginBottom: 8 }}>
+          Campos do template <b style={{ color: 'var(--accent)' }}>{activeTemplate.name}</b> — clique
+          para inserir:
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {activeTemplate.fields.length === 0 && (
+            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+              Esse template ainda não tem campos.
+            </span>
+          )}
+          {activeTemplate.fields.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className="chip"
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}
+              aria-label={`Inserir {${f.name}} no padrão`}
+              title={`Inserir {${f.name}}`}
+              onClick={() => insertToken(s.key, field, f.name)}
+            >
+              <span style={{ color: 'var(--text-3)', fontWeight: 700 }}>+</span> {`{${f.name}}`}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Pré-visualização ao vivo do padrão resolvido com valores de exemplo (D-19).
+  const renderPreview = (pattern: string, kind: 'name' | 'folder') => {
+    if (!pattern.trim() || !activeTemplate) return null
+    const out = resolvePattern(pattern, activeTemplate.fields) + (kind === 'name' ? '.pdf' : '')
+    const color = kind === 'name' ? 'var(--st-tratado)' : 'var(--st-encontrado)'
+    const bg = kind === 'name' ? 'var(--st-tratado-bg)' : 'var(--st-encontrado-bg)'
+    return (
+      <div
+        style={{
+          marginTop: 11,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 9,
+          fontSize: 12.5,
+          flexWrap: 'wrap',
+        }}
+      >
+        <span style={{ color: 'var(--text-3)' }}>Prévia:</span>
+        <span style={{ color: 'var(--text-3)' }}>→</span>
+        <span
+          className="cell-mono"
+          style={{
+            fontWeight: 600,
+            color,
+            background: bg,
+            padding: '3px 9px',
+            borderRadius: 7,
+            wordBreak: 'break-all',
+          }}
+        >
+          {out}
+        </span>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -430,304 +721,14 @@ export function AutomationsPage() {
         <div className="sec-head-col">
           <h2 className="sec-title">Automações</h2>
           <p className="sec-desc">
-            Monte um pipeline de etapas que renomeiam, movem e organizam os arquivos
-            automaticamente. Cada documento passa pelas etapas, de cima para baixo, na ordem
-            que você definir.
+            Monte um pipeline de etapas que decidem o que fazer com cada documento. Cada documento
+            passa pelas etapas, de cima para baixo, na ordem que você definir — arraste pela alça ⠿
+            para reordenar.
           </p>
         </div>
-        {!isEmpty && (
-          <button className="btn-primary" onClick={openAdd} disabled={busy}>
-            <Icon name="plus" size={15} />
-            Adicionar etapa
-          </button>
-        )}
       </div>
 
-      {/* S2/S3 — Editor de etapa (form inline) */}
-      {draft && editIndex != null && (
-        <div className="card" style={{ padding: 18, marginBottom: 16 }}>
-          <h3 className="sec-title" style={{ fontSize: 14, marginBottom: 14 }}>
-            {editIndex === -1 ? 'Nova etapa' : 'Editar etapa'}
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* (a) Tipo de ação — focal point do editor */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span style={labelStyle}>Tipo de ação</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                {ACTIONS.map((a) => {
-                  const on = draft.action_type === a.value
-                  return (
-                    <button
-                      key={a.value}
-                      type="button"
-                      className="card"
-                      onClick={() => setDraft({ ...draft, action_type: a.value })}
-                      style={{
-                        padding: 14,
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        borderColor: on ? 'var(--accent)' : 'var(--border-strong)',
-                        background: on ? 'var(--accent-soft)' : 'var(--surface)',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Icon name={a.icon} size={16} stroke={on ? 'var(--accent)' : 'var(--text-2)'} />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: on ? 'var(--accent)' : 'var(--text)' }}>
-                          {a.label}
-                        </span>
-                      </div>
-                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{a.hint}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* (b) Filtro de entrada — 0..N condições E/OU */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={labelStyle}>Filtro de entrada</span>
-                {draft.filters.length > 1 && (
-                  <div className="chips">
-                    <button
-                      type="button"
-                      className={draft.conjunction === 'and' ? 'chip active' : 'chip'}
-                      onClick={() => setDraft({ ...draft, conjunction: 'and' })}
-                    >
-                      <span>E (todas as condições)</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={draft.conjunction === 'or' ? 'chip active' : 'chip'}
-                      onClick={() => setDraft({ ...draft, conjunction: 'or' })}
-                    >
-                      <span>OU (qualquer condição)</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {draft.filters.length === 0 && (
-                <span className="badge badge-off" style={{ alignSelf: 'flex-start' }}>
-                  Aplica-se a todos os documentos
-                </span>
-              )}
-
-              {draft.filters.map((f, idx) => (
-                <div
-                  key={f.key}
-                  className="card"
-                  style={{ padding: 14, display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}
-                >
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={labelStyle}>Tipo de filtro</span>
-                    <select
-                      className="select"
-                      value={f.filter_type}
-                      onChange={(e) => patchFilter(f.key, { filter_type: e.target.value as StepFilterType })}
-                    >
-                      {FILTER_TYPES.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {f.filter_type === 'field' && (
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 120 }}>
-                      <span style={labelStyle}>Campo</span>
-                      <input
-                        className="search-input"
-                        style={{ width: '100%' }}
-                        placeholder="ex.: tipo"
-                        value={f.field_name ?? ''}
-                        onChange={(e) => patchFilter(f.key, { field_name: e.target.value })}
-                      />
-                    </label>
-                  )}
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={labelStyle}>Operador</span>
-                    <select
-                      className="select"
-                      value={f.operator}
-                      onChange={(e) => patchFilter(f.key, { operator: e.target.value as RuleOperator })}
-                    >
-                      {OPERATORS.map((op) => (
-                        <option key={op.value} value={op.value}>
-                          {op.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 120 }}>
-                    <span style={labelStyle}>Valor</span>
-                    <input
-                      className="search-input"
-                      style={{ width: '100%', fontFamily: 'var(--font-mono)' }}
-                      placeholder={f.filter_type === 'size' ? 'ex.: 500' : 'ex.: holerite'}
-                      value={f.value}
-                      onChange={(e) => patchFilter(f.key, { value: e.target.value })}
-                    />
-                  </label>
-                  <button
-                    className="row-action"
-                    aria-label={`Remover filtro ${idx + 1}`}
-                    title="Remover filtro"
-                    style={{ color: 'var(--st-erro)' }}
-                    onClick={() => removeFilter(f.key)}
-                  >
-                    <Icon name="alert" size={14} />
-                  </button>
-                  {f.filter_type === 'size' && (
-                    <span style={{ ...hintStyle, flexBasis: '100%' }}>
-                      Tamanho em KB. Use &gt; ou &lt; para faixas (ex.: &gt; 500 KB).
-                    </span>
-                  )}
-                </div>
-              ))}
-
-              <button className="btn-ghost" onClick={addFilter} style={{ alignSelf: 'flex-start' }}>
-                <Icon name="plus" size={15} />
-                Adicionar filtro
-              </button>
-            </div>
-
-            {/* (c) Parâmetros da ação (dependentes do tipo) */}
-            {draft.action_type === 'identify_type' && (
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={labelStyle}>Template para identificar o tipo</span>
-                <input
-                  className="search-input"
-                  style={{ width: '100%' }}
-                  placeholder="ID do template (ex.: 1)"
-                  value={draft.template_id}
-                  onChange={(e) => setDraft({ ...draft, template_id: e.target.value })}
-                />
-              </label>
-            )}
-
-            {draft.action_type === 'route' && (
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={labelStyle}>Tratativa</span>
-                <select
-                  className="select"
-                  value={draft.route_target}
-                  onChange={(e) => setDraft({ ...draft, route_target: e.target.value as RouteTarget })}
-                >
-                  {ROUTE_TARGETS.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-            {/* S3 — editor de padrão + token (move/rename) */}
-            {(draft.action_type === 'rename' || draft.action_type === 'move') && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                  <span style={hintStyle}>
-                    Tokens disponíveis — clique para inserir. Cada {'{campo}'} é trocado pelo valor
-                    extraído do documento.
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {SAMPLE_TOKENS.map((tok) => (
-                    <button
-                      key={tok}
-                      type="button"
-                      className="chip"
-                      aria-label={`Inserir {${tok}} no padrão`}
-                      title={`Inserir {${tok}} no padrão`}
-                      onClick={() =>
-                        insertToken(
-                          draft.action_type === 'move' ? 'folder_pattern' : 'name_pattern',
-                          tok,
-                        )
-                      }
-                    >
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>{`{${tok}}`}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {draft.action_type === 'rename' && (
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={labelStyle}>Padrão do nome do arquivo</span>
-                    <input
-                      className="search-input"
-                      style={{ width: '100%', fontFamily: 'var(--font-mono)' }}
-                      placeholder="{cliente}_{numero}.pdf"
-                      value={draft.name_pattern}
-                      onChange={(e) => setDraft({ ...draft, name_pattern: e.target.value })}
-                    />
-                  </label>
-                )}
-                {draft.action_type === 'move' && (
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={labelStyle}>Padrão da pasta de destino</span>
-                    <input
-                      className="search-input"
-                      style={{ width: '100%', fontFamily: 'var(--font-mono)' }}
-                      placeholder="Documentos/{cliente}/{data:aaaa-mm}/"
-                      value={draft.folder_pattern}
-                      onChange={(e) => setDraft({ ...draft, folder_pattern: e.target.value })}
-                    />
-                  </label>
-                )}
-
-                {/* PRÉ-VISUALIZAÇÃO AO VIVO (focal point S3) */}
-                {previewPattern.trim() && (
-                  <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={labelStyle}>Pré-visualização</span>
-                    <span
-                      className="cell-mono"
-                      style={{ fontSize: 12.5, color: 'var(--text)', wordBreak: 'break-all' }}
-                    >
-                      {resolvePattern(previewPattern)}
-                    </span>
-                    <span style={hintStyle}>
-                      Pré-visualização com dados de exemplo. Caracteres inválidos no Windows são
-                      removidos automaticamente.
-                    </span>
-                    {previewMissing.map((name) => (
-                      <span key={name} style={{ fontSize: 12, color: 'var(--st-leitura)' }}>
-                        «{name}?» — esse campo pode estar vazio em alguns documentos. Quando faltar,
-                        o documento vai para revisão antes de aplicar.
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Switch
-                on={draft.active}
-                onToggle={() => setDraft({ ...draft, active: !draft.active })}
-                title="Etapa ativa"
-              />
-              <span style={hintStyle}>{draft.active ? 'Etapa ativa' : 'Etapa pausada'}</span>
-            </div>
-
-            {formError && (
-              <p style={{ fontSize: 13, color: 'var(--st-erro)', margin: 0 }}>{formError}</p>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn-ghost" onClick={closeForm} disabled={saving}>
-                {editIndex === -1 ? 'Descartar etapa' : 'Descartar alterações'}
-              </button>
-              <button className="btn-primary" onClick={submitForm} disabled={saving}>
-                {saving ? 'Salvando…' : editIndex === -1 ? 'Salvar etapa' : 'Salvar alterações'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* S1 — Loading */}
+      {/* Loading */}
       {isInitialLoading && (
         <div className="stack">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -738,12 +739,10 @@ export function AutomationsPage() {
         </div>
       )}
 
-      {/* S1 — Erro */}
+      {/* Erro */}
       {isError && (
         <div className="card" style={{ padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
-            Não foi possível carregar.
-          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Não foi possível carregar.</div>
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 16px' }}>
             Verifique se o servidor está rodando e tente de novo.
           </p>
@@ -754,153 +753,155 @@ export function AutomationsPage() {
         </div>
       )}
 
-      {/* S1 — Vazio (empty state) */}
-      {isEmpty && !draft && (
-        <div className="card" style={{ padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
-            Nenhuma etapa de automação ainda
-          </div>
-          <p
+      {/* Pipeline card */}
+      {!isInitialLoading && !isError && (
+        <div className="card" style={{ marginBottom: 18 }}>
+          {/* cabeçalho do pipeline: nome + estado + switch */}
+          <div
             style={{
-              fontSize: 13,
-              color: 'var(--text-3)',
-              margin: '0 0 16px',
-              maxWidth: 520,
-              marginInline: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '15px 18px',
+              borderBottom: '1px solid var(--border)',
             }}
           >
-            Crie etapas para renomear, mover e organizar arquivos automaticamente a partir dos
-            campos extraídos. O documento percorre as etapas na ordem — ex.: 1) Identificar tipo →
-            2) Renomear → 3) Mover para a pasta certa.
-          </p>
-          <button className="btn-primary" onClick={openAdd}>
-            <Icon name="plus" size={15} />
-            Criar primeira etapa
-          </button>
-        </div>
-      )}
-
-      {/* S1 — Pipeline: lista ORDENADA de etapas numeradas + conector descendente */}
-      {!isInitialLoading && !isError && steps.length > 0 && (
-        <div className="stack">
-          {steps.map((s, idx) => (
-            <div key={s.id}>
-              <div className="card auto-card" style={{ opacity: s.active ? 1 : 0.6 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                  {/* Coluna de ordem + reordenação ↑/↓ */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                    <span className="chip-count" title={`Etapa ${idx + 1}`}>
-                      {idx + 1}
-                    </span>
-                    <button
-                      className="row-action"
-                      aria-label={`Mover etapa ${ACTION_LABEL[s.action_type]} para cima`}
-                      title="Mover etapa para cima"
-                      disabled={idx === 0 || busy}
-                      onClick={() => move(idx, -1)}
-                      style={{ opacity: idx === 0 ? 0.35 : 1 }}
-                    >
-                      <Icon name="arrowUp" size={15} />
-                    </button>
-                    <button
-                      className="row-action"
-                      aria-label={`Mover etapa ${ACTION_LABEL[s.action_type]} para baixo`}
-                      title="Mover etapa para baixo"
-                      disabled={idx === steps.length - 1 || busy}
-                      onClick={() => move(idx, 1)}
-                      style={{ opacity: idx === steps.length - 1 ? 0.35 : 1 }}
-                    >
-                      <Icon name="arrowDown" size={15} />
-                    </button>
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span className="rule-name">{ACTION_LABEL[s.action_type]}</span>
-                      <span className={s.active ? 'badge badge-ok' : 'badge badge-off'}>
-                        {s.active ? 'Ativa' : 'Pausada'}
-                      </span>
-                    </div>
-                    <div className="cell-mono" style={{ fontSize: 13, color: 'var(--text-2)', wordBreak: 'break-all', marginBottom: 8 }}>
-                      {paramSummary(s)}
-                    </div>
-                    {/* Pílulas: AÇÃO (accent) + filtros (neutros) */}
-                    <div className="auto-flow">
-                      <span className="flow-pill action">
-                        <Icon name={ACTION_ICON[s.action_type]} size={13} />
-                        <span className="flow-tag">Ação</span>
-                        {ACTION_LABEL[s.action_type]}
-                      </span>
-                      {s.filters.length === 0 ? (
-                        <span className="badge badge-off">Aplica-se a todos os documentos</span>
-                      ) : (
-                        s.filters.map((f, i) => (
-                          <span key={f.id} className="flow-pill">
-                            {i > 0 && (
-                              <span className="flow-tag">{s.conjunction === 'or' ? 'OU' : 'E'}</span>
-                            )}
-                            {filterSummary(f)}
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Switch
-                      on={s.active}
-                      onToggle={() => toggleActive(idx)}
-                      title={s.active ? 'Pausar etapa' : 'Ativar etapa'}
-                    />
-                    <button
-                      className="row-action"
-                      title={`Editar etapa ${ACTION_LABEL[s.action_type]}`}
-                      aria-label={`Editar etapa ${ACTION_LABEL[s.action_type]}`}
-                      onClick={() => openEdit(idx)}
-                      disabled={busy}
-                    >
-                      <Icon name="dots" size={16} />
-                    </button>
-                    <button
-                      className="row-action"
-                      title={`Remover etapa ${ACTION_LABEL[s.action_type]}`}
-                      aria-label={`Remover etapa ${ACTION_LABEL[s.action_type]}`}
-                      style={{ color: 'var(--st-erro)' }}
-                      onClick={() => setConfirmRemove(idx)}
-                      disabled={busy}
-                    >
-                      <Icon name="alert" size={15} />
-                    </button>
-                  </div>
-                </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: '-.2px' }}>
+                {pipeline?.name ?? 'Pipeline de automação'}
               </div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>
+                {steps.length} etapa{steps.length === 1 ? '' : 's'} · aplicado automaticamente em
+                documentos de alta confiança
+              </div>
+            </div>
+            {pipeline && (
+              <>
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  {pipeline.active ? 'Ativo' : 'Pausado'}
+                </span>
+                <Switch
+                  on={pipeline.active}
+                  onToggle={togglePipelineActive}
+                  title={pipeline.active ? 'Pausar pipeline' : 'Ativar pipeline'}
+                />
+              </>
+            )}
+          </div>
 
-              {/* Conector descendente (a ordem importa visualmente) */}
-              {idx < steps.length - 1 && (
-                <div
-                  aria-hidden
+          <div style={{ padding: 18 }}>
+            {/* Empty state */}
+            {isEmpty && (
+              <div style={{ padding: '36px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
+                  Nenhuma etapa ainda
+                </div>
+                <p
                   style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    paddingTop: 4,
-                    paddingBottom: 4,
+                    fontSize: 13,
+                    color: 'var(--text-3)',
+                    margin: '0 auto 4px',
+                    maxWidth: 520,
                   }}
                 >
-                  <Icon name="arrowDown" size={16} stroke="var(--text-3)" />
-                </div>
-              )}
-            </div>
-          ))}
+                  Comece adicionando etapas abaixo — ex.: 1) Identificar arquivo (só PDFs) → 2)
+                  Identificar tipo → 3) Renomear → 4) Mover para a pasta certa.
+                </p>
+              </div>
+            )}
 
-          {/* CTA "Adicionar etapa" no rodapé da lista */}
-          {!draft && (
-            <button className="btn-ghost" onClick={openAdd} disabled={busy} style={{ alignSelf: 'flex-start' }}>
-              <Icon name="plus" size={15} />
-              Adicionar etapa
-            </button>
-          )}
+            {/* Lista ORDENADA de etapas com conector descendente */}
+            {steps.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 8 }}>
+                {steps.map((s, idx) => (
+                  <div key={s.key} style={{ position: 'relative' }}>
+                    {renderStep(s, idx)}
+                    {idx < steps.length - 1 && (
+                      <div
+                        aria-hidden
+                        style={{
+                          position: 'absolute',
+                          left: 33,
+                          bottom: -20,
+                          transform: 'translateX(-50%)',
+                          color: 'var(--text-3)',
+                          fontSize: 15,
+                          fontWeight: 700,
+                        }}
+                      >
+                        ↓
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Adicionar etapa: 4 ações (mockup .addstep) */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: steps.length ? 18 : 0 }}>
+              {ACTIONS.map((a) => (
+                <button
+                  key={a.value}
+                  type="button"
+                  onClick={() => addStep(a.value)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    padding: '9px 13px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px dashed var(--border-strong)',
+                    background: 'transparent',
+                    color: 'var(--text-2)',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span
+                    style={{ width: 8, height: 8, borderRadius: 3, background: a.dot, flex: 'none' }}
+                  />
+                  {a.label}
+                </button>
+              ))}
+            </div>
+
+            {formError && (
+              <p style={{ fontSize: 13, color: 'var(--st-erro)', margin: '14px 0 0' }}>{formError}</p>
+            )}
+
+            {/* Barra de salvar (aparece quando há alterações não salvas) */}
+            {dirty && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  marginTop: 18,
+                  paddingTop: 16,
+                  borderTop: '1px solid var(--border)',
+                }}
+              >
+                <span style={{ fontSize: 12, color: 'var(--text-3)', marginRight: 'auto' }}>
+                  Alterações não salvas
+                </span>
+                <button className="btn-ghost" onClick={discard} disabled={busy}>
+                  Descartar
+                </button>
+                <button className="btn-primary" onClick={save} disabled={busy}>
+                  {saving ? 'Salvando…' : 'Salvar pipeline'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
+
+      <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>
+        Reordenação por arraste (HTML nativo) + botões ↑/↓ para acessibilidade. A ação "Decidir
+        tratativa" não faz parte do v1.
+      </div>
 
       {/* Confirmação de remoção de etapa (reversível, sem linguagem destrutiva) */}
       {confirmRemove != null && steps[confirmRemove] && (
@@ -920,25 +921,19 @@ export function AutomationsPage() {
               Remover etapa
             </h3>
             <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 18px' }}>
-              Remover a etapa{' '}
-              <b>«{ACTION_LABEL[steps[confirmRemove].action_type]}»</b>? As etapas seguintes
-              continuam valendo. Documentos já aplicados não são afetados.
+              Remover a etapa <b>«{actionLabel(steps[confirmRemove].action_type)}»</b>? As etapas
+              seguintes continuam valendo. Salve o pipeline para confirmar.
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                className="btn-ghost"
-                onClick={() => setConfirmRemove(null)}
-                disabled={busy}
-              >
+              <button className="btn-ghost" onClick={() => setConfirmRemove(null)}>
                 Manter etapa
               </button>
               <button
                 className="btn-primary"
                 style={{ background: 'var(--st-erro)' }}
-                onClick={confirmDelete}
-                disabled={busy}
+                onClick={() => removeStep(confirmRemove)}
               >
-                {deletePipeline.isPending || saving ? 'Removendo…' : 'Remover'}
+                Remover
               </button>
             </div>
           </div>
