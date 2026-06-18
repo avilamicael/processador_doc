@@ -3,10 +3,13 @@ de documento que o cliente monta no app (Fase 4, TPL-01).
 
 Um `Template` representa um TIPO de documento (ex.: "Nota Fiscal", "Boleto") com:
 - `name` único — rótulo do template no app;
-- `doc_type` opcional — categoria livre (agrupar/automação futura);
-- `signals_json` — lista de termos/chaves serializada em JSON: os **sinais
-  identificadores** (D-02) que o matcher local usa para casar o documento contra
-  este template sem custo de IA (palavras-âncora, regex de chave, etc.).
+- `doc_type` — coluna DORMENTE (D-T5): legado da Fase 4, removido do form do Plano 03;
+  mantida no schema só por compat, sem migração de remoção (nenhuma feature a alimenta);
+- `signals_json` — sinais identificadores como GRUPOS E/OU serializados em JSON (D-T2):
+  lista de grupos; cada grupo é uma lista de condições `{mode, value}` com
+  `mode ∈ {texto, regex}`. O matcher local (Plano 01) avalia OU entre grupos e E dentro
+  do grupo para casar o documento contra este template sem custo de IA. A forma plana
+  legada `list[str]` continua legível (forward-compatible em `_parse_groups`).
 
 Cada `TemplateField` declara um **campo a extrair** do documento (TPL-01):
 - `field_type` (D-08) — conjunto texto/numero/data/moeda/cpf_cnpj/booleano;
@@ -35,10 +38,12 @@ class Template(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     # Rótulo do template; único no app (não há dois templates com o mesmo nome).
     name: Mapped[str] = mapped_column(String, index=True, unique=True, nullable=False)
-    # Categoria livre opcional (agrupar/automação futura); não confundir com `name`.
+    # DORMENTE (D-T5): legado da Fase 4, fora do form do Plano 03. Mantida só por
+    # compat — sem migração de remoção, nenhuma feature a alimenta.
     doc_type: Mapped[str | None] = mapped_column(String, nullable=True)
-    # Lista de termos/chaves dos sinais identificadores (D-02) serializada em JSON.
-    # O matcher local (Plan seguinte) consome isto para casar custo-zero.
+    # Sinais identificadores como GRUPOS E/OU (D-T2) serializados em JSON: lista de
+    # grupos, cada grupo uma lista de condições {mode, value}. O matcher local
+    # (Plano 01) avalia OU entre grupos e E dentro do grupo (custo zero).
     signals_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
