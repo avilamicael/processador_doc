@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: 06-08 — Tasks 1-3 executadas e commitadas (tipos/api/hooks de pipeline; AutomationsPage construtor S1/S2/S3; DryRunPage S4 + aplicar/desfazer S5/S6). tsc+build verdes; zero npm novo. PAUSADO no checkpoint human-verify (Task 4) — verificação visual humana pendente antes de fechar a fase.
-last_updated: "2026-06-18T15:54:04.971Z"
-last_activity: 2026-06-18
+status: executing
+stopped_at: Fase 06.1 inserida (redesign Templates + sinais E/OU); CONTEXT escrito; pronto p/ plan-phase
+last_updated: "2026-06-18T16:59:22.592Z"
+last_activity: 2026-06-18 -- Phase 06.1 planning complete
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 31
+  total_plans: 34
   completed_plans: 35
   percent: 67
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 
 Phase: 06 (automa-es-de-arquivo-renomear-mover) — EXECUTING
 Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-06-18
+Status: Ready to execute
+Last activity: 2026-06-18 -- Phase 06.1 planning complete
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -151,6 +151,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T01:20:42Z
-Stopped at: 06-08 — Tasks 1-3 executadas e commitadas (tipos/api/hooks de pipeline; AutomationsPage construtor S1/S2/S3; DryRunPage S4 + aplicar/desfazer S5/S6). tsc+build verdes; zero npm novo. PAUSADO no checkpoint human-verify (Task 4) — verificação visual humana pendente antes de fechar a fase.
-Resume file: .planning/phases/06-automa-es-de-arquivo-renomear-mover/06-08-PLAN.md (Task 4 checkpoint)
+Last session: 2026-06-18T15:55:00.139Z
+Stopped at: Fase 06.1 inserida (redesign Templates + sinais E/OU); CONTEXT escrito; pronto p/ plan-phase
+Resume file: .planning/phases/06.1-redesign-de-templates-e-classifica-o-por-sinais-e-ou-regex/06.1-CONTEXT.md
