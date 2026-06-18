@@ -308,6 +308,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 7 �
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
 | 6. Automações de Arquivo (Renomear/Mover) | 7/8 | In Progress|  |
-| 6.1. Redesign de Templates e Classificação por Sinais | 4/4 | Complete   | 2026-06-18 |
+| 6.1. Redesign de Templates e Classificação por Sinais | 4/4 | Complete    | 2026-06-18 |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |

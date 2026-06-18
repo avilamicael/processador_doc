@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: 06.1-04 (gap closure CR-01/WR-01) executado — ReDoS timeout real + decide() falha-fechada; pronto p/ verificação
-last_updated: "2026-06-18T18:08:07.019Z"
+stopped_at: Fase 06.1 inserida (redesign Templates + sinais E/OU); CONTEXT escrito; pronto p/ plan-phase
+last_updated: "2026-06-18T18:20:25.480Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 9
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 
 ## Current Position
 
-Phase: 06.1 (redesign-de-templates-e-classifica-o-por-sinais-e-ou-regex) — EXECUTING
-Plan: 3 of 3
+Phase: 7
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-06-18
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
@@ -37,7 +37,7 @@ Progress: [█░░░░░░░░░] 13%
 
 **Velocity:**
 
-- Total plans completed: 13
+- Total plans completed: 17
 - Average duration: ~6 min
 - Total execution time: 0.1 hours
 
@@ -48,6 +48,7 @@ Progress: [█░░░░░░░░░] 13%
 | 01 | 4 | - | - |
 | 02 | 5 | - | - |
 | 03 | 4 | - | - |
+| 06.1 | 4 | - | - |
 
 **Recent Trend:**
 
