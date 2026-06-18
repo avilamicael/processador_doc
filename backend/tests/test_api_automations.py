@@ -180,6 +180,63 @@ def test_create_invalid_route_target_returns_422(client: TestClient) -> None:
     assert resp.status_code == 422, resp.text
 
 
+def test_create_identify_file_gate_accepts_extensions(client: TestClient) -> None:
+    """D-17: action_type 'identify_file' com params.extensions é aceito (201) e
+    persiste as extensões digitadas."""
+    body = _valid_pipeline("Gate por extensão")
+    body["steps"] = [
+        {
+            "action_type": "identify_file",
+            "params": {"extensions": [".pdf", "xlsx"]},
+            "filters": [],
+        },
+        {
+            "action_type": "move",
+            "params": {"folder_pattern": "NF"},
+            "filters": [],
+        },
+    ]
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 201, resp.text
+    steps = resp.json()["steps"]
+    assert steps[0]["action_type"] == "identify_file"
+    assert steps[0]["params"]["extensions"] == [".pdf", "xlsx"]
+
+
+def test_create_identify_file_without_extensions_returns_422(client: TestClient) -> None:
+    """D-17: 'identify_file' sem extensões → 422 (param obrigatório)."""
+    body = _valid_pipeline()
+    body["steps"] = [
+        {"action_type": "identify_file", "params": {}, "filters": []}
+    ]
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_identify_file_empty_extensions_returns_422(client: TestClient) -> None:
+    """D-17: 'identify_file' com extensões em branco → 422."""
+    body = _valid_pipeline()
+    body["steps"] = [
+        {
+            "action_type": "identify_file",
+            "params": {"extensions": ["  ", ""]},
+            "filters": [],
+        }
+    ]
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_pipeline_without_route_is_ok(client: TestClient) -> None:
+    """D-22: pipelines sem nenhuma etapa 'route' funcionam (route não é obrigatório)."""
+    body = _valid_pipeline("Sem route")
+    # _valid_pipeline já não usa route; confirma criação 201 e ausência de route.
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 201, resp.text
+    actions = [s["action_type"] for s in resp.json()["steps"]]
+    assert "route" not in actions
+
+
 def test_patch_nonexistent_returns_404(client: TestClient) -> None:
     resp = client.patch("/automations/999999", json={"name": "x"})
     assert resp.status_code == 404

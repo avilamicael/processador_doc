@@ -12,9 +12,11 @@ Garantias materializadas:
 - **AUT-01/AUT-02/TPL-02:** `AutomationPipeline` 1:N `PipelineStep` 1:N `StepFilter`
   (lista ORDENADA de etapas, cada etapa com UMA ação atômica + 0..N filtros). Steps
   retornados em ordem de `position`; filtros idem.
-- **D-13 (ações):** `action_type ∈ {move, rename, identify_type, route}`; os `params`
-  obrigatórios por tipo são validados (move→folder_pattern, rename→name_pattern,
-  identify_type→template_id, route→target ∈ {em_revisao,nao_tratar,ignorar}).
+- **D-13/D-17 (ações):** `action_type ∈ {move, rename, identify_type, identify_file,
+  route}`; os `params` obrigatórios por tipo são validados (move→folder_pattern,
+  rename→name_pattern, identify_type→template_id, identify_file→extensions,
+  route→target ∈ {em_revisao,nao_tratar,ignorar}). `route` (D-22) é aceito mas NÃO
+  obrigatório — pipelines sem route funcionam e a UI não o expõe.
 - **D-14 (filtros):** `filter_type ∈ {field, source_folder, extension, filename,
   size, template}`; `operator ∈ {eq, gt, lt, contains}`; combinados por `conjunction`.
 - **AUT-03 (dry-run):** `POST /dry-run` simula o pipeline por documento SEM tocar o
@@ -43,6 +45,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.documents import _requeue
 from app.automation import stage, undo
+from app.automation.rules import normalize_extensions
 from app.automation.stage import APPLY_STEP
 from app.models.automation_pipeline import (
     AutomationPipeline,
@@ -58,7 +61,11 @@ from app.storage.db import get_session
 router = APIRouter(prefix="/automations", tags=["automations"])
 
 # Vocabulário validado na borda HTTP (V5). Fora dos conjuntos → 422.
-_ACTION_TYPES = frozenset({"move", "rename", "identify_type", "route"})
+# `identify_file` (D-17): gate por extensão digitável. `route` (D-22) mantido aceito
+# mas NÃO obrigatório — pipelines sem route funcionam e a UI não o expõe.
+_ACTION_TYPES = frozenset(
+    {"move", "rename", "identify_type", "identify_file", "route"}
+)
 _FILTER_TYPES = frozenset(
     {"field", "source_folder", "extension", "filename", "size", "template"}
 )
@@ -116,7 +123,8 @@ class StepIn(BaseModel):
     def _action_known(cls, v: str) -> str:
         if v not in _ACTION_TYPES:
             raise ValueError(
-                f"action_type inválido: {v!r} (use move/rename/identify_type/route)"
+                f"action_type inválido: {v!r} "
+                "(use move/rename/identify_type/identify_file/route)"
             )
         return v
 
@@ -137,6 +145,14 @@ class StepIn(BaseModel):
             raise ValueError("ação 'rename' exige params.name_pattern")
         if self.action_type == "identify_type" and p.get("template_id") is None:
             raise ValueError("ação 'identify_type' exige params.template_id")
+        if self.action_type == "identify_file":
+            # D-17: o gate exige ao menos UMA extensão digitada válida. Reusa a
+            # normalização do executor (case/dot-insensitive) para rejeitar branco.
+            if not normalize_extensions(p.get("extensions")):
+                raise ValueError(
+                    "ação 'identify_file' exige params.extensions "
+                    "(uma ou mais extensões, ex.: '.pdf')"
+                )
         if self.action_type == "route":
             target = p.get("target")
             if target not in _ROUTE_TARGETS:
