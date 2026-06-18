@@ -27,6 +27,16 @@ Escopo: AUT-01..AUT-06 + TPL-02. **Fora de escopo:** automações além de renom
 - Semântica do "caminho corrente" de um documento no pipeline: como Renomear (muda nome-alvo) e Mover (muda pasta-alvo) compõem antes da materialização do CAS para o disco (D-11) — a operação física acontece a cada etapa de arquivo ou é resolvida e materializada ao final? O write-ahead/undo (AUT-04/05) precisa cobrir o pipeline inteiro (undo de todas as etapas de um documento).
 - Como o pipeline se relaciona com a fila/worker existente (step `apply`): o `apply_stage` passa a executar o pipeline ordenado por documento.
 
+### Refinamentos do construtor (validados via mockup, 2026-06-17)
+> Após 2 reescritas confusas, validamos a UI por um mockup HTML clicável (`06-MOCKUP-automacoes.html`). APROVADO pelo usuário. Refina/ajusta D-13/D-14.
+
+- **D-17:** **"Identificar arquivo"** é uma ação/etapa de GATE PRÓPRIA (separada de "Identificar tipo (template)"). Filtra por **tipo de arquivo via extensão DIGITÁVEL** pelo usuário (`.pdf`, `.xlsx`, …; pode aceitar múltiplas) — NÃO um select fixo. Permite "primeiro só PDFs, depois identificar o template". As ações de gate do v1 são: Identificar arquivo (extensão) e Identificar tipo (template).
+- **D-18:** **Semântica de GATE:** uma etapa de identificação (arquivo OU tipo) cujo filtro NÃO casa **INTERROMPE o pipeline** para aquele documento (porteiro — só os que passam seguem às etapas seguintes). Etapas de ação (Renomear/Mover) com filtro próprio apenas PULAM quando não casam (não interrompem).
+- **D-19:** **Tokens = campos do template escolhido.** Os chips de campo (renomear/mover) são os **campos definidos no template** selecionado no gate "Identificar tipo" — NÃO uma lista fixa; mudam conforme o usuário cria/edita templates. O frontend busca os campos do template para os chips; a resolução do valor usa os campos extraídos do próprio documento.
+- **D-20:** **Reordenação por DRAG-AND-DROP** (HTML5 nativo, SEM dependência npm nova) + botões ↑/↓ para acessibilidade. (SUPERA a decisão anterior do UI-SPEC de "sem drag-and-drop".)
+- **D-21:** **Campos de caminho** (Mover destino, pasta de origem, qualquer path) **aceitam com ou sem aspas** — normalizar removendo aspas nas pontas (front-end ao sair do campo + back-end defensivo). Usuário cola caminho do Windows (`"C:\...\Análise"`).
+- **D-22:** A ação **"Rotear/decidir tratativa"** (revisão/não-tratar/ignorar) **REMOVIDA do v1** (sem caso de uso claro; volta quando houver). Backend pode manter dormente, UI não expõe.
+
 ### Disparo da automação
 - **D-01:** **Auto-aplica para documentos de alta confiança** (acima do `review_confidence_threshold` da Fase 5 — i.e., os que NÃO caíram em EM_REVISAO). Documentos de baixa confiança / em revisão só têm a automação aplicada **após** aprovação humana.
 - **D-02:** Mesmo no auto-aplica, as garantias de segurança NÃO são puladas: log-antes-de-agir e undo continuam valendo. O que o auto-aplica dispensa é o clique humano de confirmação para os de alta confiança.
