@@ -27,6 +27,7 @@ button { font-family: inherit; }
   --sidebar-active-bg: rgba(37,99,235,.10); --sidebar-active-fg: #2563EB; --sidebar-border: #EAEEF4; --sidebar-soft: #F4F6FB;
   --shadow-card: 0 1px 2px rgba(20,26,36,.04), 0 8px 22px -14px rgba(20,26,36,.14);
   --tip-shadow: 0 6px 24px -8px rgba(20,26,36,.30);
+  --info: #1E5FBF; --info-bg: rgba(30,95,191,.10); --ai: #7C3AED; --ai-bg: rgba(124,58,237,.12);
   --st-encontrado: #1E5FBF; --st-encontrado-bg: rgba(30,95,191,.10);
   --st-leitura: #B45309; --st-leitura-bg: rgba(180,83,9,.12);
   --st-tratado: #15803D; --st-tratado-bg: rgba(21,128,61,.12);
@@ -43,6 +44,7 @@ button { font-family: inherit; }
   --sidebar-active-bg: rgba(59,130,246,.18); --sidebar-active-fg: #FFFFFF; --sidebar-border: rgba(255,255,255,.06); --sidebar-soft: rgba(255,255,255,.05);
   --shadow-card: 0 1px 3px rgba(0,0,0,.45), 0 10px 24px -14px rgba(0,0,0,.6);
   --tip-shadow: 0 8px 26px -8px rgba(0,0,0,.7);
+  --info: #6BA5FF; --info-bg: rgba(107,165,255,.14); --ai: #A78BFA; --ai-bg: rgba(167,139,250,.16);
   --st-encontrado: #6BA5FF; --st-encontrado-bg: rgba(107,165,255,.14);
   --st-leitura: #FBBF24; --st-leitura-bg: rgba(251,191,36,.15);
   --st-tratado: #4ADE80; --st-tratado-bg: rgba(74,222,128,.15);
@@ -240,3 +242,54 @@ table.docs tbody tr.selected { background: var(--accent-soft); }
 .flow-pill.action { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 .flow-tag { font-size: 10px; font-weight: 700; letter-spacing: .4px; color: var(--text-3); }
 .flow-pill.action .flow-tag { opacity: .7; }
+
+/* ===================== Template builder (Fase 06.1 redesign) ===================== */
+/* Portado do mockup templates-redesign-mockup.html usando os tokens do design. */
+
+/* tooltip ⓘ — hover puro (CSS, sem JS) — D-T8 */
+.info { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--border-strong); color: var(--text-3); font-size: 10.5px; font-weight: 700; cursor: help; position: relative; font-style: normal; flex: none; }
+.info:hover { border-color: var(--accent); color: var(--accent); }
+.info .tip { display: none; position: absolute; top: 150%; left: 50%; transform: translateX(-50%); z-index: 30; width: 290px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--tip-shadow); padding: 11px 13px; font-size: 11.5px; font-weight: 400; color: var(--text-2); line-height: 1.55; text-transform: none; letter-spacing: 0; text-align: left; }
+.info .tip b { color: var(--text); }
+.info .tip code { font-family: var(--font-mono); background: var(--surface-3); padding: 1px 5px; border-radius: 5px; color: var(--text-2); }
+.info:hover .tip { display: block; }
+.info.r .tip { left: auto; right: 0; transform: none; }
+
+/* seções do construtor (Passo 1 / Passo 2) */
+.tpl-sec { padding: 16px 18px; }
+.tpl-sec + .tpl-sec { border-top: 1px solid var(--border); }
+.tpl-sec-t { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.sec-tag { font-size: 9.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+.t-noai { color: var(--info); background: var(--info-bg); }
+.t-ai { color: var(--ai); background: var(--ai-bg); }
+.tpl-sec-mini { font-size: 11.5px; color: var(--text-3); margin: 5px 0 13px; }
+
+/* grupos E/OU — D-T3/D-T4 */
+.group { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); padding: 12px 13px; }
+.group-h { font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 9px; }
+.cond { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.cond-and { font-size: 10.5px; font-weight: 700; color: var(--text-3); width: 20px; text-align: center; flex: none; }
+.or-div { display: flex; align-items: center; gap: 10px; margin: 12px 0; color: var(--text-3); font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+.or-div::before, .or-div::after { content: ''; height: 1px; background: var(--border); flex: 1; }
+.add-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; padding: 7px 11px; border-radius: var(--radius-sm); border: 1px dashed var(--border-strong); background: transparent; color: var(--text-2); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.add-link:hover { border-color: var(--accent); color: var(--accent); }
+.tpl-inp { height: 34px; padding: 0 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: 13px; font-family: inherit; outline: none; width: 100%; }
+.tpl-inp:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.tpl-inp.mono { font-family: var(--font-mono); font-size: 12px; }
+.icon-x { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-3); cursor: pointer; flex: none; }
+.icon-x:hover { border-color: var(--st-erro); color: var(--st-erro); }
+
+/* linhas densas de campo — D-T7 */
+.fhead, .frow { display: grid; grid-template-columns: 1fr 140px 96px 36px 34px; gap: 10px; align-items: center; }
+.fhead { padding: 0 2px 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text-3); }
+.fhead .h { display: flex; align-items: center; gap: 6px; }
+.frow { padding: 7px 2px; }
+.frow + .frow { border-top: 1px solid var(--border); }
+.iconbtn { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-3); cursor: pointer; font-size: 13px; }
+.iconbtn:hover { border-color: var(--accent); color: var(--accent); }
+.iconbtn.danger:hover { border-color: var(--st-erro); color: var(--st-erro); }
+.adv { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 12px; padding: 11px 0 4px; border-top: 1px dashed var(--border); }
+.adv-lbl { font-size: 11px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.adv-lbl .soft { text-transform: none; letter-spacing: 0; color: var(--text-3); font-weight: 500; }
+.row2 { display: flex; gap: 14px; flex-wrap: wrap; }
+.row2 .half { flex: 1; min-width: 230px; }
