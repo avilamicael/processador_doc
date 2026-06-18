@@ -112,14 +112,23 @@ export function DryRunPage() {
   // — ficam fora da seleção (checkbox disabled).
   const isApplicable = (r: DryRunRow) => !r.blocked && !r.no_match
   const applicable = rows.filter(isApplicable)
-  const applicableIds = applicable.map((r) => r.document_id)
-  const allSel = applicable.length > 0 && selected.length === applicable.length
+  // Multi-saída (06.2): um doc copy+move gera 2+ linhas com o MESMO document_id. O
+  // apply enfileira POR DOCUMENTO — dedupe os ids para não enviar/contar/selecionar
+  // o mesmo doc duas vezes (WR-02/WR-03).
+  const applicableIds = [...new Set(applicable.map((r) => r.document_id))]
+  const allSel = applicableIds.length > 0 && selected.length === applicableIds.length
 
   const toggleSel = (id: number) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
   const toggleAll = () => setSelected((s) => (s.length === applicableIds.length ? [] : applicableIds.slice()))
 
-  const readyCount = applicable.filter((r) => !r.skipped_identical).length
+  // readyCount conta DOCUMENTOS prontos (não linhas): dedupe e exclui os que só têm
+  // saídas idênticas puladas (D-10).
+  const readyCount = [
+    ...new Set(
+      applicable.filter((r) => !r.skipped_identical).map((r) => r.document_id),
+    ),
+  ].length
   const skippedCount = rows.filter((r) => r.skipped_identical && isApplicable(r)).length
   const noMatchCount = rows.filter((r) => r.no_match).length
   const blockedCount = rows.filter((r) => r.blocked).length
@@ -219,7 +228,7 @@ export function DryRunPage() {
           <span className="foot-text">
             {selected.length > 0
               ? `${selected.length} selecionado(s)`
-              : `${applicable.length} documento(s) prontos`}
+              : `${applicableIds.length} documento(s) prontos`}
           </span>
           <div className="spacer" />
           {selected.length > 0 && (
@@ -310,11 +319,16 @@ export function DryRunPage() {
               )}
 
               {previewLoaded &&
-                rows.map((r) => {
+                rows.map((r, i) => {
                   const sel = selected.includes(r.document_id)
                   const selectable = isApplicable(r)
                   return (
-                    <tr key={r.document_id} className={sel ? 'selected' : undefined}>
+                    // Multi-saída: várias linhas compartilham document_id (copy+move) —
+                    // a chave une o id, o tipo da saída e o índice p/ ser única (WR-01).
+                    <tr
+                      key={`${r.document_id}-${r.action_kind ?? 'single'}-${i}`}
+                      className={sel ? 'selected' : undefined}
+                    >
                       <td>
                         <button
                           className={sel ? 'checkbox on' : 'checkbox'}
