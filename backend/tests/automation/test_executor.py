@@ -17,6 +17,7 @@ from app.automation import rules
 from app.automation.executor import (
     ActionSpec,
     AutomationSpec,
+    PlannedCopy,
     evaluate_automations,
 )
 
@@ -205,6 +206,143 @@ def test_actions_blocked_missing_field():
     plan = evaluate_automations(autos, FIELDS, ATTRS, base_root=BASE)
     assert plan.blocked is True
     assert plan.matched is True
+
+
+# ---- ação Copiar (Fase 06.2 — D-01/D-03/D-07) ------------------------------ #
+
+
+def test_copy_only_emits_one_copy_and_keeps_default_target():
+    # D-01/D-03: copy é SAÍDA ADICIONAL. O alvo de move permanece o DEFAULT
+    # (raiz-base + nome original); a cópia vai para o SEU dest_folder confinado,
+    # com o nome-alvo corrente (= nome original, pois não houve rename).
+    autos = [
+        _auto(
+            conditions=[_cond("extension", "eq", ".pdf")],
+            actions=[_action("copy", params={"dest_folder": "Arquivo/{cliente}"})],
+        )
+    ]
+    plan = evaluate_automations(autos, FIELDS, ATTRS, base_root=BASE)
+    assert plan.matched is True
+    assert plan.blocked is False
+    assert plan.copies == (
+        PlannedCopy(folder=BASE.resolve() / "Arquivo" / "ACME Ltda", name="entrada.pdf"),
+    )
+    # O alvo do move (single-output) continua no DEFAULT — copy NÃO o muta.
+    assert plan.target_folder == BASE.resolve()
+    assert plan.target_name == "entrada.pdf"
+
+
+def test_copy_inherits_renamed_name_when_rename_runs_first():
+    # D-03 (ordem): rename muta o nome corrente; a cópia herda o nome RENOMEADO.
+    autos = [
+        _auto(
+            conditions=[_cond("extension", "eq", ".pdf")],
+            actions=[
+                _action("rename", position=0, params={"name_pattern": "{numero}"}),
+                _action("copy", position=1, params={"dest_folder": "Arquivo"}),
+            ],
+        )
+    ]
+    plan = evaluate_automations(autos, FIELDS, ATTRS, base_root=BASE)
+    assert plan.copies == (
+        PlannedCopy(folder=BASE.resolve() / "Arquivo", name="1234"),
+    )
+    # rename também compõe o nome-alvo do plano single-output (não regride).
+    assert plan.target_name == "1234"
+
+
+def test_copy_plus_copy_emits_two_copies():
+    # D-03: várias ações Copiar → várias saídas, cada uma no SEU destino,
+    # ambas com o mesmo nome-alvo corrente.
+    autos = [
+        _auto(
+            conditions=[_cond("extension", "eq", ".pdf")],
+            actions=[
+                _action("copy", position=0, params={"dest_folder": "Backup"}),
+                _action("copy", position=1, params={"dest_folder": "Arquivo/{cliente}"}),
+            ],
+        )
+    ]
+    plan = evaluate_automations(autos, FIELDS, ATTRS, base_root=BASE)
+    assert plan.copies == (
+        PlannedCopy(folder=BASE.resolve() / "Backup", name="entrada.pdf"),
+        PlannedCopy(
+            folder=BASE.resolve() / "Arquivo" / "ACME Ltda", name="entrada.pdf"
+        ),
+    )
+
+
+def test_copy_and_move_coexist():
+    # D-03: copiar para Arquivo/ E mover para Processados/ na mesma automação →
+    # o plano carrega 1 cópia E o target de move.
+    autos = [
+        _auto(
+            conditions=[_cond("extension", "eq", ".pdf")],
+            actions=[
+                _action("copy", position=0, params={"dest_folder": "Arquivo"}),
+                _action("move", position=1, params={"dest_folder": "Processados/{cliente}"}),
+            ],
+        )
+    ]
+    plan = evaluate_automations(autos, FIELDS, ATTRS, base_root=BASE)
+    assert plan.copies == (
+        PlannedCopy(folder=BASE.resolve() / "Arquivo", name="entrada.pdf"),
+    )
+    assert plan.target_folder == (BASE.resolve() / "Processados" / "ACME Ltda")
+    assert plan.target_name == "entrada.pdf"
+
+
+def test_copy_blocked_missing_field_emits_no_copy():
+    # D-07: token p/ campo faltante no dest_folder da cópia → blocked, 0 cópias.
+    autos = [
+        _auto(
+            conditions=[_cond("extension", "eq", ".pdf")],
+            actions=[_action("copy", params={"dest_folder": "{inexistente}"})],
+        )
+    ]
+    plan = evaluate_automations(autos, FIELDS, ATTRS, base_root=BASE)
+    assert plan.blocked is True
+    assert plan.matched is True
+    assert plan.copies == ()
+
+
+def test_copy_blocked_escapes_base_root_emits_no_copy():
+    # V4/D-07: destino que escaparia da raiz-base → blocked, 0 cópias.
+    autos = [
+        _auto(
+            conditions=[_cond("extension", "eq", ".pdf")],
+            actions=[_action("copy", params={"dest_folder": "../fora"})],
+        )
+    ]
+    plan = evaluate_automations(autos, FIELDS, ATTRS, base_root=BASE)
+    assert plan.blocked is True
+    assert plan.copies == ()
+
+
+def test_copy_unknown_action_type_stays_inert():
+    # V5: action_type desconhecido não emite cópia, não bloqueia.
+    autos = [
+        _auto(
+            conditions=[_cond("extension", "eq", ".pdf")],
+            actions=[_action("xpto", params={"dest_folder": "Arquivo"})],
+        )
+    ]
+    plan = evaluate_automations(autos, FIELDS, ATTRS, base_root=BASE)
+    assert plan.matched is True
+    assert plan.blocked is False
+    assert plan.copies == ()
+
+
+def test_no_copy_actions_means_empty_copies_tuple():
+    # Não-regressão D-04: sem ação copy, o plano single-output preserva copies=().
+    autos = [
+        _auto(
+            conditions=[_cond("extension", "eq", ".pdf")],
+            actions=[_action("move", params={"dest_folder": "NF/{cliente}"})],
+        )
+    ]
+    plan = evaluate_automations(autos, FIELDS, ATTRS, base_root=BASE)
+    assert plan.copies == ()
 
 
 # ---- ordem entre automações (D-25) ----------------------------------------- #
