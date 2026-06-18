@@ -36,9 +36,10 @@ ESPERADAS = {
     "template_fields",
     "classification_results",
     "filled_fields",
-    # Fase 6 (migração 0006) — regras condicionais de automação.
-    "automation_rules",
-    "rule_conditions",
+    # Fase 6 (migração 0007) — pipeline de automações (substitui regras da 0006).
+    "automation_pipelines",
+    "pipeline_steps",
+    "step_filters",
 }
 
 
@@ -161,10 +162,12 @@ def test_0004_cria_quatro_tabelas_da_fase_4(db_url: str) -> None:
     assert idx["unique"], "índice de classification_results.document_id deve ser UNIQUE"
 
 
-def test_0006_estende_audit_log_e_cria_tabelas_de_regra(db_url: str) -> None:
-    """Fase 6 (0006): `audit_log` ganha as 5 colunas do write-ahead (AUT-04/05) e
-    as tabelas de regra (`automation_rules`/`rule_conditions`, TPL-02) existem; o
-    índice de `rule_conditions.rule_id` está presente (lookup da FK CASCADE)."""
+def test_0007_cria_pipeline_e_remove_regras(db_url: str) -> None:
+    """Fase 6 REDESIGN (0007): após upgrade head, as tabelas de pipeline
+    (`automation_pipelines`/`pipeline_steps`/`step_filters`) EXISTEM e as tabelas de
+    regra da 0006 (`automation_rules`/`rule_conditions`) NÃO existem mais. Os índices
+    de FK CASCADE (`pipeline_steps.pipeline_id`, `step_filters.step_id`) e o índice
+    composto de ordenação (`pipeline_id, position`, D-12) estão presentes."""
     cfg = _make_config(db_url)
     command.upgrade(cfg, "head")
 
@@ -172,20 +175,42 @@ def test_0006_estende_audit_log_e_cria_tabelas_de_regra(db_url: str) -> None:
     try:
         insp = inspect(engine)
         tabelas = set(insp.get_table_names())
-        cols_audit = {c["name"] for c in insp.get_columns("audit_log")}
-        idx_cond = {ix["name"] for ix in insp.get_indexes("rule_conditions")}
+        idx_steps = {ix["name"] for ix in insp.get_indexes("pipeline_steps")}
+        idx_filters = {ix["name"] for ix in insp.get_indexes("step_filters")}
     finally:
         engine.dispose()
 
-    assert {"automation_rules", "rule_conditions"}.issubset(tabelas)
-    assert {"status", "source_path", "dest_path", "run_id", "content_hash"} <= cols_audit, (
-        f"colunas write-ahead ausentes em audit_log: {cols_audit}"
+    assert {"automation_pipelines", "pipeline_steps", "step_filters"}.issubset(tabelas)
+    # As tabelas de regra da 0006 foram dropadas pela 0007.
+    assert not ({"automation_rules", "rule_conditions"} & tabelas), (
+        "tabelas de regra da 0006 não removidas pela 0007"
     )
-    assert "ix_rule_conditions_rule_id" in idx_cond
+    assert "ix_pipeline_steps_pipeline_id" in idx_steps
+    assert "ix_pipeline_steps_pipeline_position" in idx_steps
+    assert "ix_step_filters_step_id" in idx_filters
 
 
-def test_0006_preserva_trigger_documents_updated_at(db_url: str) -> None:
-    """T-06-01: a 0006 NÃO toca `documents` (sem batch recreate), logo o trigger
+def test_0007_preserva_write_ahead_de_audit_log(db_url: str) -> None:
+    """T-06-15: a 0007 NÃO toca `audit_log` — as 5 colunas write-ahead da 0006
+    (status/source_path/dest_path/run_id/content_hash, base de AUT-04/05) permanecem
+    após upgrade head."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+
+    engine = create_engine(db_url)
+    try:
+        cols_audit = {c["name"] for c in inspect(engine).get_columns("audit_log")}
+    finally:
+        engine.dispose()
+
+    assert {"status", "source_path", "dest_path", "run_id", "content_hash"} <= cols_audit, (
+        f"colunas write-ahead de audit_log perdidas após 0007: {cols_audit}"
+    )
+    assert "status" in cols_audit
+
+
+def test_0007_preserva_trigger_documents_updated_at(db_url: str) -> None:
+    """T-06-01: a 0007 NÃO toca `documents` (sem batch recreate), logo o trigger
     `trg_documents_updated_at` (criado na 0002) permanece após upgrade head."""
     cfg = _make_config(db_url)
     command.upgrade(cfg, "head")
@@ -202,13 +227,13 @@ def test_0006_preserva_trigger_documents_updated_at(db_url: str) -> None:
     finally:
         engine.dispose()
 
-    assert trigger == "trg_documents_updated_at", "trigger de documents perdido após 0006"
+    assert trigger == "trg_documents_updated_at", "trigger de documents perdido após 0007"
 
 
-def test_downgrade_um_passo_remove_so_a_fase_6(db_url: str) -> None:
-    """downgrade -1 (de head=0006) reverte SOMENTE a 0006: dropa as tabelas de regra
-    e as 5 colunas write-ahead de `audit_log`, preservando TODAS as tabelas/colunas
-    das Fases 1–5 (a Fase 5 — confidence_score/manually_corrected — permanece)."""
+def test_downgrade_um_passo_reverte_so_a_fase_6_redesign(db_url: str) -> None:
+    """downgrade -1 (de head=0007) reverte SOMENTE a 0007: dropa as tabelas de
+    pipeline e RECRIA as tabelas de regra da 0006 (reversibilidade do histórico),
+    preservando o write-ahead de `audit_log` e o schema das Fases 1–5."""
     cfg = _make_config(db_url)
     command.upgrade(cfg, "head")
     command.downgrade(cfg, "-1")
@@ -223,16 +248,48 @@ def test_downgrade_um_passo_remove_so_a_fase_6(db_url: str) -> None:
     finally:
         engine.dispose()
 
-    # As tabelas de regra e as colunas write-ahead saíram no downgrade -1.
-    assert not ({"automation_rules", "rule_conditions"} & tabelas), (
-        "tabelas da Fase 6 não removidas no downgrade -1"
+    # As tabelas de pipeline saíram; as tabelas de regra da 0006 voltaram.
+    assert not (
+        {"automation_pipelines", "pipeline_steps", "step_filters"} & tabelas
+    ), "tabelas de pipeline não removidas no downgrade -1"
+    assert {"automation_rules", "rule_conditions"}.issubset(tabelas), (
+        "tabelas de regra da 0006 não recriadas no downgrade -1"
     )
-    assert not ({"status", "source_path", "dest_path", "run_id", "content_hash"} & cols_audit), (
-        "colunas write-ahead da Fase 6 não removidas no downgrade -1"
-    )
-    # As colunas da Fase 5 permanecem — a 0006 não as toca.
+    # O write-ahead de audit_log (0006) permanece — a 0007 não o toca.
+    assert {"status", "source_path", "dest_path", "run_id", "content_hash"} <= cols_audit
+    # As colunas da Fase 5 permanecem.
     assert "confidence_score" in cols_cls
     assert "manually_corrected" in cols_ff
+
+
+def test_downgrade_dois_passos_remove_a_fase_6_inteira(db_url: str) -> None:
+    """downgrade -2 (de head=0007) reverte 0007 + 0006: remove as tabelas de
+    pipeline E de regra E as 5 colunas write-ahead de `audit_log`, preservando
+    intactos os schemas das Fases 1–5 (confidence_score/manually_corrected)."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "-2")
+
+    engine = create_engine(db_url)
+    try:
+        insp = inspect(engine)
+        tabelas = set(insp.get_table_names())
+        cols_audit = {c["name"] for c in insp.get_columns("audit_log")}
+        cols_cls = {c["name"] for c in insp.get_columns("classification_results")}
+    finally:
+        engine.dispose()
+
+    fase6 = {
+        "automation_pipelines", "pipeline_steps", "step_filters",
+        "automation_rules", "rule_conditions",
+    }
+    sobrando = fase6 & tabelas
+    assert not sobrando, f"tabelas da Fase 6 não removidas no downgrade -2: {sobrando}"
+    assert not ({"status", "source_path", "dest_path", "run_id", "content_hash"} & cols_audit), (
+        "colunas write-ahead da Fase 6 não removidas no downgrade -2"
+    )
+    # As colunas da Fase 5 permanecem.
+    assert "confidence_score" in cols_cls
     # Tabelas das Fases 1–4 permanecem.
     fase1234 = {
         "documents", "pages", "audit_log", "usage",
@@ -240,34 +297,7 @@ def test_downgrade_um_passo_remove_so_a_fase_6(db_url: str) -> None:
         "extractions",
         "templates", "template_fields", "classification_results", "filled_fields",
     }
-    assert fase1234.issubset(tabelas), "schema das Fases 1–4 não preservado no downgrade -1"
-
-
-def test_downgrade_tres_passos_remove_so_a_fase_4(db_url: str) -> None:
-    """downgrade -3 (de head=0006) reverte 0006 + 0005 + 0004: remove as 4 tabelas
-    da Fase 4 (e as da Fase 6), preservando intactos os schemas das Fases 1, 2 e 3."""
-    cfg = _make_config(db_url)
-    command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-3")
-
-    engine = create_engine(db_url)
-    try:
-        tabelas = set(inspect(engine).get_table_names())
-    finally:
-        engine.dispose()
-
-    fase46 = {
-        "templates", "template_fields", "classification_results", "filled_fields",
-        "automation_rules", "rule_conditions",
-    }
-    fase123 = {
-        "documents", "pages", "audit_log", "usage",
-        "watched_folders", "ingested_originals", "jobs",
-        "extractions",
-    }
-    sobrando = fase46 & tabelas
-    assert not sobrando, f"tabelas das Fases 4/6 não removidas no downgrade -3: {sobrando}"
-    assert fase123.issubset(tabelas), "schema das Fases 1/2/3 não preservado no downgrade -3"
+    assert fase1234.issubset(tabelas), "schema das Fases 1–4 não preservado no downgrade -2"
 
 
 def test_downgrade_base_remove_as_tabelas(db_url: str) -> None:

@@ -12,13 +12,18 @@ As fixtures de schema (`schema_engine`) e de pasta de dados (`data_dir`, que apo
 o CAS para um dir temporário) vêm do conftest raiz — não redefinir aqui.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 from sqlalchemy import Engine
 
+from app.models.automation_pipeline import (
+    AutomationPipeline,
+    PipelineStep,
+    StepFilter,
+)
 from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
 from app.models.enums import DocState
@@ -109,6 +114,102 @@ def classified_doc(schema_engine: Engine) -> ClassifiedDoc:
             classification_result_id=result.id,
             fields=seeded,
         )
+
+
+@dataclass
+class FileAttrs:
+    """Atributos de arquivo do bloco — base dos filtros D-14 do pipeline (06-07).
+
+    Estende o `classified_doc` (campos extraídos) com a dimensão "arquivo": a
+    extensão, o tamanho, a pasta de origem (`source_folder_id`→`WatchedFolder.path`)
+    e o nome original. Consumidos pelos filtros `extension`/`size`/`source_folder`/
+    `filename` que o executor do pipeline aplica.
+    """
+
+    ext: str
+    size: int
+    source_folder_id: int | None
+    original_filename: str
+
+
+@pytest.fixture
+def classified_doc_attrs(classified_doc: "ClassifiedDoc") -> FileAttrs:
+    """Atributos de arquivo que ACOMPANHAM o `classified_doc` (NÃO o redefine).
+
+    Disponibiliza, para os testes de filtros do pipeline (06-07), a dimensão de
+    arquivo do mesmo bloco semeado por `classified_doc`: `.pdf`, ~120 KB, sem
+    pasta de origem específica e com o nome original do bundle.
+    """
+    return FileAttrs(
+        ext=".pdf",
+        size=120_000,
+        source_folder_id=None,
+        original_filename="entrada.pdf",
+    )
+
+
+# Fábrica que cria um AutomationPipeline com N steps; retorna o id do pipeline.
+PipelineFactory = Callable[..., int]
+
+
+@pytest.fixture
+def pipeline_factory(schema_engine: Engine) -> PipelineFactory:
+    """Cria um `AutomationPipeline` persistido com N `PipelineStep` (cada um com
+    `action_type`/`params_json` e 0..N `StepFilter`) — base dos testes do executor
+    (06-07).
+
+    Uso:
+        pid = pipeline_factory(
+            name="P1",
+            steps=[
+                {
+                    "action_type": "rename",
+                    "params_json": '{"name_pattern": "{cliente}_{numero}"}',
+                    "filters": [
+                        {"filter_type": "field", "field_name": "cliente",
+                         "operator": "eq", "value": "ACME Ltda"},
+                    ],
+                },
+                {"action_type": "move", "params_json": '{"folder_pattern": "{data}"}'},
+            ],
+        )
+
+    Retorna o `id` do pipeline criado (a sessão é fechada ao final).
+    """
+
+    def _make(
+        *,
+        name: str = "Pipeline de teste",
+        active: bool = True,
+        steps: list[dict] | None = None,
+    ) -> int:
+        steps = steps or []
+        with get_session(schema_engine) as session:
+            pipeline = AutomationPipeline(name=name, active=active)
+            for i, spec in enumerate(steps):
+                step = PipelineStep(
+                    position=spec.get("position", i),
+                    action_type=spec["action_type"],
+                    conjunction=spec.get("conjunction", "and"),
+                    params_json=spec.get("params_json"),
+                    active=spec.get("active", True),
+                )
+                for j, fspec in enumerate(spec.get("filters", [])):
+                    step.filters.append(
+                        StepFilter(
+                            filter_type=fspec["filter_type"],
+                            operator=fspec["operator"],
+                            value=fspec["value"],
+                            field_name=fspec.get("field_name"),
+                            position=fspec.get("position", j),
+                        )
+                    )
+                pipeline.steps.append(step)
+            session.add(pipeline)
+            session.commit()
+            return pipeline.id
+
+    return _make
 
 
 @pytest.fixture
