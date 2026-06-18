@@ -9,6 +9,13 @@ teste com schema (D-10: create_all só em teste). Espelha
 - POST sem campos → 422; campo sem nome → 422; name em branco → 422
 - DELETE de template NÃO apaga classificações já feitas (D-03 / SET NULL)
 - O endpoint NÃO compila/executa a regex do operador (T-04-10) — guardada como string
+
+Fase 06.1-02 — sinais como GRUPOS E/OU (D-T2):
+- POST/GET com grupos de condições {mode, value}; mode inválido → 422 (Literal, T-06.1-07)
+- value vazio → 422; regex catastrófica guardada como STRING sem compilar (T-04-10/T-06.1-06)
+- forma plana legada `["DANFE"]` lida como `[[{texto, DANFE}]]` (forward-compatible, T-06.1-08)
+- PATCH só com signals preserva fields; PATCH sem signals preserva os signals atuais
+- field.name preservado byte-a-byte (ponte campo→token de automação, D-T9)
 """
 
 import warnings
@@ -24,7 +31,7 @@ with warnings.catch_warnings():
 from app.main import app
 from app.models.classification import ClassificationResult
 from app.models.document import Document
-from app.models.template import Template
+from app.models.template import Template, TemplateField
 from app.storage.db import get_session
 
 
@@ -46,7 +53,10 @@ def _valid_body(name: str = "Nota Fiscal") -> dict:
     return {
         "name": name,
         "doc_type": "Fiscal",
-        "signals": ["linha digitável", "CNPJ"],
+        "signals": [
+            [{"mode": "texto", "value": "linha digitável"}],
+            [{"mode": "texto", "value": "CNPJ"}],
+        ],
         "fields": [
             {
                 "name": "CNPJ emitente",
@@ -67,7 +77,10 @@ def test_crud_lifecycle(client: TestClient) -> None:
     created = resp.json()
     assert created["name"] == "Nota Fiscal"
     assert created["doc_type"] == "Fiscal"
-    assert created["signals"] == ["linha digitável", "CNPJ"]
+    assert created["signals"] == [
+        [{"mode": "texto", "value": "linha digitável"}],
+        [{"mode": "texto", "value": "CNPJ"}],
+    ]
     assert len(created["fields"]) == 2
     cnpj = next(f for f in created["fields"] if f["name"] == "CNPJ emitente")
     assert cnpj["field_type"] == "cpf_cnpj"
@@ -92,14 +105,14 @@ def test_crud_lifecycle(client: TestClient) -> None:
         f"/templates/{template_id}",
         json={
             "name": "NF-e",
-            "signals": ["chave de acesso"],
+            "signals": [[{"mode": "texto", "value": "chave de acesso"}]],
             "fields": [{"name": "Chave de acesso", "field_type": "texto"}],
         },
     )
     assert resp.status_code == 200, resp.text
     patched = resp.json()
     assert patched["name"] == "NF-e"
-    assert patched["signals"] == ["chave de acesso"]
+    assert patched["signals"] == [[{"mode": "texto", "value": "chave de acesso"}]]
     assert len(patched["fields"]) == 1
     assert patched["fields"][0]["name"] == "Chave de acesso"
 
@@ -192,3 +205,113 @@ def test_delete_template_preserves_classifications(
         assert survived is not None
         assert survived.template_id is None
         assert session.scalar(select(Template).where(Template.id == template_id)) is None
+
+
+# ---------------------------------------------------------------------------
+# Fase 06.1-02 — sinais como GRUPOS E/OU (D-T2)
+# ---------------------------------------------------------------------------
+
+
+def test_cria_template_com_grupos(client: TestClient) -> None:
+    """POST com 2 grupos (E dentro, OU entre) → 201; GET devolve os mesmos grupos."""
+    body = {
+        "name": "NF-e grupos",
+        "signals": [
+            [
+                {"mode": "texto", "value": "TryLab"},
+                {"mode": "regex", "value": r"\d{44}"},
+            ],
+            [{"mode": "texto", "value": "12.345.678/0001-99"}],
+        ],
+        "fields": [{"name": "Chave"}],
+    }
+    resp = client.post("/templates", json=body)
+    assert resp.status_code == 201, resp.text
+    template_id = resp.json()["id"]
+    assert resp.json()["signals"] == body["signals"]
+
+    resp = client.get(f"/templates/{template_id}")
+    assert resp.status_code == 200
+    assert resp.json()["signals"] == body["signals"]
+
+
+def test_mode_invalido_422(client: TestClient) -> None:
+    """Uma condição com `mode` fora de texto|regex → 422 (Literal), nunca 500."""
+    body = {
+        "name": "Modo inválido",
+        "signals": [[{"mode": "qualquer", "value": "x"}]],
+        "fields": [{"name": "f"}],
+    }
+    resp = client.post("/templates", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_value_vazio_422(client: TestClient) -> None:
+    """Condição com `value` em branco → 422 (field_validator), nunca 500."""
+    body = {
+        "name": "Valor vazio",
+        "signals": [[{"mode": "texto", "value": "   "}]],
+        "fields": [{"name": "f"}],
+    }
+    resp = client.post("/templates", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_legado_lido_como_grupos(client: TestClient, schema_engine: Engine) -> None:
+    """Template gravado na forma plana legada `["DANFE"]` é lido como 1 grupo OU."""
+    with get_session(schema_engine) as session:
+        tpl = Template(name="Legado plano", signals_json='["DANFE"]')
+        tpl.fields = [TemplateField(name="Campo")]
+        session.add(tpl)
+        session.commit()
+        template_id = tpl.id
+
+    resp = client.get(f"/templates/{template_id}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["signals"] == [[{"mode": "texto", "value": "DANFE"}]]
+
+
+def test_patch_signals_substitui(client: TestClient) -> None:
+    """PATCH só com signals preserva fields; PATCH sem signals preserva signals."""
+    created = client.post("/templates", json=_valid_body("Patch sinais")).json()
+    template_id = created["id"]
+    fields_antes = created["fields"]
+
+    # PATCH só com signals → substitui signals, preserva fields.
+    resp = client.patch(
+        f"/templates/{template_id}",
+        json={"signals": [[{"mode": "regex", "value": r"\d{2}"}]]},
+    )
+    assert resp.status_code == 200, resp.text
+    out = resp.json()
+    assert out["signals"] == [[{"mode": "regex", "value": r"\d{2}"}]]
+    assert [f["name"] for f in out["fields"]] == [f["name"] for f in fields_antes]
+
+    # PATCH sem signals → preserva os signals atuais.
+    resp = client.patch(f"/templates/{template_id}", json={"name": "Patch sinais 2"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["signals"] == [[{"mode": "regex", "value": r"\d{2}"}]]
+
+
+def test_regex_guardada_como_string(client: TestClient) -> None:
+    """Regex catastrófica como value → 201; endpoint NÃO compila/executa (T-04-10)."""
+    body = {
+        "name": "Regex catastrófica",
+        "signals": [[{"mode": "regex", "value": "(a+)+$"}]],
+        "fields": [{"name": "f"}],
+    }
+    resp = client.post("/templates", json=body)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["signals"] == [[{"mode": "regex", "value": "(a+)+$"}]]
+
+
+def test_field_name_preservado_D_T9(client: TestClient) -> None:
+    """field.name persiste byte-a-byte (ponte campo→token de automação, D-T9)."""
+    body = {
+        "name": "Ponte D-T9",
+        "signals": [],
+        "fields": [{"name": "CNPJ do emitente"}],
+    }
+    resp = client.post("/templates", json=body)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["fields"][0]["name"] == "CNPJ do emitente"
