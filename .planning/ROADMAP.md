@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Extração Genérica via IA e Medição de Tokens** - Núcleo do motor: extração por IA dirigida pelo template (qualquer tipo) + texto nativo + medição de uso (completed 2026-06-16)
 - [x] **Phase 4: Templates, Sub-templates e Classificação** - Construtor schema-first de templates e classificação automática contra eles (completed 2026-06-16)
 - [x] **Phase 5: Confiança, Revisão Humana e Quarentena** - Score de confiança determinístico, limiar, fila de revisão lado-a-lado e quarentena visível (completed 2026-06-17)
-- [ ] **Phase 6: Automações de Arquivo (Renomear/Mover)** - Renomear/mover por tokens com dry-run, audit log write-ahead, anti-colisão e undo
+- [x] **Phase 6: Automações de Arquivo (Renomear/Mover)** - Renomear/mover por tokens com dry-run, audit log write-ahead, anti-colisão e undo (modelo final Condições→Ações; verificado por testes 2026-06-18, 1 item de verificação ao vivo pendente)
 - [ ] **Phase 7: Módulo Determinístico Opcional e Roteamento de Custo** - Parsing plugável de tipos conhecidos (boleto/NF-e) e cascata determinístico→nativo→IA — **ADIADA** (otimização opcional; revisitar após medir custo real de tokens em uso)
 - [ ] **Phase 8: Distribuição, Atualização e Documentação** - Releases versionadas, update com migração segura e guias de instalação/atualização/uso/operação
 
@@ -239,7 +239,9 @@ Plans:
 
 **Wave 3 (REPLAN)** *(blocked on 06-07)*
 
-- [ ] 06-08-PLAN.md — Frontend construtor de pipeline (S1 lista ordenada/encadeada + S2 editor de etapa + S3 token com pré-visualização) + Dry-run (S4) + Aplicar/Desfazer (S5/S6) + verificação visual (sem visualizador; zero npm novo)
+- [x] 06-08-PLAN.md — Frontend construtor de pipeline (S1 lista ordenada/encadeada + S2 editor de etapa + S3 token com pré-visualização) + Dry-run (S4) + Aplicar/Desfazer (S5/S6) + verificação visual (sem visualizador; zero npm novo)
+
+> **REFINO PÓS-PLANO (06-09..06-12, 2026-06-18).** Após 06-08, o modelo de automações evoluiu para o **modelo final "Condições→Ações"** (D-23..D-26): 06-09 (refinamentos D-17/D-18/D-21/D-22), 06-10 (construtor conforme mockup), 06-11 (remodelagem Condições→Ações + migração 0008 substituindo pipeline/steps/filters por automations/conditions/actions), 06-12 (reescrita do frontend). Ver `06-VERIFICATION.md`.
 
 ### Phase 06.1: Redesign de Templates e Classificação por Sinais (E/OU + Regex) (INSERTED)
 
@@ -309,7 +311,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 7 �
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
-| 6. Automações de Arquivo (Renomear/Mover) | 7/8 | In Progress|  |
+| 6. Automações de Arquivo (Renomear/Mover) | 8/8 (+06-09..06-12 refino) | Complete (test-verified) | 2026-06-18 |
 | 6.1. Redesign de Templates e Classificação por Sinais | 4/4 | Complete    | 2026-06-18 |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Deferred (2026-06-18) | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
