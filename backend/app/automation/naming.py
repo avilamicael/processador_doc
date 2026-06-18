@@ -56,6 +56,25 @@ def _max_len() -> int:
     return get_settings().automation_max_component_len
 
 
+# Aspas removidas nas PONTAS de qualquer caminho recebido (D-21). O usuário cola
+# caminhos do Windows com aspas (ex.: `"C:\\...\\Análise"`); normalizamos antes de
+# usar. Helper CENTRAL — reusar em todo ponto que recebe um caminho do usuário.
+_EDGE_QUOTES = "\"'"
+
+
+def strip_quotes(value: str | None) -> str:
+    """Remove aspas (`"`/`'`) nas PONTAS de um caminho + trim de espaços (D-21).
+
+    Defesa de produto: o usuário cola caminhos do Windows entre aspas. Só mexe nas
+    PONTAS — o miolo do caminho é preservado intacto (aspas internas permanecem).
+    `None`/vazio → "". NÃO loga o valor. O confinamento V4 roda DEPOIS desta
+    normalização (responsabilidade de `resolve_dest_folder`).
+    """
+    if value is None:
+        return ""
+    return str(value).strip().strip(_EDGE_QUOTES).strip()
+
+
 def sanitize_component(value: str, max_len: int | None = None) -> str:
     """Sanitiza UM componente (segmento) de caminho para ser seguro no Windows.
 
@@ -162,6 +181,8 @@ def resolve_pattern(pattern: str, fields: dict[str, str]) -> str | None:
     valor não-ISO) → `None` (D-07: caller rebaixa para revisão, nunca aplica nome
     quebrado). NÃO loga valores.
     """
+    # D-21: normaliza aspas nas pontas do padrão recebido antes de qualquer uso.
+    pattern = strip_quotes(pattern)
     try:
         substituted = _substitute(pattern, fields, sanitize=False)
     except _MissingField:
@@ -186,6 +207,9 @@ def resolve_dest_folder(
     Campo faltante/inválido (D-07) OU destino que escaparia da raiz-base → `None`.
     NÃO cria a pasta no disco (PURO — sem efeito de filesystem). NÃO loga valores.
     """
+    # D-21: normaliza aspas nas pontas do padrão recebido (usuário cola caminho do
+    # Windows entre aspas) ANTES de fatiar/confinar. O confinamento V4 roda depois.
+    pattern = strip_quotes(pattern)
     # Aceita separadores `/` e `\\` no padrão literal; cada segmento vira componente.
     raw_segments: list[str] = []
     for chunk in re.split(r"[/\\]", pattern):

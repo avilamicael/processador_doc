@@ -73,3 +73,37 @@ def test_folder_traversal_blocked(tmp_path) -> None:
     dest = naming.resolve_dest_folder("{cliente}", malicious, base_root=tmp_path)
     # Bloqueio = None OU permanece confinado sob a raiz (a sanitização neutralizou).
     assert dest is None or dest.is_relative_to(tmp_path)
+
+
+# ---- D-21: normalização de aspas nas pontas de caminhos -------------------- #
+
+
+def test_strip_quotes_double_and_single() -> None:
+    """D-21: remove aspas duplas/simples nas PONTAS + trim de espaços."""
+    assert naming.strip_quotes('"C:\\Users\\Análise"') == "C:\\Users\\Análise"
+    assert naming.strip_quotes("'/home/user/docs'") == "/home/user/docs"
+    assert naming.strip_quotes('  "x"  ') == "x"
+
+
+def test_strip_quotes_preserves_inner_content() -> None:
+    """D-21: NÃO altera o miolo (aspas internas permanecem)."""
+    assert naming.strip_quotes('a"b') == 'a"b'
+    assert naming.strip_quotes("semaspas") == "semaspas"
+
+
+def test_strip_quotes_handles_none_and_empty() -> None:
+    assert naming.strip_quotes(None) == ""
+    assert naming.strip_quotes('""') == ""
+    assert naming.strip_quotes("   ") == ""
+
+
+def test_folder_pattern_with_quotes_normalized(tmp_path) -> None:
+    """D-21: padrão de pasta colado com aspas (estilo Windows) é normalizado e
+    o confinamento V4 segue valendo DEPOIS da normalização."""
+    dest = naming.resolve_dest_folder(
+        '"NotasFiscais/{cliente}"', _fields(), base_root=tmp_path
+    )
+    assert dest is not None
+    assert dest.is_relative_to(tmp_path)
+    # A pasta resultante não contém aspas em nenhum segmento.
+    assert '"' not in str(dest)

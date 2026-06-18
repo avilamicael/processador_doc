@@ -46,7 +46,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.automation import fileops
+from app.automation import fileops, naming
 from app.automation.pipeline import PipelinePlan, PipelineStepSpec, run_pipeline
 from app.automation.rules import FilterSpec
 from app.config import get_settings
@@ -220,7 +220,9 @@ def _base_root() -> Path:
     """
     settings = get_settings()
     if settings.automation_dest_root:
-        return Path(settings.automation_dest_root)
+        # D-21: normaliza aspas nas pontas (o env pode vir com caminho Windows entre
+        # aspas) antes de construir o Path; confinamento V4 segue na resolução.
+        return Path(naming.strip_quotes(settings.automation_dest_root))
     return settings.data_dir / "organizados"
 
 
