@@ -443,15 +443,12 @@ def dry_run(session: Session, *, content_hash: str) -> ApplyStageResult | None:
         )
 
     # A saída de MOVE (alvo final) — emitida só quando há MOVE EFETIVO. Copy-only
-    # (cópias + plano-alvo no DEFAULT) NÃO gera linha de move (o original permanece).
-    base = _base_root().resolve()
-    default_name = Path(source).name
-    is_default_target = (
-        plan.target_folder is not None
-        and Path(plan.target_folder).resolve() == base
-        and (plan.target_name is None or plan.target_name == default_name)
-    )
-    has_effective_move = not (plan.copies and is_default_target)
+    # (cópias sem ação move) NÃO gera linha de move (o original permanece). CR-01:
+    # há move efetivo quando NÃO há cópias (caminho legado Fase 6, sempre move/conclui)
+    # OU quando uma ação `move` foi de fato aplicada (`has_explicit_move`). Antes a
+    # heurística `is_default_target` inferia o move do (folder, name) final e tratava
+    # rename+copy (sem move) como move efetivo → removia o original (D-01 violado).
+    has_effective_move = (not plan.copies) or plan.has_explicit_move
 
     m_collision = False
     m_identical = False
@@ -668,19 +665,14 @@ async def apply_stage(
             StageOutput(kind="copy", dest_path=str(cdst), collision=c_collision)
         )
 
-    # Distingue MOVE EFETIVO de DEFAULT. Copy-only é LEGÍTIMO (cópias + nenhum move):
-    # o plano-alvo fica no DEFAULT (base_root + nome original) e NÃO deve materializar
-    # para a raiz. Há move efetivo quando a pasta-alvo difere do base_root OU o nome
-    # difere do original (rename mudou o nome). Sem cópias, o caminho legado roda
-    # sempre (não-regressão D-04: o move default vira o no-op/conclusão da Fase 6).
-    base = _base_root().resolve()
-    default_name = Path(source).name
-    is_default_target = (
-        plan.target_folder is not None
-        and Path(plan.target_folder).resolve() == base
-        and (plan.target_name is None or plan.target_name == default_name)
-    )
-    has_effective_move = not (plan.copies and is_default_target)
+    # Distingue MOVE EFETIVO de COPY-ONLY. Copy-only é LEGÍTIMO (cópias + nenhuma ação
+    # move): o original PERMANECE na origem (D-01) e NÃO se materializa para a raiz.
+    # CR-01: há move efetivo quando NÃO há cópias (caminho legado Fase 6, roda sempre —
+    # não-regressão D-04) OU quando uma ação `move` foi de fato aplicada
+    # (`has_explicit_move`). A heurística anterior inferia o move do (folder, name)
+    # final, então rename+copy SEM move virava "move efetivo" e REMOVIA o original
+    # (perda de arquivo, D-01 violado). O flag vem fiel da ação real (executor).
+    has_effective_move = (not plan.copies) or plan.has_explicit_move
 
     if not has_effective_move:
         # COPY-ONLY (D-01/D-03): só cópias, sem move. Conclui o documento (D-05) sem

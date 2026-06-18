@@ -64,7 +64,12 @@ class AutomationPlan:
       escaparia da raiz-base (D-07/V4) → o caller rebaixa para revisão SEM
       materializar (nenhuma cópia é emitida quando bloqueia, como o move);
     - `matched=False`: nenhuma automação casou (D-25 no-match) → no-op explícito;
-    - `automation_id`: id da automação que casou (diagnóstico/auditoria; None se nenhuma).
+    - `automation_id`: id da automação que casou (diagnóstico/auditoria; None se nenhuma);
+    - `has_explicit_move`: True SÓ quando uma ação `move` foi de fato aplicada (CR-01).
+      Substitui a heurística frágil `is_default_target` (que confundia rename+copy, sem
+      move, com move efetivo → removia o original, violando D-01). O caller usa
+      `(not copies) or has_explicit_move` para decidir se há move que remove o original.
+      Aditivo (default False): construções existentes sem o flag seguem válidas (D-04).
     """
 
     target_folder: Path | None = None
@@ -73,6 +78,7 @@ class AutomationPlan:
     matched: bool = False
     automation_id: int | None = None
     copies: tuple[PlannedCopy, ...] = ()
+    has_explicit_move: bool = False
 
 
 @dataclass
@@ -112,20 +118,22 @@ def _apply_actions(
     base_root: Path,
     default_folder: Path,
     default_name: str | None,
-) -> tuple[Path | None, str | None, bool, tuple[PlannedCopy, ...]]:
+) -> tuple[Path | None, str | None, bool, tuple[PlannedCopy, ...], bool]:
     """Aplica as AÇÕES ordenadas, mutando nome/pasta-alvo em memória (D-24/D-26).
 
     rename → `resolve_pattern` muta SÓ o nome; move → `resolve_dest_folder`
-    (confinado V4) muta SÓ a pasta. copy (Fase 06.2, D-01/D-03) → `resolve_dest_folder`
+    (confinado V4) muta SÓ a pasta E marca `has_explicit_move=True` (CR-01: é a ÚNICA
+    ação que remove o original). copy (Fase 06.2, D-01/D-03) → `resolve_dest_folder`
     resolve o destino confinado, mas NÃO muta o alvo do documento: acumula uma
     `PlannedCopy` (saída ADICIONAL) com o `name` CORRENTE (rename antes → a cópia
     herda o nome renomeado; ordem D-03). Token p/ campo faltante/inválido ou destino
     fora da raiz → devolve `blocked=True` (mesma regra do move, D-07/V4) e SEM cópias.
-    Retorna `(folder, name, blocked, copies)`. NÃO loga valores (V7/V9).
+    Retorna `(folder, name, blocked, copies, has_explicit_move)`. NÃO loga valores (V7/V9).
     """
     folder: Path | None = default_folder
     name: str | None = default_name
     copies: list[PlannedCopy] = []
+    has_explicit_move = False
 
     for action in sorted(actions, key=lambda a: a.position):
         if action.action_type == "rename":
@@ -133,15 +141,18 @@ def _apply_actions(
                 action.params.get("name_pattern", ""), fields
             )
             if resolved_name is None:
-                return None, None, True, ()  # D-07
+                return None, None, True, (), False  # D-07
             name = resolved_name
         elif action.action_type == "move":
             resolved_folder = naming.resolve_dest_folder(
                 action.params.get("dest_folder", ""), fields, base_root=base_root
             )
             if resolved_folder is None:
-                return None, None, True, ()  # D-07 / V4
+                return None, None, True, (), False  # D-07 / V4
             folder = resolved_folder
+            # CR-01: marca que houve MOVE explícito — flag fiel à ação real, em vez de
+            # inferir do (folder, name) final (rename+copy sem move enganava a heurística).
+            has_explicit_move = True
         elif action.action_type == "copy":
             # D-01/D-03: cópia é SAÍDA ADICIONAL — resolve/bloqueia como o move, mas
             # NÃO muta o (folder, name) corrente. Captura o `name` corrente (herda o
@@ -150,11 +161,11 @@ def _apply_actions(
                 action.params.get("dest_folder", ""), fields, base_root=base_root
             )
             if resolved_copy_folder is None:
-                return None, None, True, ()  # D-07 / V4 (mesma regra do move)
+                return None, None, True, (), False  # D-07 / V4 (mesma regra do move)
             copies.append(PlannedCopy(folder=resolved_copy_folder, name=name))
         # action_type desconhecido: ignora (ação inerte) — falha fechada (V5).
 
-    return folder, name, False, tuple(copies)
+    return folder, name, False, tuple(copies), has_explicit_move
 
 
 def evaluate_automations(
@@ -190,7 +201,7 @@ def evaluate_automations(
             continue
 
         # Primeira automação que casa (D-25): executa suas ações e PARA.
-        folder, name, blocked, copies = _apply_actions(
+        folder, name, blocked, copies, has_explicit_move = _apply_actions(
             automation.actions,
             fields,
             base_root=base_root,
@@ -208,6 +219,7 @@ def evaluate_automations(
             matched=True,
             automation_id=automation.automation_id,
             copies=copies,
+            has_explicit_move=has_explicit_move,
         )
 
     # Nenhuma automação casou (D-25 no-match): plano default, no-op no caller.

@@ -516,6 +516,123 @@ def test_copies_before_move_order(
         assert move_done == 1
 
 
+def test_rename_copy_no_move_keeps_original(
+    schema_engine: Engine,
+    classified_doc: ClassifiedDoc,
+    automation_factory,
+    monkeypatch,
+) -> None:
+    """CR-01 / D-01: rename + copy SEM move NÃO remove o original.
+
+    Regressão do BLOCKER: a heurística antiga inferia o "move efetivo" do (folder,
+    name) final; com rename+copy o nome mudava → `is_default_target=False` →
+    `has_effective_move=True` → o caminho de move rodava e REMOVIA o original (perda
+    de arquivo). Com o flag explícito `has_explicit_move` (que SÓ a ação move liga),
+    rename+copy sem move continua copy-only: o original PERMANECE, o doc conclui e a
+    cópia é criada já com o nome RENOMEADO (D-03).
+
+    Sem o fix este teste FALHA: `remove_original` seria chamado (remove_calls != [])
+    e o doc passaria pelo caminho de move (não copy-only).
+    """
+    import app.automation.fileops as fileops
+
+    copied: list[str] = []
+    remove_calls: list[str] = []
+
+    def spy_materialize(content_hash, dst):
+        copied.append(str(dst))
+        return str(dst)
+
+    monkeypatch.setattr(fileops, "materialize_to_dest", spy_materialize)
+    monkeypatch.setattr(
+        fileops, "remove_original", lambda src: remove_calls.append(str(src))
+    )
+
+    automation_factory(
+        name="A-rename-copy-no-move",
+        conditions=[{"field": "extension", "operator": "eq", "value": ".pdf"}],
+        actions=[
+            {
+                "action_type": "rename",
+                "params_json": '{"name_pattern": "{cliente}_{numero}"}',
+            },
+            {"action_type": "copy", "params_json": '{"dest_folder": "ARQUIVO"}'},
+        ],
+    )
+
+    with get_session(schema_engine) as session:
+        result = asyncio.run(
+            stage.apply_stage(
+                session, content_hash=classified_doc.content_hash, run_id="run-rc"
+            )
+        )
+        # D-01: o original NUNCA é removido (a essência do BLOCKER CR-01).
+        assert remove_calls == []
+        # Copy-only: apenas a cópia foi materializada (sem saída de move).
+        assert len(copied) == 1
+        # A cópia herdou o nome RENOMEADO (rename antes da copy, D-03).
+        assert "ACME Ltda_1234" in copied[0]
+        assert "ARQUIVO" in copied[0]
+        # O documento conclui mesmo sem move (copy-only, D-05).
+        doc = session.get(Document, classified_doc.document_id)
+        assert doc.state == DocState.CONCLUIDO
+        # Não há saída de move no resultado — só a cópia.
+        kinds = [o.kind for o in result.outputs]
+        assert kinds == ["copy"]
+
+
+def test_move_copy_removes_original_after_copy(
+    schema_engine: Engine,
+    classified_doc: ClassifiedDoc,
+    automation_factory,
+    monkeypatch,
+) -> None:
+    """D-03 (guarda): move + copy AINDA remove o original — DEPOIS da cópia.
+
+    Contraponto ao teste CR-01: quando HÁ uma ação move explícita, o move efetivo
+    roda e `remove_original` é chamado (uma vez), porém só APÓS a cópia materializar.
+    """
+    from pathlib import Path
+
+    import app.automation.fileops as fileops
+
+    events: list[str] = []
+    remove_calls: list[str] = []
+
+    def spy_materialize(content_hash, dst):
+        events.append(f"materialize:{Path(dst).parent.name}")
+        return str(dst)
+
+    def spy_remove(src):
+        events.append("remove_original")
+        remove_calls.append(str(src))
+
+    monkeypatch.setattr(fileops, "materialize_to_dest", spy_materialize)
+    monkeypatch.setattr(fileops, "remove_original", spy_remove)
+
+    automation_factory(
+        name="A-move-copy",
+        conditions=[{"field": "extension", "operator": "eq", "value": ".pdf"}],
+        actions=[
+            {"action_type": "copy", "params_json": '{"dest_folder": "ARQUIVO"}'},
+            {"action_type": "move", "params_json": '{"dest_folder": "PROCESSADOS"}'},
+        ],
+    )
+
+    with get_session(schema_engine) as session:
+        result = asyncio.run(
+            stage.apply_stage(
+                session, content_hash=classified_doc.content_hash, run_id="run-mc"
+            )
+        )
+        # D-03: o original É removido (move efetivo), mas DEPOIS da cópia.
+        assert len(remove_calls) == 1
+        assert events.index("materialize:ARQUIVO") < events.index("remove_original")
+        kinds = [o.kind for o in result.outputs]
+        assert "copy" in kinds
+        assert "move" in kinds
+
+
 def test_copy_collision_suffix(
     schema_engine: Engine,
     classified_doc: ClassifiedDoc,
