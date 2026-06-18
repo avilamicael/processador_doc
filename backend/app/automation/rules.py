@@ -25,6 +25,7 @@ pelo caller. NÃO loga valores de campo (LGPD).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
@@ -147,6 +148,54 @@ def first_matching_rule(rules: list[Rule], fields: dict[str, str]) -> Rule | Non
 _FILTER_TYPES = frozenset(
     {"field", "source_folder", "extension", "filename", "size", "template"}
 )
+
+
+def normalize_extensions(raw) -> list[str]:
+    """Normaliza extensões DIGITADAS pelo usuário (D-17) → lista canônica `.ext`.
+
+    Aceita uma lista (`[".pdf", "XLSX"]`) OU uma string única separada por vírgula/
+    espaço/ponto-e-vírgula (`"pdf, .xlsx; PNG"`). Cada item é: stripado, lowercased,
+    prefixado com "." se ausente. Itens vazios são descartados. Resultado sem
+    duplicatas, preservando a ordem. NÃO loga valores.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        items = re.split(r"[,;\s]+", raw)
+    elif isinstance(raw, (list, tuple)):
+        items = list(raw)
+    else:
+        items = [raw]
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        token = str(item).strip().casefold()
+        if not token:
+            continue
+        if not token.startswith("."):
+            token = "." + token
+        if token not in seen:
+            seen.add(token)
+            out.append(token)
+    return out
+
+
+def ext_matches(raw_extensions, file_ext: str | None) -> bool:
+    """Casa a EXTENSÃO do arquivo (`file_ext`) contra as extensões digitadas (D-17).
+
+    `raw_extensions` vem dos params do step (`{"extensions": [...]/"..."}`); é
+    normalizado por `normalize_extensions` (case/dot-insensitive). True quando a
+    extensão do arquivo está na lista normalizada. Lista vazia → False (um gate sem
+    extensão configurada nunca casa: falha fechada, V5). NÃO loga valores.
+    """
+    wanted = normalize_extensions(raw_extensions)
+    if not wanted:
+        return False
+    actual = str(file_ext or "").strip().casefold()
+    if actual and not actual.startswith("."):
+        actual = "." + actual
+    return actual in wanted
 
 
 @dataclass

@@ -234,6 +234,97 @@ def test_no_match_is_explicit_noop():
     assert plan.target_name == "entrada.pdf"
 
 
+# ---- gate identify_file por extensão (D-17) -------------------------------- #
+
+
+def test_gate_identify_file_single_extension_matches():
+    # D-17: extensão digitada (.pdf) casa a extensão do arquivo → segue.
+    steps = [
+        _step("identify_file", position=0, params={"extensions": [".pdf"]}),
+        _step("move", position=1, params={"folder_pattern": "NF"}),
+    ]
+    plan = run_pipeline(steps, FIELDS, dict(ATTRS), base_root=BASE, classify_fn=_no_classify)
+    assert plan.matched_any is True
+    assert plan.target_folder == (BASE.resolve() / "NF")
+
+
+def test_gate_identify_file_case_and_dot_insensitive():
+    # D-17: múltiplas extensões, sem ponto e com caixa alta → normalizadas.
+    attrs = {**ATTRS, "ext": ".PDF"}
+    steps = [
+        _step("identify_file", position=0, params={"extensions": ["xlsx", "PDF"]}),
+        _step("move", position=1, params={"folder_pattern": "NF"}),
+    ]
+    plan = run_pipeline(steps, FIELDS, attrs, base_root=BASE, classify_fn=_no_classify)
+    assert plan.matched_any is True
+    assert plan.target_folder == (BASE.resolve() / "NF")
+
+
+def test_gate_identify_file_no_match_stops_pipeline():
+    # D-18: gate por extensão NÃO casa → INTERROMPE; etapas seguintes não rodam.
+    attrs = {**ATTRS, "ext": ".pdf"}
+    steps = [
+        _step("identify_file", position=0, params={"extensions": [".xlsx"]}),
+        _step("move", position=1, params={"folder_pattern": "NUNCA"}),
+    ]
+    plan = run_pipeline(steps, FIELDS, attrs, base_root=BASE, classify_fn=_no_classify)
+    # Gate não casou → pipeline parado, sem materializar (no-match explícito).
+    assert plan.gate_stopped is True
+    assert plan.matched_any is False
+    assert plan.target_folder == BASE.resolve()
+    assert plan.target_name == "entrada.pdf"
+
+
+def test_gate_identify_file_param_string_extensions():
+    # D-17: aceita extensions como string única "pdf, xlsx" (defensivo).
+    steps = [
+        _step("identify_file", position=0, params={"extensions": "pdf, xlsx"}),
+        _step("move", position=1, params={"folder_pattern": "NF"}),
+    ]
+    plan = run_pipeline(steps, FIELDS, dict(ATTRS), base_root=BASE, classify_fn=_no_classify)
+    assert plan.target_folder == (BASE.resolve() / "NF")
+
+
+# ---- semântica de GATE identify_type (D-18) -------------------------------- #
+
+
+def test_gate_identify_type_no_match_filter_stops_pipeline():
+    # D-18: gate identify_type cujo FILTRO de entrada não casa → INTERROMPE.
+    steps = [
+        _step(
+            "identify_type",
+            position=0,
+            params={"template_id": 42},
+            filters=[_filter("field", "eq", "Outra", field_name="cliente")],
+        ),
+        _step("move", position=1, params={"folder_pattern": "NUNCA"}),
+    ]
+    plan = run_pipeline(steps, FIELDS, dict(ATTRS), base_root=BASE, classify_fn=_no_classify)
+    assert plan.gate_stopped is True
+    assert plan.matched_any is False
+    assert plan.target_folder == BASE.resolve()
+
+
+def test_action_no_match_only_skips_does_not_stop():
+    # D-18: etapa de AÇÃO (move) cujo filtro não casa apenas PULA — não interrompe;
+    # uma ação seguinte que casa AINDA roda.
+    steps = [
+        _step(
+            "move",
+            position=0,
+            params={"folder_pattern": "PULADA"},
+            filters=[_filter("field", "eq", "Outra", field_name="cliente")],
+        ),
+        _step("rename", position=1, params={"name_pattern": "{numero}"}),
+    ]
+    plan = run_pipeline(steps, FIELDS, dict(ATTRS), base_root=BASE, classify_fn=_no_classify)
+    assert plan.gate_stopped is False
+    assert plan.matched_any is True
+    # O move foi pulado (pasta default), mas o rename seguinte rodou.
+    assert plan.target_folder == BASE.resolve()
+    assert plan.target_name == "1234"
+
+
 # ---- gate identify_type (D-15) --------------------------------------------- #
 
 

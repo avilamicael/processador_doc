@@ -32,7 +32,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.automation import naming
-from app.automation.rules import FilterSpec, filter_matches
+from app.automation.rules import FilterSpec, ext_matches, filter_matches
+
+# Ações de GATE (porteiro, D-18): quando o casamento (filtro de entrada OU, no caso
+# do identify_file, a lista de extensões) NÃO confere, o pipeline é INTERROMPIDO para
+# o documento — nenhuma etapa subsequente roda e nada é materializado. Ações comuns
+# (move/rename) que não casam apenas PULAM.
+_GATE_ACTIONS = frozenset({"identify_file", "identify_type"})
 
 
 @dataclass(frozen=True)
@@ -55,6 +61,12 @@ class PipelinePlan:
     route_to: str | None = None
     identified_template_id: int | None = None
     matched_any: bool = False
+    # gate_stopped=True quando uma etapa de GATE (identify_file/identify_type) NÃO
+    # casou (D-18): o pipeline foi INTERROMPIDO (porteiro) e o documento é tratado
+    # como no-match (mantido na origem, NÃO materializa). Distingue-se do no-match
+    # de P10 (nenhuma etapa casou) só para diagnóstico/log; o caller trata ambos
+    # como no-op explícito (matched_any=False).
+    gate_stopped: bool = False
 
 
 @dataclass
@@ -88,8 +100,11 @@ def run_pipeline(
     Plano-alvo inicial = DEFAULT: pasta = `base_root` resolvida, nome = nome
     original do arquivo. Para cada etapa (ordenada por `position`):
       1. etapa pausada (`active=False`) → PULA (D-12);
-      2. filtro não casa → PULA (D-14);
+      2. filtro não casa → PULA se for AÇÃO; INTERROMPE (gate_stopped) se for GATE
+         (`identify_file`/`identify_type`), D-18;
       3. senão `matched_any=True` e despacha por `action_type`:
+         - `identify_file`: gate por EXTENSÃO digitada (D-17); extensão fora da lista
+           → INTERROMPE o pipeline (gate_stopped, D-18);
          - `identify_type`: `classify_fn(template_id)` → `identified_template_id`
            (consumível pelos filtros `template` seguintes, D-15); o gate é o ÚNICO
            ponto que chama a classificação (idempotente, custo 0);
@@ -108,16 +123,41 @@ def run_pipeline(
         # (1) Etapa pausada = como se não existisse no pipeline ativo (D-12).
         if not step.active:
             continue
-        # (2) Filtro de entrada (D-14): sem filtros = casa sempre (P10).
+
+        action = step.action_type
+        is_gate = action in _GATE_ACTIONS
+
+        # (2) Filtro de entrada (D-14): sem filtros = casa sempre (P10). Semântica
+        # de GATE (D-18): se o filtro de uma etapa de identificação NÃO casa, o
+        # pipeline INTERROMPE (porteiro). Para uma ação comum, apenas PULA.
         if not filter_matches(
             step.filters, step.conjunction, fields, file_attrs, identified
         ):
+            if is_gate:
+                return PipelinePlan(
+                    target_folder=folder,
+                    target_name=name,
+                    identified_template_id=identified,
+                    matched_any=False,
+                    gate_stopped=True,
+                )
             continue
 
         matched_any = True
-        action = step.action_type
 
-        if action == "identify_type":
+        if action == "identify_file":
+            # Gate D-17: casa por EXTENSÃO digitada pelo usuário (uma ou mais),
+            # case/dot-insensitive. NÃO casou → INTERROMPE o pipeline (D-18).
+            if not ext_matches(step.params.get("extensions"), file_attrs.get("ext")):
+                return PipelinePlan(
+                    target_folder=folder,
+                    target_name=name,
+                    identified_template_id=identified,
+                    matched_any=False,
+                    gate_stopped=True,
+                )
+
+        elif action == "identify_type":
             # Gate D-15: reusa a classificação existente (custo 0, NÃO re-cobra IA).
             identified = classify_fn(step.params.get("template_id"))
             file_attrs = {**file_attrs, "template_id": identified}

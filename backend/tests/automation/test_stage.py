@@ -175,6 +175,88 @@ def test_route_stops_no_materialize(
         assert doc.state == DocState.EM_REVISAO
 
 
+def test_gate_identify_file_no_match_stops_no_materialize(
+    schema_engine: Engine, classified_doc: ClassifiedDoc, pipeline_factory, monkeypatch
+) -> None:
+    """D-17/D-18: gate identify_file cuja extensão NÃO casa interrompe o pipeline
+    e NÃO materializa (doc mantido na origem, estado inalterado)."""
+    import app.automation.fileops as fileops
+
+    def fail_materialize(*args, **kwargs):  # pragma: no cover
+        raise AssertionError("gate parado NÃO deve materializar")
+
+    monkeypatch.setattr(fileops, "materialize_to_dest", fail_materialize)
+
+    # O doc semeado é entrada.pdf; o gate exige .xlsx → não casa → para.
+    pipeline_factory(
+        name="P-gatefile",
+        steps=[
+            {
+                "action_type": "identify_file",
+                "params_json": '{"extensions": [".xlsx"]}',
+            },
+            {"action_type": "move", "params_json": '{"folder_pattern": "NUNCA"}'},
+        ],
+    )
+
+    with get_session(schema_engine) as session:
+        result = asyncio.run(
+            stage.apply_stage(
+                session, content_hash=classified_doc.content_hash, run_id="run-gf"
+            )
+        )
+        assert result.no_match is True
+        assert result.materialized is False
+        done = session.scalar(
+            select(func.count()).select_from(AuditLog).where(AuditLog.status == "done")
+        )
+        assert done == 0
+        doc = session.get(Document, classified_doc.document_id)
+        assert doc.state == DocState.PROCESSANDO
+        assert doc.last_completed_step == "classificado"
+
+
+def test_gate_identify_file_match_proceeds(
+    schema_engine: Engine, classified_doc: ClassifiedDoc, pipeline_factory, monkeypatch
+) -> None:
+    """D-17: gate identify_file cuja extensão CASA deixa o pipeline seguir e a etapa
+    de ação seguinte materializa normalmente."""
+    import app.automation.fileops as fileops
+
+    moved = {"called": False}
+
+    def spy_materialize(content_hash, dst):
+        moved["called"] = True
+        return str(dst)
+
+    monkeypatch.setattr(fileops, "materialize_to_dest", spy_materialize)
+    monkeypatch.setattr(fileops, "remove_original", lambda *a, **k: None)
+
+    pipeline_factory(
+        name="P-gatefile-ok",
+        steps=[
+            {
+                "action_type": "identify_file",
+                "params_json": '{"extensions": ["PDF"]}',
+            },
+            {
+                "action_type": "rename",
+                "params_json": '{"name_pattern": "{cliente}_{numero}"}',
+            },
+        ],
+    )
+
+    with get_session(schema_engine) as session:
+        result = asyncio.run(
+            stage.apply_stage(
+                session, content_hash=classified_doc.content_hash, run_id="run-gfok"
+            )
+        )
+        assert result.no_match is False
+        assert result.materialized is True
+        assert moved["called"] is True
+
+
 def test_no_match_keeps_origin_no_materialize(
     schema_engine: Engine, classified_doc: ClassifiedDoc, pipeline_factory, monkeypatch
 ) -> None:
