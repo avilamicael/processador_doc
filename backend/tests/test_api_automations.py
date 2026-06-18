@@ -1,11 +1,12 @@
-"""GREEN — API de automações (CRUD aninhado de pipeline/steps/filtros + dry-run/apply/undo).
+"""API de automações — CRUD com condições/ações + dry-run/apply/undo (MODELO FINAL).
 
 Espelha `test_api_templates.py`: `TestClient` com `app.state.engine` sobrescrito por
 um engine de teste com schema. Prova:
-- POST cria pipeline com steps + filtros aninhados (201) + GET lista + GET por id +
-  PATCH (substitui steps, delete-orphan) + DELETE (204, cascade);
-- 422: action_type/filter_type/operator inválido; param obrigatório faltante por tipo;
-- 404: pipeline ausente (GET/PATCH/DELETE);
+- POST cria automação com conditions[] + actions[] aninhados (201) + GET lista + GET
+  por id + PATCH (substitui coleções, delete-orphan) + DELETE (204, cascade);
+- 422: action_type/field/operator inválido; param obrigatório faltante por ação;
+- 404: automação ausente (GET/PATCH/DELETE);
+- ordem entre automações (position) preservada na listagem;
 - dry-run / apply / undo respondem.
 """
 
@@ -20,7 +21,6 @@ with warnings.catch_warnings():
     from fastapi.testclient import TestClient
 
 from app.main import app
-from app.storage.db import get_session  # noqa: F401  (reusado pelas waves seguintes)
 
 
 @pytest.fixture
@@ -35,206 +35,150 @@ def client(schema_engine: Engine) -> Iterator[TestClient]:
         app.state.engine = previous
 
 
-def _valid_pipeline(name: str = "Organizar NFs") -> dict:
+def _valid_automation(name: str = "Organizar NFs", position: int = 0) -> dict:
     return {
         "name": name,
         "active": True,
-        "steps": [
+        "position": position,
+        "conditions": [
+            {"field": "source_folder", "operator": "eq", "value": "Downloads"},
+            {"field": "extension", "operator": "eq", "value": ".pdf"},
             {
-                "action_type": "identify_type",
-                "params": {"template_id": 1},
-                "filters": [],
+                "field": "field",
+                "field_name": "cliente",
+                "operator": "contains",
+                "value": "ACME",
             },
-            {
-                "action_type": "rename",
-                "params": {"name_pattern": "{cliente}_{numero}"},
-                "conjunction": "and",
-                "filters": [
-                    {
-                        "filter_type": "field",
-                        "field_name": "cliente",
-                        "operator": "contains",
-                        "value": "ACME",
-                    },
-                    {"filter_type": "extension", "operator": "eq", "value": ".pdf"},
-                ],
-            },
-            {
-                "action_type": "move",
-                "params": {"folder_pattern": "NotasFiscais/{cliente}"},
-                "filters": [],
-            },
+        ],
+        "actions": [
+            {"action_type": "rename", "params": {"name_pattern": "{cliente}_{numero}"}},
+            {"action_type": "move", "params": {"dest_folder": "NotasFiscais/{cliente}"}},
         ],
     }
 
 
 def test_crud_lifecycle(client: TestClient) -> None:
-    # POST cria pipeline com steps + filtros aninhados
-    resp = client.post("/automations", json=_valid_pipeline())
+    # POST cria automação com conditions + actions aninhadas
+    resp = client.post("/automations", json=_valid_automation())
     assert resp.status_code == 201, resp.text
     created = resp.json()
     assert created["name"] == "Organizar NFs"
-    assert len(created["steps"]) == 3
-    # Steps em ordem de position; o segundo tem 2 filtros.
-    assert created["steps"][0]["action_type"] == "identify_type"
-    assert len(created["steps"][1]["filters"]) == 2
-    pid = created["id"]
+    assert len(created["conditions"]) == 3
+    assert len(created["actions"]) == 2
+    # Ações em ordem de position.
+    assert created["actions"][0]["action_type"] == "rename"
+    assert created["actions"][1]["action_type"] == "move"
+    aid = created["id"]
 
     # GET lista + GET por id
     resp = client.get("/automations")
     assert resp.status_code == 200
-    assert any(p["id"] == pid for p in resp.json())
+    assert any(a["id"] == aid for a in resp.json())
 
-    resp = client.get(f"/automations/{pid}")
+    resp = client.get(f"/automations/{aid}")
     assert resp.status_code == 200
-    assert resp.json()["id"] == pid
+    assert resp.json()["id"] == aid
 
-    # PATCH substitui steps (delete-orphan)
+    # PATCH substitui conditions/actions (delete-orphan)
     resp = client.patch(
-        f"/automations/{pid}",
+        f"/automations/{aid}",
         json={
-            "name": "Pipeline editado",
-            "steps": [
-                {
-                    "action_type": "route",
-                    "params": {"target": "em_revisao"},
-                    "filters": [],
-                }
+            "name": "Automação editada",
+            "conditions": [
+                {"field": "extension", "operator": "eq", "value": ".xlsx"}
+            ],
+            "actions": [
+                {"action_type": "move", "params": {"dest_folder": "Planilhas"}}
             ],
         },
     )
     assert resp.status_code == 200, resp.text
     patched = resp.json()
-    assert patched["name"] == "Pipeline editado"
-    assert len(patched["steps"]) == 1
-    assert patched["steps"][0]["action_type"] == "route"
+    assert patched["name"] == "Automação editada"
+    assert len(patched["conditions"]) == 1
+    assert len(patched["actions"]) == 1
+    assert patched["actions"][0]["action_type"] == "move"
 
     # DELETE remove (cascade)
-    resp = client.delete(f"/automations/{pid}")
+    resp = client.delete(f"/automations/{aid}")
     assert resp.status_code == 204
-    resp = client.get(f"/automations/{pid}")
+    resp = client.get(f"/automations/{aid}")
     assert resp.status_code == 404
 
 
+def test_list_ordered_by_position(client: TestClient) -> None:
+    """D-25: a listagem reflete a ordem de `position` (a primeira que casa vence)."""
+    client.post("/automations", json=_valid_automation("Genérica", position=5))
+    client.post("/automations", json=_valid_automation("Específica", position=1))
+    resp = client.get("/automations")
+    assert resp.status_code == 200
+    names = [a["name"] for a in resp.json()]
+    assert names.index("Específica") < names.index("Genérica")
+
+
 def test_create_blank_name_returns_422(client: TestClient) -> None:
-    body = _valid_pipeline()
+    body = _valid_automation()
     body["name"] = "   "
     resp = client.post("/automations", json=body)
     assert resp.status_code == 422, resp.text
 
 
 def test_create_invalid_action_type_returns_422(client: TestClient) -> None:
-    body = _valid_pipeline()
-    body["steps"] = [{"action_type": "explode", "params": {}, "filters": []}]
+    body = _valid_automation()
+    body["actions"] = [{"action_type": "explode", "params": {}}]
     resp = client.post("/automations", json=body)
     assert resp.status_code == 422, resp.text
 
 
-def test_create_invalid_filter_type_returns_422(client: TestClient) -> None:
-    body = _valid_pipeline()
-    body["steps"] = [
-        {
-            "action_type": "rename",
-            "params": {"name_pattern": "{cliente}"},
-            "filters": [{"filter_type": "xpto", "operator": "eq", "value": "x"}],
-        }
-    ]
+def test_create_route_action_rejected(client: TestClient) -> None:
+    """D-22: 'route' não existe no v1 → 422."""
+    body = _valid_automation()
+    body["actions"] = [{"action_type": "route", "params": {"target": "em_revisao"}}]
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_invalid_condition_field_returns_422(client: TestClient) -> None:
+    body = _valid_automation()
+    body["conditions"] = [{"field": "xpto", "operator": "eq", "value": "x"}]
     resp = client.post("/automations", json=body)
     assert resp.status_code == 422, resp.text
 
 
 def test_create_invalid_operator_returns_422(client: TestClient) -> None:
-    body = _valid_pipeline()
-    body["steps"] = [
-        {
-            "action_type": "rename",
-            "params": {"name_pattern": "{cliente}"},
-            "filters": [
-                {
-                    "filter_type": "field",
-                    "field_name": "cliente",
-                    "operator": "regex",
-                    "value": "x",
-                }
-            ],
-        }
+    body = _valid_automation()
+    body["conditions"] = [
+        {"field": "field", "field_name": "cliente", "operator": "regex", "value": "x"}
     ]
     resp = client.post("/automations", json=body)
     assert resp.status_code == 422, resp.text
 
 
-def test_create_missing_required_param_returns_422(client: TestClient) -> None:
-    # move sem folder_pattern → 422 (param obrigatório por tipo, D-13).
-    body = _valid_pipeline()
-    body["steps"] = [{"action_type": "move", "params": {}, "filters": []}]
+def test_create_rename_without_pattern_returns_422(client: TestClient) -> None:
+    body = _valid_automation()
+    body["actions"] = [{"action_type": "rename", "params": {}}]
     resp = client.post("/automations", json=body)
     assert resp.status_code == 422, resp.text
 
 
-def test_create_invalid_route_target_returns_422(client: TestClient) -> None:
-    body = _valid_pipeline()
-    body["steps"] = [
-        {"action_type": "route", "params": {"target": "lixeira"}, "filters": []}
-    ]
+def test_create_move_without_dest_returns_422(client: TestClient) -> None:
+    body = _valid_automation()
+    body["actions"] = [{"action_type": "move", "params": {}}]
     resp = client.post("/automations", json=body)
     assert resp.status_code == 422, resp.text
 
 
-def test_create_identify_file_gate_accepts_extensions(client: TestClient) -> None:
-    """D-17: action_type 'identify_file' com params.extensions é aceito (201) e
-    persiste as extensões digitadas."""
-    body = _valid_pipeline("Gate por extensão")
-    body["steps"] = [
-        {
-            "action_type": "identify_file",
-            "params": {"extensions": [".pdf", "xlsx"]},
-            "filters": [],
-        },
-        {
-            "action_type": "move",
-            "params": {"folder_pattern": "NF"},
-            "filters": [],
-        },
-    ]
-    resp = client.post("/automations", json=body)
+def test_create_without_conditions_or_actions_is_ok(client: TestClient) -> None:
+    """Automação em branco (sem condições/ações) é criável — a UI cria e o usuário
+    preenche depois. (O executor trata sem-condições como no-match.)"""
+    resp = client.post(
+        "/automations",
+        json={"name": "Em branco", "conditions": [], "actions": []},
+    )
     assert resp.status_code == 201, resp.text
-    steps = resp.json()["steps"]
-    assert steps[0]["action_type"] == "identify_file"
-    assert steps[0]["params"]["extensions"] == [".pdf", "xlsx"]
-
-
-def test_create_identify_file_without_extensions_returns_422(client: TestClient) -> None:
-    """D-17: 'identify_file' sem extensões → 422 (param obrigatório)."""
-    body = _valid_pipeline()
-    body["steps"] = [
-        {"action_type": "identify_file", "params": {}, "filters": []}
-    ]
-    resp = client.post("/automations", json=body)
-    assert resp.status_code == 422, resp.text
-
-
-def test_create_identify_file_empty_extensions_returns_422(client: TestClient) -> None:
-    """D-17: 'identify_file' com extensões em branco → 422."""
-    body = _valid_pipeline()
-    body["steps"] = [
-        {
-            "action_type": "identify_file",
-            "params": {"extensions": ["  ", ""]},
-            "filters": [],
-        }
-    ]
-    resp = client.post("/automations", json=body)
-    assert resp.status_code == 422, resp.text
-
-
-def test_create_pipeline_without_route_is_ok(client: TestClient) -> None:
-    """D-22: pipelines sem nenhuma etapa 'route' funcionam (route não é obrigatório)."""
-    body = _valid_pipeline("Sem route")
-    # _valid_pipeline já não usa route; confirma criação 201 e ausência de route.
-    resp = client.post("/automations", json=body)
-    assert resp.status_code == 201, resp.text
-    actions = [s["action_type"] for s in resp.json()["steps"]]
-    assert "route" not in actions
+    body = resp.json()
+    assert body["conditions"] == []
+    assert body["actions"] == []
 
 
 def test_patch_nonexistent_returns_404(client: TestClient) -> None:

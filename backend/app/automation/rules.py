@@ -305,3 +305,97 @@ def filter_matches(
     if (conjunction or "and").strip().casefold() == "or":
         return any(results)
     return all(results)
+
+
+# --------------------------------------------------------------------------- #
+# Condições do MODELO FINAL (D-24) — nível da automação, combinadas por E.      #
+#                                                                               #
+# `field` do modelo final mapeia 1:1 para o `filter_type` do avaliador acima    #
+# (source_folder/extension/template/field/filename/size). Esta camada fina      #
+# reusa `evaluate_filter` (sem eval, V5) e combina por E (AND) — não há OU no    #
+# nível da automação (D-24).                                                     #
+# --------------------------------------------------------------------------- #
+
+# Campos de condição suportados (D-24). Fora do conjunto → nunca casa (V5).
+_CONDITION_FIELDS = _FILTER_TYPES
+
+
+@dataclass
+class ConditionSpec:
+    """Condição PURA de uma automação — `{field} {operator} {value}` (D-24).
+
+    Forma pura consumida pelo executor; o caller (stage.py) mapeia o
+    `AutomationCondition` ORM para esta forma. `field_name` só é usado quando
+    `field == "field"` (qual campo extraído comparar). `field` casa o vocabulário
+    de `evaluate_filter` (1:1 com `filter_type`).
+    """
+
+    field: str
+    operator: str
+    value: str
+    field_name: str | None = None
+
+
+def condition_matches(
+    cond: ConditionSpec,
+    fields: dict[str, str],
+    file_attrs: dict,
+    template_id: int | None,
+) -> bool:
+    """Avalia UMA condição da automação (D-24). Reusa `evaluate_filter` (V5).
+
+    `field` mapeia 1:1 para `filter_type`; a `extension` aceita a extensão digitada
+    pelo usuário (`.pdf`/`pdf`/`.PDF` — case/dot-insensitive via `ext_matches`),
+    diferenciando-se do `evaluate_filter` "extension" cru (que compara literal).
+    NÃO loga valores.
+    """
+    if cond.field == "extension":
+        # D-24: a condição de tipo de arquivo casa a extensão DIGITADA pelo usuário,
+        # case/dot-insensitive (ex.: ".pdf" casa "PDF"). `contains` mantém o
+        # comportamento de substring literal de `evaluate_filter`.
+        if cond.operator == "contains":
+            return evaluate_filter(
+                FilterSpec("extension", "contains", cond.value),
+                fields,
+                file_attrs,
+                template_id,
+            )
+        return ext_matches(cond.value, file_attrs.get("ext"))
+
+    if cond.field == "source_folder":
+        # D-24: a condição "pasta de origem" compara o CAMINHO/NOME da pasta
+        # monitorada digitado pelo usuário (ex.: "Downloads", "C:\\Downloads"),
+        # NÃO o id interno. `eq` = igualdade case-insensitive; `contains` = substring.
+        actual = str(file_attrs.get("source_folder") or "")
+        if not actual:
+            return False
+        target = str(cond.value or "")
+        if cond.operator == "contains":
+            return target.strip().casefold() in actual.casefold()
+        return actual.strip().casefold() == target.strip().casefold()
+
+    spec = FilterSpec(
+        filter_type=cond.field,
+        operator=cond.operator,
+        value=cond.value,
+        field_name=cond.field_name,
+    )
+    return evaluate_filter(spec, fields, file_attrs, template_id)
+
+
+def automation_conditions_match(
+    conditions: list[ConditionSpec],
+    fields: dict[str, str],
+    file_attrs: dict,
+    template_id: int | None,
+) -> bool:
+    """True quando TODAS as condições da automação casam (E/AND, D-24).
+
+    Uma automação SEM condições NÃO casa (evita aplicar uma automação vazia a todo
+    documento — falha fechada, espelha `rule_matches`). NÃO loga valores.
+    """
+    if not conditions:
+        return False
+    return all(
+        condition_matches(c, fields, file_attrs, template_id) for c in conditions
+    )

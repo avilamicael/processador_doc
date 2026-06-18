@@ -6,10 +6,10 @@ schema). Mantenha este `__all__`/imports em sincronia ao adicionar modelos.
 """
 
 from app.models.audit_log import AuditLog
-from app.models.automation_pipeline import (
-    AutomationPipeline,
-    PipelineStep,
-    StepFilter,
+from app.models.automation import (
+    Automation,
+    AutomationAction,
+    AutomationCondition,
 )
 from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
@@ -24,7 +24,9 @@ from app.models.watched_folder import WatchedFolder
 
 __all__ = [
     "AuditLog",
-    "AutomationPipeline",
+    "Automation",
+    "AutomationAction",
+    "AutomationCondition",
     "ClassificationResult",
     "DocState",
     "Document",
@@ -34,8 +36,6 @@ __all__ = [
     "Job",
     "JobStatus",
     "Page",
-    "PipelineStep",
-    "StepFilter",
     "Template",
     "TemplateField",
     "Usage",

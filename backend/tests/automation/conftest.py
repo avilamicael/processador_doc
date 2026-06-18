@@ -19,10 +19,10 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine
 
-from app.models.automation_pipeline import (
-    AutomationPipeline,
-    PipelineStep,
-    StepFilter,
+from app.models.automation import (
+    Automation,
+    AutomationAction,
+    AutomationCondition,
 )
 from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
@@ -148,66 +148,68 @@ def classified_doc_attrs(classified_doc: "ClassifiedDoc") -> FileAttrs:
     )
 
 
-# Fábrica que cria um AutomationPipeline com N steps; retorna o id do pipeline.
-PipelineFactory = Callable[..., int]
+# Fábrica que cria uma Automation com N condições + N ações; retorna o id.
+AutomationFactory = Callable[..., int]
 
 
 @pytest.fixture
-def pipeline_factory(schema_engine: Engine) -> PipelineFactory:
-    """Cria um `AutomationPipeline` persistido com N `PipelineStep` (cada um com
-    `action_type`/`params_json` e 0..N `StepFilter`) — base dos testes do executor
-    (06-07).
+def automation_factory(schema_engine: Engine) -> AutomationFactory:
+    """Cria uma `Automation` persistida com 0..N `AutomationCondition` (combinadas
+    por E) e 0..N `AutomationAction` ordenadas — base dos testes do stage (executor).
 
     Uso:
-        pid = pipeline_factory(
-            name="P1",
-            steps=[
-                {
-                    "action_type": "rename",
-                    "params_json": '{"name_pattern": "{cliente}_{numero}"}',
-                    "filters": [
-                        {"filter_type": "field", "field_name": "cliente",
-                         "operator": "eq", "value": "ACME Ltda"},
-                    ],
-                },
-                {"action_type": "move", "params_json": '{"folder_pattern": "{data}"}'},
+        aid = automation_factory(
+            name="A1",
+            position=0,
+            conditions=[
+                {"field": "field", "field_name": "cliente",
+                 "operator": "eq", "value": "ACME Ltda"},
+                {"field": "extension", "operator": "eq", "value": ".pdf"},
+            ],
+            actions=[
+                {"action_type": "rename",
+                 "params_json": '{"name_pattern": "{cliente}_{numero}"}'},
+                {"action_type": "move",
+                 "params_json": '{"dest_folder": "{data}"}'},
             ],
         )
 
-    Retorna o `id` do pipeline criado (a sessão é fechada ao final).
+    Retorna o `id` da automação criada (a sessão é fechada ao final).
     """
 
     def _make(
         *,
-        name: str = "Pipeline de teste",
+        name: str = "Automação de teste",
         active: bool = True,
-        steps: list[dict] | None = None,
+        position: int = 0,
+        conditions: list[dict] | None = None,
+        actions: list[dict] | None = None,
     ) -> int:
-        steps = steps or []
+        conditions = conditions or []
+        actions = actions or []
         with get_session(schema_engine) as session:
-            pipeline = AutomationPipeline(name=name, active=active)
-            for i, spec in enumerate(steps):
-                step = PipelineStep(
-                    position=spec.get("position", i),
-                    action_type=spec["action_type"],
-                    conjunction=spec.get("conjunction", "and"),
-                    params_json=spec.get("params_json"),
-                    active=spec.get("active", True),
-                )
-                for j, fspec in enumerate(spec.get("filters", [])):
-                    step.filters.append(
-                        StepFilter(
-                            filter_type=fspec["filter_type"],
-                            operator=fspec["operator"],
-                            value=fspec["value"],
-                            field_name=fspec.get("field_name"),
-                            position=fspec.get("position", j),
-                        )
+            automation = Automation(name=name, active=active, position=position)
+            for i, cspec in enumerate(conditions):
+                automation.conditions.append(
+                    AutomationCondition(
+                        field=cspec["field"],
+                        operator=cspec["operator"],
+                        value=cspec["value"],
+                        field_name=cspec.get("field_name"),
+                        position=cspec.get("position", i),
                     )
-                pipeline.steps.append(step)
-            session.add(pipeline)
+                )
+            for i, aspec in enumerate(actions):
+                automation.actions.append(
+                    AutomationAction(
+                        position=aspec.get("position", i),
+                        action_type=aspec["action_type"],
+                        params_json=aspec.get("params_json"),
+                    )
+                )
+            session.add(automation)
             session.commit()
-            return pipeline.id
+            return automation.id
 
     return _make
 
