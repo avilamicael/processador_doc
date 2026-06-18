@@ -1,16 +1,12 @@
-"""RED (Wave 0) — API de automações (regras + dry-run/apply/undo).
+"""GREEN — API de automações (CRUD aninhado de pipeline/steps/filtros + dry-run/apply/undo).
 
-Espelha `test_api_templates.py`: `TestClient` com `app.state.engine` sobrescrito
-por um engine de teste com schema (D-10: create_all só em teste). As rotas
-`/automations` ainda NÃO existem (criadas na wave de API) → estes testes estão em
-RED (404 até a rota existir). A coleção do pytest NÃO falha — o módulo importa só
-o que já existe.
-
-Prova (quando GREEN):
-- POST cria regra com condições aninhadas (201) + GET lista + PATCH (substitui
-  condições, delete-orphan) + DELETE (204);
-- POST inválido → 422; PATCH/DELETE de id inexistente → 404;
-- POST /automations/dry-run e /automations/apply respondem; /undo reverte.
+Espelha `test_api_templates.py`: `TestClient` com `app.state.engine` sobrescrito por
+um engine de teste com schema. Prova:
+- POST cria pipeline com steps + filtros aninhados (201) + GET lista + GET por id +
+  PATCH (substitui steps, delete-orphan) + DELETE (204, cascade);
+- 422: action_type/filter_type/operator inválido; param obrigatório faltante por tipo;
+- 404: pipeline ausente (GET/PATCH/DELETE);
+- dry-run / apply / undo respondem.
 """
 
 import warnings
@@ -39,58 +35,147 @@ def client(schema_engine: Engine) -> Iterator[TestClient]:
         app.state.engine = previous
 
 
-def _valid_rule(name: str = "Mover NF da ACME") -> dict:
+def _valid_pipeline(name: str = "Organizar NFs") -> dict:
     return {
         "name": name,
-        "priority": 1,
-        "conjunction": "and",
-        "name_pattern": "{cliente}_{numero}",
-        "folder_pattern": "NotasFiscais/{cliente}/{data:aaaa-mm}",
         "active": True,
-        "conditions": [
-            {"field_name": "cliente", "operator": "contains", "value": "ACME"},
-            {"field_name": "valor", "operator": "gt", "value": "500.00"},
+        "steps": [
+            {
+                "action_type": "identify_type",
+                "params": {"template_id": 1},
+                "filters": [],
+            },
+            {
+                "action_type": "rename",
+                "params": {"name_pattern": "{cliente}_{numero}"},
+                "conjunction": "and",
+                "filters": [
+                    {
+                        "filter_type": "field",
+                        "field_name": "cliente",
+                        "operator": "contains",
+                        "value": "ACME",
+                    },
+                    {"filter_type": "extension", "operator": "eq", "value": ".pdf"},
+                ],
+            },
+            {
+                "action_type": "move",
+                "params": {"folder_pattern": "NotasFiscais/{cliente}"},
+                "filters": [],
+            },
         ],
     }
 
 
 def test_crud_lifecycle(client: TestClient) -> None:
-    # POST cria com condições aninhadas
-    resp = client.post("/automations", json=_valid_rule())
+    # POST cria pipeline com steps + filtros aninhados
+    resp = client.post("/automations", json=_valid_pipeline())
     assert resp.status_code == 201, resp.text
     created = resp.json()
-    assert created["name"] == "Mover NF da ACME"
-    assert len(created["conditions"]) == 2
-    rule_id = created["id"]
+    assert created["name"] == "Organizar NFs"
+    assert len(created["steps"]) == 3
+    # Steps em ordem de position; o segundo tem 2 filtros.
+    assert created["steps"][0]["action_type"] == "identify_type"
+    assert len(created["steps"][1]["filters"]) == 2
+    pid = created["id"]
 
-    # GET lista
+    # GET lista + GET por id
     resp = client.get("/automations")
     assert resp.status_code == 200
-    assert any(r["id"] == rule_id for r in resp.json())
+    assert any(p["id"] == pid for p in resp.json())
 
-    # PATCH substitui condições (delete-orphan)
+    resp = client.get(f"/automations/{pid}")
+    assert resp.status_code == 200
+    assert resp.json()["id"] == pid
+
+    # PATCH substitui steps (delete-orphan)
     resp = client.patch(
-        f"/automations/{rule_id}",
+        f"/automations/{pid}",
         json={
-            "name": "Regra editada",
-            "conditions": [
-                {"field_name": "numero", "operator": "eq", "value": "1234"}
+            "name": "Pipeline editado",
+            "steps": [
+                {
+                    "action_type": "route",
+                    "params": {"target": "em_revisao"},
+                    "filters": [],
+                }
             ],
         },
     )
     assert resp.status_code == 200, resp.text
     patched = resp.json()
-    assert patched["name"] == "Regra editada"
-    assert len(patched["conditions"]) == 1
+    assert patched["name"] == "Pipeline editado"
+    assert len(patched["steps"]) == 1
+    assert patched["steps"][0]["action_type"] == "route"
 
-    # DELETE remove
-    resp = client.delete(f"/automations/{rule_id}")
+    # DELETE remove (cascade)
+    resp = client.delete(f"/automations/{pid}")
     assert resp.status_code == 204
+    resp = client.get(f"/automations/{pid}")
+    assert resp.status_code == 404
 
 
-def test_create_invalid_returns_422(client: TestClient) -> None:
-    body = _valid_rule()
+def test_create_blank_name_returns_422(client: TestClient) -> None:
+    body = _valid_pipeline()
     body["name"] = "   "
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_invalid_action_type_returns_422(client: TestClient) -> None:
+    body = _valid_pipeline()
+    body["steps"] = [{"action_type": "explode", "params": {}, "filters": []}]
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_invalid_filter_type_returns_422(client: TestClient) -> None:
+    body = _valid_pipeline()
+    body["steps"] = [
+        {
+            "action_type": "rename",
+            "params": {"name_pattern": "{cliente}"},
+            "filters": [{"filter_type": "xpto", "operator": "eq", "value": "x"}],
+        }
+    ]
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_invalid_operator_returns_422(client: TestClient) -> None:
+    body = _valid_pipeline()
+    body["steps"] = [
+        {
+            "action_type": "rename",
+            "params": {"name_pattern": "{cliente}"},
+            "filters": [
+                {
+                    "filter_type": "field",
+                    "field_name": "cliente",
+                    "operator": "regex",
+                    "value": "x",
+                }
+            ],
+        }
+    ]
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_missing_required_param_returns_422(client: TestClient) -> None:
+    # move sem folder_pattern → 422 (param obrigatório por tipo, D-13).
+    body = _valid_pipeline()
+    body["steps"] = [{"action_type": "move", "params": {}, "filters": []}]
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_invalid_route_target_returns_422(client: TestClient) -> None:
+    body = _valid_pipeline()
+    body["steps"] = [
+        {"action_type": "route", "params": {"target": "lixeira"}, "filters": []}
+    ]
     resp = client.post("/automations", json=body)
     assert resp.status_code == 422, resp.text
 
@@ -106,6 +191,17 @@ def test_delete_nonexistent_returns_404(client: TestClient) -> None:
 
 
 def test_dry_run_endpoint_responds(client: TestClient) -> None:
-    """AUT-03: POST /automations/dry-run devolve o plano origem→destino (sem mover)."""
+    """AUT-03: POST /automations/dry-run devolve o preview (sem mover)."""
     resp = client.post("/automations/dry-run", json={"document_ids": []})
-    assert resp.status_code in (200, 422)
+    assert resp.status_code == 200, resp.text
+    assert "rows" in resp.json()
+
+
+def test_apply_without_ids_returns_422(client: TestClient) -> None:
+    resp = client.post("/automations/apply", json={})
+    assert resp.status_code == 422
+
+
+def test_undo_without_target_returns_422(client: TestClient) -> None:
+    resp = client.post("/automations/undo", json={})
+    assert resp.status_code == 422

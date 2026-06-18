@@ -1,45 +1,54 @@
-"""API de automações — CRUD de regras + dry-run + apply + undo (Fase 6, TPL-02).
+"""API de automações — CRUD ANINHADO de pipeline/steps/filtros + dry-run/apply/undo
+(Fase 6 REDESIGN, TPL-02/AUT-01..AUT-06).
 
-Router fino (`/automations`) que a UI (Plano 05) usa para o construtor de REGRAS de
-automação e para disparar/reverter aplicações. Espelha exatamente o padrão de
-`api/templates.py` (1:N aninhado: regra → condições): schemas `In`/`Patch`/`Out`
+Router fino (`/automations`) que a UI (Plano 08) usa para o construtor do PIPELINE de
+automação e para disparar/reverter aplicações. Espelha o padrão de `api/templates.py`
+(CRUD aninhado em 2 níveis: pipeline → steps → filtros): schemas `In`/`Patch`/`Out`
 Pydantic, `request.app.state.engine` + `with get_session(engine)`, `IntegrityError →
 409`, `404` em ausente, `204` no DELETE, coleção filha substituída inteira no PATCH
-(delete-orphan). As AÇÕES (dry-run/apply/undo) espelham `api/documents.py`
-(approve/retry/reclassify): guard semântico → ação → reenqueue do step `apply`.
+(delete-orphan). As AÇÕES (dry-run/apply/undo) espelham `api/documents.py`.
 
 Garantias materializadas:
-- **TPL-02:** uma `AutomationRule` 1:N `RuleCondition` (operador eq/gt/lt/contains,
-  conjunção E/OU, prioridade D-05). Regras listadas em ordem de `priority`.
-- **AUT-03 (dry-run):** `POST /dry-run` resolve origem→destino por documento SEM
-  tocar o disco nem escrever AuditLog (chama `stage.dry_run`).
-- **D-03 (apply por-doc e por-lote):** `POST /apply` aceita um único id OU uma lista
-  (lote). Em lote, gera um `run_id` único; reenfileira `(content_hash, APPLY_STEP)`
-  via o helper `_requeue` (o worker materializa — NÃO move síncrono no request).
-- **AUT-05 (undo por-doc e por-run):** `POST /undo` aceita `document_id` OU `run_id`;
-  reverte o arquivo (`undo.undo_document`/`undo_run`) — que JÁ reabre CONCLUIDO→
-  PROCESSANDO (aresta nova da allowlist, Fase 6), tornando a reversão observável.
+- **AUT-01/AUT-02/TPL-02:** `AutomationPipeline` 1:N `PipelineStep` 1:N `StepFilter`
+  (lista ORDENADA de etapas, cada etapa com UMA ação atômica + 0..N filtros). Steps
+  retornados em ordem de `position`; filtros idem.
+- **D-13 (ações):** `action_type ∈ {move, rename, identify_type, route}`; os `params`
+  obrigatórios por tipo são validados (move→folder_pattern, rename→name_pattern,
+  identify_type→template_id, route→target ∈ {em_revisao,nao_tratar,ignorar}).
+- **D-14 (filtros):** `filter_type ∈ {field, source_folder, extension, filename,
+  size, template}`; `operator ∈ {eq, gt, lt, contains}`; combinados por `conjunction`.
+- **AUT-03 (dry-run):** `POST /dry-run` simula o pipeline por documento SEM tocar o
+  disco nem escrever AuditLog (chama `stage.dry_run`).
+- **D-03 (apply por-doc e por-lote):** `POST /apply` aceita um único id OU lista; gera
+  um `run_id` único e reenfileira `(content_hash, APPLY_STEP)` (o worker materializa).
+- **AUT-05 (undo por-doc e por-run):** `POST /undo` aceita `document_id` OU `run_id`.
 
 SEGURANÇA:
-- V5 (injeção em operador): `operator` validado contra o conjunto eq/gt/lt/contains
-  (422 fora dele); o avaliador (Plan 02) é dispatch explícito, nunca `eval`.
+- V5 (injeção em operador/ação): `action_type`/`filter_type`/`operator`/`route target`
+  validados contra conjuntos explícitos (422 fora); o executor é dispatch explícito,
+  nunca `eval`.
 - V4 (path traversal): o confinamento do destino é responsabilidade de naming
   (consumido por apply_stage) — base = `automation_dest_root`.
-- V7/V9 (info disclosure): NÃO logamos valores de campo nem conteúdo de documento —
-  só ids/paths/run_id/status.
+- V7/V9 (info disclosure): NÃO logamos/retornamos valores de campo nem conteúdo de
+  documento — só ids/paths/run_id/status.
 """
 
+import json
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.documents import _requeue
 from app.automation import stage, undo
 from app.automation.stage import APPLY_STEP
-from app.models.automation_rule import AutomationRule, RuleCondition
+from app.models.automation_pipeline import (
+    AutomationPipeline,
+    PipelineStep,
+    StepFilter,
+)
 from app.models.document import Document
 from app.models.enums import DocState
 from app.pipeline.state_machine import transition
@@ -48,53 +57,68 @@ from app.storage.db import get_session
 
 router = APIRouter(prefix="/automations", tags=["automations"])
 
-# Operadores suportados (D-04 / V5). Fora do conjunto → 422.
+# Vocabulário validado na borda HTTP (V5). Fora dos conjuntos → 422.
+_ACTION_TYPES = frozenset({"move", "rename", "identify_type", "route"})
+_FILTER_TYPES = frozenset(
+    {"field", "source_folder", "extension", "filename", "size", "template"}
+)
 _OPERATORS = frozenset({"eq", "gt", "lt", "contains"})
-# Conjunções suportadas (D-04). Default "and".
 _CONJUNCTIONS = frozenset({"and", "or"})
+_ROUTE_TARGETS = frozenset({"em_revisao", "nao_tratar", "ignorar"})
 
 
-class ConditionIn(BaseModel):
-    """Condição `{field_name} {operator} {value}` informada na regra (D-04)."""
+# --------------------------------------------------------------------------- #
+# Schemas In/Patch/Out (CRUD aninhado pipeline → steps → filtros)             #
+# --------------------------------------------------------------------------- #
 
-    field_name: str
+
+class StepFilterIn(BaseModel):
+    """Filtro de entrada `{filter_type} {operator} {value}` (D-14).
+
+    `field_name` só é usado quando `filter_type == "field"`.
+    """
+
+    filter_type: str
     operator: str
     value: str
+    field_name: str | None = None
 
-    @field_validator("field_name")
+    @field_validator("filter_type")
     @classmethod
-    def _field_not_blank(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("Informe o nome do campo da condição.")
-        return v.strip()
+    def _filter_type_known(cls, v: str) -> str:
+        if v not in _FILTER_TYPES:
+            raise ValueError(
+                f"filter_type inválido: {v!r} "
+                "(use field/source_folder/extension/filename/size/template)"
+            )
+        return v
 
     @field_validator("operator")
     @classmethod
     def _operator_known(cls, v: str) -> str:
-        # V5: operador fora do conjunto explícito é rejeitado (422) — nunca chega
-        # ao avaliador, que de qualquer forma falha fechado.
+        # V5: operador fora do conjunto explícito é rejeitado (422).
         if v not in _OPERATORS:
             raise ValueError(f"operador inválido: {v!r} (use eq/gt/lt/contains)")
         return v
 
 
-class RuleIn(BaseModel):
-    """Body de criação de regra: nome + prioridade + padrões + condições."""
+class StepIn(BaseModel):
+    """Etapa do pipeline: UMA ação atômica + 0..N filtros (D-13)."""
 
-    name: str
-    priority: int = 0
+    action_type: str
     conjunction: str = "and"
-    name_pattern: str | None = None
-    folder_pattern: str | None = None
+    params: dict = {}
     active: bool = True
-    conditions: list[ConditionIn] = []
+    filters: list[StepFilterIn] = []
 
-    @field_validator("name")
+    @field_validator("action_type")
     @classmethod
-    def _name_not_blank(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("Informe o nome da regra.")
-        return v.strip()
+    def _action_known(cls, v: str) -> str:
+        if v not in _ACTION_TYPES:
+            raise ValueError(
+                f"action_type inválido: {v!r} (use move/rename/identify_type/route)"
+            )
+        return v
 
     @field_validator("conjunction")
     @classmethod
@@ -103,187 +127,236 @@ class RuleIn(BaseModel):
             raise ValueError("conjunção inválida (use 'and' ou 'or')")
         return v
 
+    @model_validator(mode="after")
+    def _params_required_by_action(self) -> "StepIn":
+        """Valida o param obrigatório por `action_type` (D-13). Faltante → 422."""
+        p = self.params or {}
+        if self.action_type == "move" and not p.get("folder_pattern"):
+            raise ValueError("ação 'move' exige params.folder_pattern")
+        if self.action_type == "rename" and not p.get("name_pattern"):
+            raise ValueError("ação 'rename' exige params.name_pattern")
+        if self.action_type == "identify_type" and p.get("template_id") is None:
+            raise ValueError("ação 'identify_type' exige params.template_id")
+        if self.action_type == "route":
+            target = p.get("target")
+            if target not in _ROUTE_TARGETS:
+                raise ValueError(
+                    "ação 'route' exige params.target ∈ "
+                    "{em_revisao, nao_tratar, ignorar}"
+                )
+        return self
 
-class RulePatch(BaseModel):
-    """Body de edição parcial de regra (todos opcionais).
 
-    Quando `conditions` é informado, SUBSTITUI a coleção inteira (delete-orphan).
-    Quando omitido (`None`), as condições atuais são preservadas.
+class PipelineIn(BaseModel):
+    """Body de criação de pipeline: nome + estado + lista ordenada de etapas."""
+
+    name: str
+    active: bool = True
+    steps: list[StepIn] = []
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Informe o nome do pipeline.")
+        return v.strip()
+
+
+class PipelinePatch(BaseModel):
+    """Body de edição parcial (todos opcionais).
+
+    Quando `steps` é informado, SUBSTITUI a coleção inteira (delete-orphan).
+    Quando omitido (`None`), as etapas atuais são preservadas.
     """
 
     name: str | None = None
-    priority: int | None = None
-    conjunction: str | None = None
-    name_pattern: str | None = None
-    folder_pattern: str | None = None
     active: bool | None = None
-    conditions: list[ConditionIn] | None = None
+    steps: list[StepIn] | None = None
 
     @field_validator("name")
     @classmethod
     def _name_not_blank(cls, v: str | None) -> str | None:
         if v is not None and not v.strip():
-            raise ValueError("Informe o nome da regra.")
+            raise ValueError("Informe o nome do pipeline.")
         return v.strip() if v is not None else v
 
-    @field_validator("conjunction")
-    @classmethod
-    def _conjunction_known(cls, v: str | None) -> str | None:
-        if v is not None and v not in _CONJUNCTIONS:
-            raise ValueError("conjunção inválida (use 'and' ou 'or')")
-        return v
 
-
-class ConditionOut(BaseModel):
-    """Representação de resposta de uma condição."""
+class StepFilterOut(BaseModel):
+    """Representação de resposta de um filtro."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    field_name: str
+    filter_type: str
     operator: str
     value: str
+    field_name: str | None
     position: int
 
 
-class RuleOut(BaseModel):
-    """Representação de resposta de uma regra com condições aninhadas."""
+class StepOut(BaseModel):
+    """Representação de resposta de uma etapa com filtros aninhados."""
+
+    id: int
+    position: int
+    action_type: str
+    conjunction: str
+    params: dict
+    active: bool
+    filters: list[StepFilterOut]
+
+
+class PipelineOut(BaseModel):
+    """Representação de resposta de um pipeline com etapas aninhadas (ordenadas)."""
 
     id: int
     name: str
-    priority: int
-    conjunction: str
-    name_pattern: str | None
-    folder_pattern: str | None
     active: bool
-    conditions: list[ConditionOut]
+    steps: list[StepOut]
 
 
-def _serialize(rule: AutomationRule) -> RuleOut:
-    """Converte um `AutomationRule` ORM (condições carregadas) no schema de saída."""
-    conditions = sorted(rule.conditions, key=lambda c: c.position)
-    return RuleOut(
-        id=rule.id,
-        name=rule.name,
-        priority=rule.priority,
-        conjunction=rule.conjunction,
-        name_pattern=rule.name_pattern,
-        folder_pattern=rule.folder_pattern,
-        active=rule.active,
-        conditions=[ConditionOut.model_validate(c) for c in conditions],
+def _serialize(pipeline: AutomationPipeline) -> PipelineOut:
+    """Converte um `AutomationPipeline` ORM no schema de saída (ordens preservadas)."""
+    steps_sorted = sorted(pipeline.steps, key=lambda s: s.position)
+    steps_out: list[StepOut] = []
+    for step in steps_sorted:
+        try:
+            params = json.loads(step.params_json) if step.params_json else {}
+        except (ValueError, TypeError):
+            params = {}
+        if not isinstance(params, dict):
+            params = {}
+        filters_sorted = sorted(step.filters, key=lambda f: f.position)
+        steps_out.append(
+            StepOut(
+                id=step.id,
+                position=step.position,
+                action_type=step.action_type,
+                conjunction=step.conjunction,
+                params=params,
+                active=step.active,
+                filters=[StepFilterOut.model_validate(f) for f in filters_sorted],
+            )
+        )
+    return PipelineOut(
+        id=pipeline.id,
+        name=pipeline.name,
+        active=pipeline.active,
+        steps=steps_out,
     )
 
 
-def _apply_conditions(rule: AutomationRule, conditions: list[ConditionIn]) -> None:
-    """Substitui a coleção de condições da regra (delete-orphan cuida do resto)."""
-    rule.conditions = [
-        RuleCondition(
-            field_name=c.field_name,
-            operator=c.operator,
-            value=c.value,
+def _apply_steps(pipeline: AutomationPipeline, steps: list[StepIn]) -> None:
+    """Substitui a coleção de etapas (e seus filtros) do pipeline (delete-orphan).
+
+    `params` é serializado em `params_json`; cada etapa recebe sua `position` pela
+    ordem informada (D-12), e cada filtro idem.
+    """
+    new_steps: list[PipelineStep] = []
+    for i, s in enumerate(steps):
+        step = PipelineStep(
             position=i,
+            action_type=s.action_type,
+            conjunction=s.conjunction,
+            params_json=json.dumps(s.params or {}),
+            active=s.active,
         )
-        for i, c in enumerate(conditions)
-    ]
-
-
-@router.get("", response_model=list[RuleOut])
-def list_rules(request: Request) -> list[RuleOut]:
-    """Lista as regras cadastradas em ordem de prioridade (D-05)."""
-    engine = request.app.state.engine
-    with get_session(engine) as session:
-        rules = session.scalars(
-            select(AutomationRule).order_by(AutomationRule.priority, AutomationRule.id)
-        ).all()
-        return [_serialize(r) for r in rules]
-
-
-@router.get("/{rule_id}", response_model=RuleOut)
-def get_rule(request: Request, rule_id: int) -> RuleOut:
-    """Detalhe de uma regra; 404 se ausente."""
-    engine = request.app.state.engine
-    with get_session(engine) as session:
-        rule = session.get(AutomationRule, rule_id)
-        if rule is None:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, f"regra {rule_id} não encontrada"
+        step.filters = [
+            StepFilter(
+                filter_type=f.filter_type,
+                operator=f.operator,
+                value=f.value,
+                field_name=f.field_name,
+                position=j,
             )
-        return _serialize(rule)
+            for j, f in enumerate(s.filters)
+        ]
+        new_steps.append(step)
+    pipeline.steps = new_steps
 
 
-@router.post("", response_model=RuleOut, status_code=status.HTTP_201_CREATED)
-def create_rule(request: Request, body: RuleIn) -> RuleOut:
-    """Cria uma regra + condições num único commit."""
+@router.get("", response_model=list[PipelineOut])
+def list_pipelines(request: Request) -> list[PipelineOut]:
+    """Lista os pipelines cadastrados (ordenados por id)."""
     engine = request.app.state.engine
     with get_session(engine) as session:
-        rule = AutomationRule(
-            name=body.name,
-            priority=body.priority,
-            conjunction=body.conjunction,
-            name_pattern=body.name_pattern,
-            folder_pattern=body.folder_pattern,
-            active=body.active,
-        )
-        _apply_conditions(rule, body.conditions)
-        session.add(rule)
+        pipelines = session.scalars(
+            select(AutomationPipeline).order_by(AutomationPipeline.id)
+        ).all()
+        return [_serialize(p) for p in pipelines]
+
+
+@router.get("/{pipeline_id}", response_model=PipelineOut)
+def get_pipeline(request: Request, pipeline_id: int) -> PipelineOut:
+    """Detalhe de um pipeline; 404 se ausente."""
+    engine = request.app.state.engine
+    with get_session(engine) as session:
+        pipeline = session.get(AutomationPipeline, pipeline_id)
+        if pipeline is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, f"pipeline {pipeline_id} não encontrado"
+            )
+        return _serialize(pipeline)
+
+
+@router.post("", response_model=PipelineOut, status_code=status.HTTP_201_CREATED)
+def create_pipeline(request: Request, body: PipelineIn) -> PipelineOut:
+    """Cria um pipeline + etapas + filtros num único commit."""
+    engine = request.app.state.engine
+    with get_session(engine) as session:
+        pipeline = AutomationPipeline(name=body.name, active=body.active)
+        _apply_steps(pipeline, body.steps)
+        session.add(pipeline)
         try:
             session.commit()
         except IntegrityError as exc:
             session.rollback()
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                f"regra já cadastrada: {body.name}",
+                f"pipeline já cadastrado: {body.name}",
             ) from exc
-        session.refresh(rule)
-        return _serialize(rule)
+        session.refresh(pipeline)
+        return _serialize(pipeline)
 
 
-@router.patch("/{rule_id}", response_model=RuleOut)
-def update_rule(request: Request, rule_id: int, body: RulePatch) -> RuleOut:
-    """Edita campos/condições; ao trocar `conditions`, substitui a coleção. 404 se ausente."""
+@router.patch("/{pipeline_id}", response_model=PipelineOut)
+def update_pipeline(request: Request, pipeline_id: int, body: PipelinePatch) -> PipelineOut:
+    """Edita campos/etapas; ao trocar `steps`, substitui a coleção. 404 se ausente."""
     engine = request.app.state.engine
     with get_session(engine) as session:
-        rule = session.get(AutomationRule, rule_id)
-        if rule is None:
+        pipeline = session.get(AutomationPipeline, pipeline_id)
+        if pipeline is None:
             raise HTTPException(
-                status.HTTP_404_NOT_FOUND, f"regra {rule_id} não encontrada"
+                status.HTTP_404_NOT_FOUND, f"pipeline {pipeline_id} não encontrado"
             )
         if body.name is not None:
-            rule.name = body.name
-        if body.priority is not None:
-            rule.priority = body.priority
-        if body.conjunction is not None:
-            rule.conjunction = body.conjunction
-        if body.name_pattern is not None:
-            rule.name_pattern = body.name_pattern
-        if body.folder_pattern is not None:
-            rule.folder_pattern = body.folder_pattern
+            pipeline.name = body.name
         if body.active is not None:
-            rule.active = body.active
-        if body.conditions is not None:
-            _apply_conditions(rule, body.conditions)
+            pipeline.active = body.active
+        if body.steps is not None:
+            _apply_steps(pipeline, body.steps)
         try:
             session.commit()
         except IntegrityError as exc:
             session.rollback()
             raise HTTPException(
-                status.HTTP_409_CONFLICT, "regra já cadastrada com este nome"
+                status.HTTP_409_CONFLICT, "pipeline já cadastrado com este nome"
             ) from exc
-        session.refresh(rule)
-        return _serialize(rule)
+        session.refresh(pipeline)
+        return _serialize(pipeline)
 
 
-@router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_rule(request: Request, rule_id: int) -> None:
-    """Remove a regra (cascade apaga suas condições). 404 se ausente."""
+@router.delete("/{pipeline_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_pipeline(request: Request, pipeline_id: int) -> None:
+    """Remove o pipeline (cascade apaga etapas e filtros). 404 se ausente."""
     engine = request.app.state.engine
     with get_session(engine) as session:
-        rule = session.get(AutomationRule, rule_id)
-        if rule is None:
+        pipeline = session.get(AutomationPipeline, pipeline_id)
+        if pipeline is None:
             raise HTTPException(
-                status.HTTP_404_NOT_FOUND, f"regra {rule_id} não encontrada"
+                status.HTTP_404_NOT_FOUND, f"pipeline {pipeline_id} não encontrado"
             )
-        session.delete(rule)
+        session.delete(pipeline)
         session.commit()
 
 
@@ -293,7 +366,7 @@ def delete_rule(request: Request, rule_id: int) -> None:
 
 
 class ActionIn(BaseModel):
-    """Body das ações por-doc/lote: lista de document_ids (vazia = todos os prontos)."""
+    """Body do dry-run: lista de document_ids (vazia = todos os prontos)."""
 
     document_ids: list[int] = []
 
@@ -308,6 +381,10 @@ class DryRunRow(BaseModel):
     blocked: bool
     collision: bool
     skipped_identical: bool
+    # REDESIGN (06-07): Rotear (P9) e no-match (P10) para a UI sinalizar.
+    routed: bool
+    route_target: str | None
+    no_match: bool
 
 
 class DryRunOut(BaseModel):
@@ -357,11 +434,12 @@ def _ready_documents(session) -> list[Document]:
 
 @router.post("/dry-run", response_model=DryRunOut)
 def dry_run(request: Request, body: ActionIn) -> DryRunOut:
-    """Preview origem→destino por documento SEM tocar o disco (AUT-03).
+    """Preview do pipeline por documento SEM tocar o disco (AUT-03).
 
     `document_ids` vazio = todos os documentos prontos (PROCESSANDO + classificado).
-    Chama `stage.dry_run` por doc (que NÃO escreve AuditLog nem move arquivo). NÃO
-    loga valores de campo — os paths vão só no corpo da resposta.
+    Chama `stage.dry_run` por doc (que NÃO escreve AuditLog nem move arquivo) e
+    sinaliza blocked/collision/skipped_identical/routed/no_match para a UI. NÃO loga
+    valores de campo — os paths vão só no corpo da resposta.
     """
     engine = request.app.state.engine
     rows: list[DryRunRow] = []
@@ -369,9 +447,7 @@ def dry_run(request: Request, body: ActionIn) -> DryRunOut:
         if body.document_ids:
             docs = [
                 d
-                for d in (
-                    session.get(Document, did) for did in body.document_ids
-                )
+                for d in (session.get(Document, did) for did in body.document_ids)
                 if d is not None
             ]
         else:
@@ -390,6 +466,9 @@ def dry_run(request: Request, body: ActionIn) -> DryRunOut:
                     blocked=plan.blocked,
                     collision=plan.collision,
                     skipped_identical=plan.skipped_identical,
+                    routed=plan.routed,
+                    route_target=plan.route_target,
+                    no_match=plan.no_match,
                 )
             )
     return DryRunOut(rows=rows)
@@ -397,12 +476,13 @@ def dry_run(request: Request, body: ActionIn) -> DryRunOut:
 
 @router.post("/apply", response_model=ApplyOut)
 def apply(request: Request, body: ApplyIn) -> ApplyOut:
-    """Dispara a aplicação das automações por-doc OU por-lote (D-03).
+    """Dispara a aplicação do pipeline por-doc OU por-lote (D-03).
 
     Gera um `run_id` único (base do undo por-run, AUT-05) e reenfileira
     `(content_hash, APPLY_STEP)` com o `run_id` no payload para cada documento — o
-    WORKER materializa (NÃO movemos síncrono no request). Idempotente: o
-    apply_stage no-op se o doc já tem AuditLog(status="done"). 404 se nenhum id válido.
+    WORKER materializa (NÃO movemos síncrono no request). Idempotente: o apply_stage
+    no-op se o doc já tem AuditLog(status="done"). 404 se nenhum id válido; 422 se
+    nenhum id informado.
     """
     engine = request.app.state.engine
     ids: list[int] = list(body.document_ids)
@@ -435,14 +515,13 @@ def apply(request: Request, body: ApplyIn) -> ApplyOut:
 
 @router.post("/undo", response_model=UndoOut)
 def undo_action(request: Request, body: UndoIn) -> UndoOut:
-    """Desfaz automações por-doc OU por-run (AUT-05/D-03).
+    """Desfaz o pipeline aplicado por-doc OU por-run (AUT-05/D-03).
 
     `document_id` → `undo.undo_document` (reverte os 'done' do doc); `run_id` →
     `undo.undo_run` (reverte tudo do lote). AMBOS já reabrem o documento revertido
-    (CONCLUIDO→PROCESSANDO) dentro do undo — a reversão fica observável no estado,
-    não só no arquivo. Por robustez, garantimos a reabertura também aqui para docs
-    que tenham ficado em CONCLUIDO (idempotente: docs fora de CONCLUIDO são pulados).
-    422 se nenhum dos dois for informado.
+    (CONCLUIDO→PROCESSANDO) dentro do undo. Por robustez, garantimos a reabertura
+    também aqui para docs que tenham ficado em CONCLUIDO. 422 se nenhum dos dois for
+    informado.
     """
     engine = request.app.state.engine
     if body.document_id is None and body.run_id is None:
@@ -464,8 +543,7 @@ def _reopen_if_concluded(session, document_id: int | None) -> None:
     """Reabre CONCLUIDO→PROCESSANDO se o doc ainda estiver concluído (idempotente).
 
     O `undo.undo_document` já reabre internamente; este guard é defesa em
-    profundidade para o caso de o documento ter ficado em CONCLUIDO (a aresta nova da
-    allowlist da Fase 6). Doc fora de CONCLUIDO → pula sem erro.
+    profundidade. Doc fora de CONCLUIDO → pula sem erro.
     """
     if document_id is None:
         return
