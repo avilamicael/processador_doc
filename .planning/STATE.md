@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: verifying
 stopped_at: "Fase 06 em REPLAN: modelo de automações virou PIPELINE de etapas (D-12..D-16). Re-research em curso; depois UI-SPEC + replan + re-exec. Backend testado verde no modelo antigo (será refeito p/ pipeline)."
-last_updated: "2026-06-18T01:13:52.280Z"
+last_updated: "2026-06-18T01:20:42Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 8
@@ -151,6 +151,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T01:13:31.582Z
-Stopped at: Fase 06 em REPLAN: modelo de automações virou PIPELINE de etapas (D-12..D-16). Re-research em curso; depois UI-SPEC + replan + re-exec. Backend testado verde no modelo antigo (será refeito p/ pipeline).
-Resume file: None
+Last session: 2026-06-18T01:20:42Z
+Stopped at: 06-08 — Tasks 1-3 executadas e commitadas (tipos/api/hooks de pipeline; AutomationsPage construtor S1/S2/S3; DryRunPage S4 + aplicar/desfazer S5/S6). tsc+build verdes; zero npm novo. PAUSADO no checkpoint human-verify (Task 4) — verificação visual humana pendente antes de fechar a fase.
+Resume file: .planning/phases/06-automa-es-de-arquivo-renomear-mover/06-08-PLAN.md (Task 4 checkpoint)
