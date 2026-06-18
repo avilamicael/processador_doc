@@ -206,3 +206,96 @@ def test_apply_without_ids_returns_422(client: TestClient) -> None:
 def test_undo_without_target_returns_422(client: TestClient) -> None:
     resp = client.post("/automations/undo", json={})
     assert resp.status_code == 422
+
+
+# --------------------------------------------------------------------------- #
+# Fase 06.2 — ação COPIAR: validação (espelha move) + dry-run discrimina saída #
+# --------------------------------------------------------------------------- #
+
+
+def test_create_copy_without_dest_returns_422(client: TestClient) -> None:
+    """V5: ação 'copy' exige params.dest_folder (espelha 'move')."""
+    body = _valid_automation()
+    body["actions"] = [{"action_type": "copy", "params": {}}]
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_copy_with_dest_returns_201(client: TestClient) -> None:
+    """Ação 'copy' com dest_folder é aceita (action_type válido + param presente)."""
+    body = _valid_automation()
+    body["actions"] = [
+        {"action_type": "copy", "params": {"dest_folder": "Arquivo/{cliente}"}}
+    ]
+    resp = client.post("/automations", json=body)
+    assert resp.status_code == 201, resp.text
+    created = resp.json()
+    assert created["actions"][0]["action_type"] == "copy"
+    assert created["actions"][0]["params"]["dest_folder"] == "Arquivo/{cliente}"
+
+
+def _seed_ready_doc(engine: Engine) -> int:
+    """Semeia um Document PROCESSANDO+classificado pronto para o dry-run do endpoint."""
+    from app.models.classification import ClassificationResult, FilledField
+    from app.models.document import Document
+    from app.models.enums import DocState
+    from app.models.template import Template, TemplateField
+    from app.storage.db import get_session
+
+    with get_session(engine) as session:
+        template = Template(name="NF", doc_type="Fiscal")
+        template.fields = [TemplateField(name="cliente", field_type="texto")]
+        session.add(template)
+        session.flush()
+        doc = Document(
+            content_hash="b" * 64,
+            original_filename="entrada.pdf",
+            state=DocState.PROCESSANDO,
+            last_completed_step="classificado",
+        )
+        session.add(doc)
+        session.flush()
+        cr = ClassificationResult(
+            document_id=doc.id, template_id=template.id, confidence=0.95
+        )
+        cr.filled_fields = [
+            FilledField(
+                field_name="cliente",
+                raw_value="ACME",
+                normalized_value="ACME",
+                valid=True,
+            )
+        ]
+        session.add(cr)
+        session.commit()
+        return doc.id
+
+
+def test_dry_run_copy_move_emits_row_per_output(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """Dry-run de copy+move emite UMA linha de cópia (não remove original) E uma de
+    move para o mesmo document_id, com discriminador action_kind/removes_original."""
+    doc_id = _seed_ready_doc(schema_engine)
+    client.post(
+        "/automations",
+        json={
+            "name": "Copiar e mover",
+            "conditions": [{"field": "extension", "operator": "eq", "value": ".pdf"}],
+            "actions": [
+                {"action_type": "copy", "params": {"dest_folder": "Arquivo"}},
+                {"action_type": "move", "params": {"dest_folder": "Processados"}},
+            ],
+        },
+    )
+    resp = client.post("/automations/dry-run", json={"document_ids": [doc_id]})
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()["rows"]
+    same_doc = [r for r in rows if r["document_id"] == doc_id]
+    kinds = {r["action_kind"] for r in same_doc}
+    assert "copy" in kinds
+    assert "move" in kinds
+    copy_row = next(r for r in same_doc if r["action_kind"] == "copy")
+    move_row = next(r for r in same_doc if r["action_kind"] == "move")
+    assert copy_row["removes_original"] is False
+    assert move_row["removes_original"] is True
