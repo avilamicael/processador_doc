@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
+status: executing
 stopped_at: Fase 06.1 inserida (redesign Templates + sinais E/OU); CONTEXT escrito; pronto p/ plan-phase
-last_updated: "2026-06-18T17:24:49.543Z"
-last_activity: 2026-06-18
+last_updated: "2026-06-18T18:00:05.125Z"
+last_activity: 2026-06-18 -- Phase 06.1 planning complete
 progress:
   total_phases: 9
-  completed_phases: 7
-  total_plans: 34
+  completed_phases: 6
+  total_plans: 35
   completed_plans: 38
-  percent: 78
+  percent: 67
 ---
 
 # Project State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 
 Phase: 06.1 (redesign-de-templates-e-classifica-o-por-sinais-e-ou-regex) — EXECUTING
 Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-06-18
+Status: Ready to execute
+Last activity: 2026-06-18 -- Phase 06.1 planning complete
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
