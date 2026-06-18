@@ -1,55 +1,55 @@
-// Hooks TanStack Query para o PIPELINE de automações (Fase 6 REDESIGN, TPL-02/
-// AUT-03/AUT-05).
+// Hooks TanStack Query para o MODELO FINAL de automações (Fase 6, D-23..D-26,
+// TPL-02/AUT-03/AUT-05).
 //
-// Espelha useTemplates.ts: a query lista os pipelines (com etapas/filtros
+// Espelha useTemplates.ts: a query lista as automações (com conditions[]/actions[]
 // aninhados); as mutations de CRUD invalidam ['automations']. As AÇÕES
 // (dry-run/apply/undo) invalidam também ['documents'] e ['attention'] porque mudam
 // o estado dos documentos (auto-aplicado → CONCLUIDO, bloqueado → EM_REVISAO, undo
 // reabre PROCESSANDO). Fonte de verdade é a API — sem otimismo que mascare falha de
-// operação (T-06-18).
+// operação.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  createPipeline,
-  deletePipeline,
-  getPipelines,
+  createAutomation,
+  deleteAutomation,
+  getAutomations,
   postApply,
   postDryRun,
   postUndo,
-  updatePipeline,
+  updateAutomation,
 } from '../lib/api'
-import type { PipelineCreate, PipelinePatch } from '../types'
+import type { AutomationCreate, AutomationPatch } from '../types'
 
 const AUTOMATIONS_KEY = ['automations'] as const
 
 export function useAutomations() {
   return useQuery({
     queryKey: AUTOMATIONS_KEY,
-    queryFn: getPipelines,
+    queryFn: getAutomations,
   })
 }
 
-export function useCreatePipeline() {
+export function useCreateAutomation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: PipelineCreate) => createPipeline(body),
+    mutationFn: (body: AutomationCreate) => createAutomation(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: AUTOMATIONS_KEY }),
   })
 }
 
-export function useUpdatePipeline() {
+export function useUpdateAutomation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, body }: { id: number; body: PipelinePatch }) =>
-      updatePipeline(id, body),
+    mutationFn: ({ id, body }: { id: number; body: AutomationPatch }) =>
+      updateAutomation(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: AUTOMATIONS_KEY }),
   })
 }
 
-export function useDeletePipeline() {
+export function useDeleteAutomation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) => deletePipeline(id),
+    mutationFn: (id: number) => deleteAutomation(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: AUTOMATIONS_KEY }),
   })
 }

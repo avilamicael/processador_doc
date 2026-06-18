@@ -167,110 +167,95 @@ export interface DocumentDetail {
   classification: Classification | null
 }
 
-// --- Automações: PIPELINE (forma REAL da API /automations — Fase 6 REDESIGN, ---
-// --- D-12..D-16, TPL-02). Substitui o modelo de regra única por um PIPELINE de  ---
-// --- etapas ordenadas: cada etapa = 1 ação atômica + 0..N filtros E/OU.         ---
+// --- Automações: MODELO FINAL (forma REAL da API /automations — Fase 6,        ---
+// --- D-23..D-26, TPL-02/AUT-01..AUT-06). VÁRIAS automações nomeadas; cada uma = ---
+// --- CONDIÇÕES (quando rodar, combinadas por E) → AÇÕES (o que fazer: rename/move). ---
 
-// Ações atômicas de uma etapa (V5: conjunto fechado no backend).
-// `identify_file` (D-17) = gate por extensão digitável. `route` (D-22) é aceito pelo
-// backend mas NÃO é exposto na UI v1 — mantido no tipo só para tolerar pipelines
-// legados vindos do backend sem quebrar a serialização.
-export type StepActionType =
-  | 'move'
-  | 'rename'
-  | 'identify_type'
-  | 'identify_file'
-  | 'route'
-
-// Tipos de filtro de entrada de uma etapa (D-14).
-export type StepFilterType =
-  | 'field'
+// Dimensão comparada por uma condição (D-24; V5: conjunto fechado no backend).
+export type ConditionField =
   | 'source_folder'
   | 'extension'
+  | 'template'
+  | 'field'
   | 'filename'
   | 'size'
-  | 'template'
 
-// Operadores de filtro aceitos pelo backend (V5: conjunto fechado).
-export type RuleOperator = 'eq' | 'gt' | 'lt' | 'contains'
+// Operadores aceitos pelo backend (D-24; V5: conjunto fechado).
+// 'eq' ('é') | 'contains' ('contém') | 'gt' ('>') | 'lt' ('<').
+export type ConditionOperator = 'eq' | 'contains' | 'gt' | 'lt'
 
-// Conjunção entre os filtros de uma etapa (E/OU — D-14).
-export type RuleConjunction = 'and' | 'or'
+// Tipos de ação ordenada de uma automação (D-24): renomear/mover. Sem "route" (D-22).
+export type ActionType = 'rename' | 'move'
 
-// Alvo da ação `route` (Decidir tratativa — interrompe o pipeline).
-export type RouteTarget = 'em_revisao' | 'nao_tratar' | 'ignorar'
-
-// Filtro `{filter_type} {operator} {value}` de uma etapa (StepFilterOut do backend).
-// `field_name` só é usado quando `filter_type === 'field'`.
-export interface StepFilter {
+// Condição `{field} {operator} {value}` no nível da automação (ConditionOut).
+// `field_name` só é usado quando `field === 'field'` (qual campo extraído comparar).
+export interface AutomationCondition {
   id: number
-  filter_type: StepFilterType
-  operator: RuleOperator
+  field: ConditionField
+  operator: ConditionOperator
   value: string
   field_name: string | null
   position: number
 }
 
-// Body de filtro no POST/PATCH (StepFilterIn — sem id/position, server-gerados).
-export interface StepFilterCreate {
-  filter_type: StepFilterType
-  operator: RuleOperator
+// Body de condição no POST/PATCH (ConditionIn — sem id/position, server-gerados).
+export interface AutomationConditionCreate {
+  field: ConditionField
+  operator: ConditionOperator
   value: string
   field_name: string | null
 }
 
-// Etapa do pipeline (StepOut do backend): 1 ação + 0..N filtros combinados por
-// `conjunction`. `params` depende da ação (move→folder_pattern, rename→name_pattern,
-// identify_type→template_id, route→target). Etapas vêm ordenadas por `position` (D-12).
-export interface PipelineStep {
+// Ação ordenada (ActionOut do backend). `params`: rename→{name_pattern},
+// move→{dest_folder}. Ordem por `position` (drag-and-drop / ↑↓ na UI, D-24).
+export interface AutomationAction {
   id: number
   position: number
-  action_type: StepActionType
-  conjunction: RuleConjunction
+  action_type: ActionType
   params: Record<string, unknown>
-  active: boolean
-  filters: StepFilter[]
 }
 
-// Body de criação de etapa (StepIn — sem id/position, server-gerados).
-// `position` é dada pela ordem da lista enviada (D-12).
-export interface PipelineStepCreate {
-  action_type: StepActionType
-  conjunction: RuleConjunction
+// Body de criação de ação (ActionIn — sem id/position; position vem da ordem da lista).
+export interface AutomationActionCreate {
+  action_type: ActionType
   params: Record<string, unknown>
-  active: boolean
-  filters: StepFilterCreate[]
 }
 
-// Pipeline de automação exposto por GET /automations (PipelineOut do backend).
-// `steps` em ordem de execução (D-12).
-export interface AutomationPipeline {
+// Automação nomeada exposta por GET /automations (AutomationOut do backend, D-23).
+// `conditions`/`actions` já vêm ordenados por `position`.
+export interface Automation {
   id: number
   name: string
   active: boolean
-  steps: PipelineStep[]
+  position: number
+  conditions: AutomationCondition[]
+  actions: AutomationAction[]
 }
 
-// Body de criação de pipeline (POST /automations — PipelineIn).
-export interface PipelineCreate {
+// Body de criação (POST /automations — AutomationIn).
+export interface AutomationCreate {
   name: string
   active: boolean
-  steps: PipelineStepCreate[]
+  position?: number
+  conditions: AutomationConditionCreate[]
+  actions: AutomationActionCreate[]
 }
 
-// Body de edição parcial (PATCH /automations/{id} — PipelinePatch).
-// `steps` informado SUBSTITUI a coleção inteira; omitido preserva as etapas atuais.
-export interface PipelinePatch {
+// Body de edição parcial (PATCH /automations/{id} — AutomationPatch).
+// `conditions`/`actions` informados SUBSTITUEM a coleção inteira; omitidos preservam.
+export interface AutomationPatch {
   name?: string
   active?: boolean
-  steps?: PipelineStepCreate[]
+  position?: number
+  conditions?: AutomationConditionCreate[]
+  actions?: AutomationActionCreate[]
 }
 
 // Uma linha do preview de dry-run (DryRunRow do backend, AUT-03). UM par
-// origem→destino-final por documento (materialização única, P8). Sinalização por
+// origem→destino-final por documento (materialização única, D-26). Sinalização por
 // flags booleanas: blocked (D-07, vermelho), collision (D-09, sufixo, âmbar),
-// skipped_identical (D-10, duplicata, azul), routed (P9, informativo, com
-// route_target), no_match (P10, neutro — mantido na origem).
+// skipped_identical (D-10, duplicata, azul), no_match (nenhuma automação casou —
+// neutro, mantido na origem). `automation_id` = qual automação casou (D-25).
 export interface DryRunRow {
   document_id: number
   original_filename: string
@@ -279,9 +264,8 @@ export interface DryRunRow {
   blocked: boolean
   collision: boolean
   skipped_identical: boolean
-  routed: boolean
-  route_target: RouteTarget | string | null
   no_match: boolean
+  automation_id: number | null
 }
 
 // Resultado de POST /automations/dry-run (DryRunOut).

@@ -12,7 +12,9 @@
 import type {
   ApplyResult,
   AttentionList,
-  AutomationPipeline,
+  Automation,
+  AutomationCreate,
+  AutomationPatch,
   Doc,
   DocumentDetail,
   DocumentList,
@@ -20,8 +22,6 @@ import type {
   Folder,
   FolderCreate,
   FolderPatch,
-  PipelineCreate,
-  PipelinePatch,
   ReviewThreshold,
   Template,
   TemplateCreate,
@@ -175,32 +175,32 @@ export function deleteTemplate(id: number): Promise<void> {
   return request<void>(`/templates/${id}`, { method: 'DELETE' })
 }
 
-// --- Automações: PIPELINE (CRUD aninhado pipeline→steps→filtros + dry-run/apply/ ---
-// --- undo — Fase 6 REDESIGN, TPL-02/AUT-03/AUT-05) ---
+// --- Automações: MODELO FINAL (CRUD de N automações nomeadas com conditions[]/  ---
+// --- actions[] + dry-run/apply/undo — Fase 6, D-23..D-26, TPL-02/AUT-03/AUT-05) ---
 
-export function getPipelines(): Promise<AutomationPipeline[]> {
-  return request<AutomationPipeline[]>('/automations')
+export function getAutomations(): Promise<Automation[]> {
+  return request<Automation[]>('/automations')
 }
 
-export function getPipeline(id: number): Promise<AutomationPipeline> {
-  return request<AutomationPipeline>(`/automations/${id}`)
+export function getAutomation(id: number): Promise<Automation> {
+  return request<Automation>(`/automations/${id}`)
 }
 
-export function createPipeline(body: PipelineCreate): Promise<AutomationPipeline> {
-  return request<AutomationPipeline>('/automations', {
+export function createAutomation(body: AutomationCreate): Promise<Automation> {
+  return request<Automation>('/automations', {
     method: 'POST',
     body: JSON.stringify(body),
   })
 }
 
-export function updatePipeline(id: number, body: PipelinePatch): Promise<AutomationPipeline> {
-  return request<AutomationPipeline>(`/automations/${id}`, {
+export function updateAutomation(id: number, body: AutomationPatch): Promise<Automation> {
+  return request<Automation>(`/automations/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
   })
 }
 
-export function deletePipeline(id: number): Promise<void> {
+export function deleteAutomation(id: number): Promise<void> {
   return request<void>(`/automations/${id}`, { method: 'DELETE' })
 }
 

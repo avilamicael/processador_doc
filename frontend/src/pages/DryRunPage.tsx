@@ -10,18 +10,10 @@ import { useApply, useDryRun, useUndo } from '../hooks/useAutomations'
 //
 // Sem visualizador de documento (restrição absoluta): só caminhos como texto mono.
 
-// Rótulos do alvo de roteamento (P9 — pipeline desviou, não materializa).
-const ROUTE_SITUATION: Record<string, string> = {
-  em_revisao: 'Enviado para revisão',
-  nao_tratar: 'Marcado para não tratar',
-  ignorar: 'Ignorado pelo pipeline',
-}
-
 // Badge de sinalização da situação da linha. Texto puro. Cores SEMPRE via tokens
 // --st-* (06-UI-SPEC §Cores semânticas): vermelho só bloqueio (D-07); colisão âmbar
-// (D-09); duplicata azul (D-10); roteado âmbar/violeta (P9, informativo); sem-etapa
-// neutro (P10); pronto verde. Ordem de precedência: bloqueio → roteado → sem-etapa →
-// duplicata → colisão → pronto.
+// (D-09); duplicata azul (D-10); sem-automação neutro; pronto verde. Ordem de
+// precedência: bloqueio → sem-automação → duplicata → colisão → pronto.
 function SituationBadge({ row }: { row: DryRunRow }) {
   if (row.blocked) {
     return (
@@ -34,29 +26,13 @@ function SituationBadge({ row }: { row: DryRunRow }) {
       </span>
     )
   }
-  if (row.routed) {
-    const target = row.route_target ?? ''
-    // "não tratar"/"ignorar" usam o violeta de quarentena; "revisão" usa âmbar.
-    const isQuar = target === 'nao_tratar' || target === 'ignorar'
-    const color = isQuar ? 'var(--st-quarentena)' : 'var(--st-leitura)'
-    const bg = isQuar ? 'var(--st-quarentena-bg)' : 'var(--st-leitura-bg)'
-    return (
-      <span
-        className="badge"
-        style={{ color, background: bg }}
-        title="O pipeline desviou este documento — ele não é movido nem renomeado."
-      >
-        {ROUTE_SITUATION[target] ?? 'Roteado pelo pipeline'}
-      </span>
-    )
-  }
   if (row.no_match) {
     return (
       <span
         className="badge badge-off"
-        title="Nenhuma etapa do pipeline se aplica a este documento — ele permanece no local de origem."
+        title="Nenhuma automação se aplica a este documento — ele permanece no local de origem."
       >
-        Nenhuma etapa se aplica — mantido na origem
+        Nenhuma automação se aplica — mantido na origem
       </span>
     )
   }
@@ -120,9 +96,9 @@ export function DryRunPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Aplicável = vai tocar o disco. Bloqueado (D-07), roteado (P9) e sem-etapa (P10)
-  // NÃO materializam — ficam fora da seleção (checkbox disabled).
-  const isApplicable = (r: DryRunRow) => !r.blocked && !r.routed && !r.no_match
+  // Aplicável = vai tocar o disco. Bloqueado (D-07) e sem-automação NÃO materializam
+  // — ficam fora da seleção (checkbox disabled).
+  const isApplicable = (r: DryRunRow) => !r.blocked && !r.no_match
   const applicable = rows.filter(isApplicable)
   const applicableIds = applicable.map((r) => r.document_id)
   const allSel = applicable.length > 0 && selected.length === applicable.length
@@ -133,7 +109,7 @@ export function DryRunPage() {
 
   const readyCount = applicable.filter((r) => !r.skipped_identical).length
   const skippedCount = rows.filter((r) => r.skipped_identical && isApplicable(r)).length
-  const routedCount = rows.filter((r) => r.routed || r.no_match).length
+  const noMatchCount = rows.filter((r) => r.no_match).length
   const blockedCount = rows.filter((r) => r.blocked).length
 
   // "Aplicar" só habilita após o preview carregar (AUT-03) e havendo o que aplicar.
@@ -210,10 +186,10 @@ export function DryRunPage() {
           </div>
           <div className="card stat-card">
             <div className="stat-head">
-              <span className="stat-label">Roteados / sem etapa</span>
+              <span className="stat-label">Sem automação</span>
               <span className="stat-dot" style={{ background: 'var(--st-leitura)' }} />
             </div>
-            <div className="stat-num">{routedCount}</div>
+            <div className="stat-num">{noMatchCount}</div>
           </div>
           <div className="card stat-card">
             <div className="stat-head">
