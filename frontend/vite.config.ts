@@ -16,6 +16,7 @@ export default defineConfig({
       '/watched-folders': 'http://127.0.0.1:8000',
       '/rescan': 'http://127.0.0.1:8000',
       '/templates': 'http://127.0.0.1:8000',
+      '/automations': 'http://127.0.0.1:8000',
       '/config': 'http://127.0.0.1:8000',
     },
   },
