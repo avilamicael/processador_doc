@@ -282,7 +282,19 @@ Plans:
 
 **Escopo (decisão 2026-06-18, discuss-phase):** a Fase 6.2 cobre **somente a ação Copiar**. A ação **Cortar / split por template foi ADIADA para a v2** — a separação por pasta monitorada (`pages_per_block`) já existe e o split dirigido por template (re-entrada de pedaços no pipeline vs. saída de arquivo; onde a regra de corte mora) precisa de mais reflexão. Ver memória de projeto `automacoes-acoes-copiar-cortar`.
 
-**Plans:** TBD (run /gsd:plan-phase 06.2 to break down)
+**Plans:** 3 plans (3 waves)
+Plans:
+**Wave 1**
+
+- [ ] 06.2-01-PLAN.md — Executor PURO multi-saída: AutomationPlan carrega N cópias planejadas + alvo de move; ramo `copy` espelha `move` (resolução/bloqueio) sem mutar o alvo; docstring de modelo (sem migração)
+
+**Wave 2** *(blocked on 06.2-01)*
+
+- [ ] 06.2-02-PLAN.md — Orquestração física: apply_stage materializa cada cópia do CAS (write-ahead por cópia, anti-colisão, SEM remove_original) antes do move; undo de cópia (apaga a cópia, nunca toca o original); API valida `copy` + dry-run por saída
+
+**Wave 3** *(blocked on 06.2-02)*
+
+- [ ] 06.2-03-PLAN.md — Frontend: ActionType/DryRunRow + opção "Copiar" no editor (nota "o original permanece") + badge "Copiado — original mantido" no dry-run + verificação visual ao vivo
 
 ### Phase 7: Módulo Determinístico Opcional e Roteamento de Custo
 
