@@ -225,13 +225,13 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 06-05-PLAN.md — Frontend: tipos/api/hooks + Automações real (S1/S2/S3) + Dry-run (S4) + Aplicar/Desfazer (S5/S6) + verificação visual
+- [x] 06-05-PLAN.md — Frontend: tipos/api/hooks + Automações real (S1/S2/S3) + Dry-run (S4) + Aplicar/Desfazer (S5/S6) + verificação visual
 
 > **REPLAN (2026-06-17) — modelo de PIPELINE (D-12..D-16).** As automações deixaram de ser "regra única" e viraram um pipeline ordenado de etapas componíveis. 06-02 (naming) e 06-03 (fileops/undo) são REUSADOS como ações atômicas (não replanejados). 06-01/06-04/06-05 ficam como histórico do modelo antigo. Os planos abaixo reescrevem modelo de dados + executor + API + frontend.
 
 **Wave 1 (REPLAN)**
 
-- [ ] 06-06-PLAN.md — Modelo de dados do PIPELINE: AutomationPipeline 1:N PipelineStep 1:N StepFilter (substitui automation_rules/rule_conditions) + Alembic 0007 forward-only (documents/audit_log intactos) + scaffolds de teste do modelo
+- [x] 06-06-PLAN.md — Modelo de dados do PIPELINE: AutomationPipeline 1:N PipelineStep 1:N StepFilter (substitui automation_rules/rule_conditions) + Alembic 0007 forward-only (documents/audit_log intactos) + scaffolds de teste do modelo
 
 **Wave 2 (REPLAN)** *(blocked on 06-06)*
 
@@ -282,6 +282,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Extração Genérica via IA e Medição de Tokens | 4/4 | Complete    | 2026-06-16 |
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
-| 6. Automações de Arquivo (Renomear/Mover) | 4/5 | In Progress|  |
+| 6. Automações de Arquivo (Renomear/Mover) | 6/8 | In Progress|  |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
