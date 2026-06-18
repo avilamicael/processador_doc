@@ -207,8 +207,9 @@ export type ConditionField =
 // 'eq' ('é') | 'contains' ('contém') | 'gt' ('>') | 'lt' ('<').
 export type ConditionOperator = 'eq' | 'contains' | 'gt' | 'lt'
 
-// Tipos de ação ordenada de uma automação (D-24): renomear/mover. Sem "route" (D-22).
-export type ActionType = 'rename' | 'move'
+// Tipos de ação ordenada de uma automação (D-24): renomear/mover/copiar. Sem "route" (D-22).
+// 'copy' (Phase 06.2) espelha 'move' (usa dest_folder) mas NÃO remove o original (D-01).
+export type ActionType = 'rename' | 'move' | 'copy'
 
 // Condição `{field} {operator} {value}` no nível da automação (ConditionOut).
 // `field_name` só é usado quando `field === 'field'` (qual campo extraído comparar).
@@ -274,9 +275,12 @@ export interface AutomationPatch {
   actions?: AutomationActionCreate[]
 }
 
-// Uma linha do preview de dry-run (DryRunRow do backend, AUT-03). UM par
-// origem→destino-final por documento (materialização única, D-26). Sinalização por
-// flags booleanas: blocked (D-07, vermelho), collision (D-09, sufixo, âmbar),
+// Uma linha do preview de dry-run (DryRunRow do backend, AUT-03). A partir da Phase
+// 06.2 há N linhas por documento — UMA por saída (cada cópia + o move opcional, D-03/D-07):
+// linhas de saída trazem `action_kind` ('copy' | 'move') e `removes_original`
+// (cópia = false → o original permanece). Linhas blocked/no-match continuam 1 por
+// documento (sem saída): `action_kind = null` e `removes_original = false`.
+// Sinalização por flags: blocked (D-07, vermelho), collision (D-09, sufixo, âmbar),
 // skipped_identical (D-10, duplicata, azul), no_match (nenhuma automação casou —
 // neutro, mantido na origem). `automation_id` = qual automação casou (D-25).
 export interface DryRunRow {
@@ -289,6 +293,10 @@ export interface DryRunRow {
   skipped_identical: boolean
   no_match: boolean
   automation_id: number | null
+  // Discriminador da saída (Phase 06.2, espelha o backend): 'copy' | 'move' | null.
+  action_kind?: ActionType | null
+  // false numa linha de cópia (o original permanece onde está, D-01).
+  removes_original?: boolean
 }
 
 // Resultado de POST /automations/dry-run (DryRunOut).

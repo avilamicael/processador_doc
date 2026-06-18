@@ -67,13 +67,16 @@ const OP_LABEL: Record<ConditionOperator, string> = {
   lt: '<',
 }
 
-// Catálogo das 2 ações do v1 (D-24). Cores espelham k-rn (#7C3AED) / k-mv (#15803D).
+// Catálogo das ações (D-24 + 06.2). Cores por token, distintas entre si:
+// rename → --st-quarentena ; move → --st-tratado ; copy → --st-encontrado.
+// 'copy' espelha 'move' (usa dest_folder) mas NÃO remove o original (D-01/D-05).
 const ACTION_META: Record<
   ActionType,
   { label: string; icon: 'docMini' | 'folder'; dot: string }
 > = {
   rename: { label: 'Renomear', icon: 'docMini', dot: 'var(--st-quarentena)' },
   move: { label: 'Mover', icon: 'folder', dot: 'var(--st-tratado)' },
+  copy: { label: 'Copiar', icon: 'folder', dot: 'var(--st-encontrado)' },
 }
 
 // ─── Rascunho local (draft) ────────────────────────────────────────────────────
@@ -91,7 +94,7 @@ interface CondDraft {
 interface ActDraft {
   key: number
   action_type: ActionType
-  // rename → name_pattern ; move → dest_folder
+  // rename → name_pattern ; move|copy → dest_folder (genérico)
   pattern: string
 }
 
@@ -419,6 +422,9 @@ export function AutomationsPage() {
       if (a.action_type === 'move' && !stripQuotes(a.pattern).trim()) {
         return 'Em "Mover", defina a pasta de destino.'
       }
+      if (a.action_type === 'copy' && !stripQuotes(a.pattern).trim()) {
+        return 'Em "Copiar", defina a pasta de destino.'
+      }
     }
     return null
   }
@@ -433,7 +439,8 @@ export function AutomationsPage() {
     const actions: AutomationActionCreate[] = d.acts.map((a) =>
       a.action_type === 'rename'
         ? { action_type: 'rename', params: { name_pattern: a.pattern.trim() } }
-        : { action_type: 'move', params: { dest_folder: stripQuotes(a.pattern) } },
+        : // move|copy: mesmo mapeamento → dest_folder; o action_type preserva a distinção.
+          { action_type: a.action_type, params: { dest_folder: stripQuotes(a.pattern) } },
     )
     return { name: d.name.trim(), active: d.active, conditions, actions }
   }
@@ -844,6 +851,11 @@ export function AutomationsPage() {
             <code>C:\Users\…\Análise</code>: as aspas são removidas ao sair do campo.
           </div>
         )}
+        {a.action_type === 'copy' && (
+          <div style={{ ...hintStyle, color: 'var(--st-encontrado)', fontWeight: 600 }}>
+            O original permanece onde está — uma cópia é criada no destino.
+          </div>
+        )}
       </div>
     )
   }
@@ -1149,7 +1161,7 @@ export function AutomationsPage() {
                   )}
 
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {(['rename', 'move'] as ActionType[]).map((act) => (
+                    {(['rename', 'move', 'copy'] as ActionType[]).map((act) => (
                       <button
                         key={act}
                         type="button"
