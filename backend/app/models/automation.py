@@ -17,9 +17,13 @@ muito mais simples e direto, espelhando o mockup v3 aprovado:
   `field="field"` (qual campo extraído comparar). A pasta de origem é só mais uma
   condição — a automação NÃO é atrelada a uma pasta.
 - **D-24 (ações):** `AutomationAction` ordenada por `position` (drag-and-drop +
-  ↑/↓). `action_type` ∈ {rename, move}; `params_json` carrega `name_pattern`
-  (rename) ou `dest_folder` (move). "Rotear/decidir tratativa" continua FORA do v1
-  (D-22) — não há `action_type` route aqui.
+  ↑/↓). `action_type` ∈ {rename, move, copy}; `params_json` carrega `name_pattern`
+  (rename) ou `dest_folder` (move/copy). `copy` (Fase 06.2, D-01/D-03) materializa
+  no destino e NÃO remove o original — é aditivo e COEXISTE com move na mesma
+  automação (várias cópias + 0..1 move). "Rotear/decidir tratativa" continua FORA
+  do v1 (D-22) — não há `action_type` route aqui.
+  `action_type` é `String` LIVRE (sem CHECK/constraint): `copy` é só um novo valor
+  aceito — NÃO há migração de schema na Fase 06.2.
 - **D-25 (resolução entre automações):** o executor (stage) avalia as automações
   ATIVAS por ordem de `position`; a PRIMEIRA cujas TODAS as condições casam executa
   suas ações; as demais NÃO rodam para esse documento.
@@ -109,13 +113,16 @@ class AutomationCondition(Base):
 
 
 class AutomationAction(Base):
-    """Ação ordenada de uma automação — rename/move (D-24).
+    """Ação ordenada de uma automação — rename/move/copy (D-24).
 
     `params_json` carrega os parâmetros da ação:
       rename → {"name_pattern": "{cliente}_{numero}"}
       move   → {"dest_folder": "Documentos/{cliente}/{data:aaaa-mm}"}
+      copy   → {"dest_folder": "Arquivo/{cliente}"}  (mesmo formato do move)
     A ORDEM (`position`) vem do drag-and-drop/↑↓ da UI. Rename compõe o NOME-alvo,
-    Move compõe a PASTA-alvo; a materialização do CAS é ÚNICA no fim (D-26).
+    Move compõe a PASTA-alvo (materialização do CAS ÚNICA no fim, D-26). Copy
+    (Fase 06.2, D-01/D-03) materializa no destino e NÃO remove o original — é uma
+    saída ADICIONAL que coexiste com move.
     """
 
     __tablename__ = "automation_actions"
@@ -130,10 +137,12 @@ class AutomationAction(Base):
     position: Mapped[int] = mapped_column(
         Integer, index=True, default=0, server_default="0", nullable=False
     )
-    # Tipo da ação (D-24): "rename" | "move". O executor despacha por este rótulo;
-    # nunca `eval`. (Não há "route" no v1 — D-22.)
+    # Tipo da ação (D-24; +copy na Fase 06.2): "rename" | "move" | "copy". O executor
+    # despacha por este rótulo; nunca `eval`. String LIVRE, sem CHECK/constraint —
+    # `copy` é só um novo valor aceito (SEM migração de schema). Desconhecido = inerte
+    # (falha-fechada, V5). (Não há "route" no v1 — D-22.)
     action_type: Mapped[str] = mapped_column(String, nullable=False)
-    # Parâmetros serializados em JSON (rename→name_pattern; move→dest_folder).
+    # Parâmetros serializados em JSON (rename→name_pattern; move/copy→dest_folder).
     params_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     automation: Mapped["Automation"] = relationship(back_populates="actions")
