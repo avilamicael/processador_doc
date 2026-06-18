@@ -137,3 +137,122 @@ def first_matching_rule(rules: list[Rule], fields: dict[str, str]) -> Rule | Non
         if rule_matches(rule, fields):
             return rule
     return None
+
+
+# --------------------------------------------------------------------------- #
+# Filtros de entrada do PIPELINE (D-14) — generaliza o avaliador de condições.  #
+# --------------------------------------------------------------------------- #
+
+# Tipos de filtro suportados (D-14). Um tipo fora deste conjunto nunca casa (V5).
+_FILTER_TYPES = frozenset(
+    {"field", "source_folder", "extension", "filename", "size", "template"}
+)
+
+
+@dataclass
+class FilterSpec:
+    """Filtro de entrada PURO de uma etapa do pipeline — `{filter_type} {op} {value}`.
+
+    Forma pura consumida pelo avaliador; o caller (pipeline.py / stage.py) mapeia o
+    `StepFilter` ORM para esta forma (igual `Condition` faz para `RuleCondition`).
+    `field_name` só é usado quando `filter_type == "field"`.
+    """
+
+    filter_type: str
+    operator: str
+    value: str
+    field_name: str | None = None
+
+
+def evaluate_filter(
+    filter: FilterSpec,
+    fields: dict[str, str],
+    file_attrs: dict,
+    identified_template_id: int | None,
+) -> bool:
+    """Avalia UM filtro de entrada (D-14). Dispatch EXPLÍCITO por `filter_type` (V5).
+
+    - `field`: reusa `evaluate_condition` (campo extraído `{campo} op valor`);
+    - `source_folder`: `eq` sobre `str(file_attrs["source_folder_id"])`;
+    - `extension`: `eq`/`contains` case-insensitive sobre `file_attrs["ext"]`;
+    - `filename`: `eq`/`contains` sobre `file_attrs["original_filename"]`;
+    - `size`: coerção numérica (`_as_decimal`) `gt`/`lt` sobre `file_attrs["size"]`
+      (Pitfall 2 — nunca lexicográfico);
+    - `template`: `eq` sobre `str(identified_template_id)` (porteiro do gate, D-15).
+
+    `filter_type` desconhecido → False (falha fechada, V5). NÃO loga valores.
+    """
+    ft = filter.filter_type
+    if ft not in _FILTER_TYPES:
+        return False  # V5: falha fechada
+
+    if ft == "field":
+        cond = Condition(
+            field_name=filter.field_name or "",
+            operator=filter.operator,
+            value=filter.value,
+        )
+        return evaluate_condition(cond, fields)
+
+    if ft == "source_folder":
+        sfid = file_attrs.get("source_folder_id")
+        if sfid is None:
+            return False
+        return str(sfid).strip() == str(filter.value).strip()
+
+    if ft == "extension":
+        ext = str(file_attrs.get("ext") or "").strip().casefold()
+        target = str(filter.value or "").strip().casefold()
+        if filter.operator == "contains":
+            return target in ext
+        return ext == target
+
+    if ft == "filename":
+        name = str(file_attrs.get("original_filename") or "")
+        target = str(filter.value or "")
+        if filter.operator == "contains":
+            return target.strip().casefold() in name.casefold()
+        return name.strip().casefold() == target.strip().casefold()
+
+    if ft == "size":
+        left = _as_decimal(str(file_attrs.get("size", "")))
+        right = _as_decimal(str(filter.value))
+        if left is None or right is None:
+            return False
+        if filter.operator == "gt":
+            return left > right
+        if filter.operator == "lt":
+            return left < right
+        # eq sobre tamanho (uso raro mas coerente).
+        if filter.operator == "eq":
+            return left == right
+        return False
+
+    if ft == "template":
+        if identified_template_id is None:
+            return False
+        return str(identified_template_id).strip() == str(filter.value).strip()
+
+    return False  # inalcançável (V5)
+
+
+def filter_matches(
+    filters: list[FilterSpec],
+    conjunction: str,
+    fields: dict[str, str],
+    file_attrs: dict,
+    identified_template_id: int | None,
+) -> bool:
+    """Casa a etapa: combina seus filtros de entrada por `conjunction` (D-14).
+
+    SEM filtros → True (a etapa aplica-se a TODO documento, P10). Senão `or` → any /
+    `and` (default) → all. NÃO loga valores.
+    """
+    if not filters:
+        return True
+    results = [
+        evaluate_filter(f, fields, file_attrs, identified_template_id) for f in filters
+    ]
+    if (conjunction or "and").strip().casefold() == "or":
+        return any(results)
+    return all(results)
