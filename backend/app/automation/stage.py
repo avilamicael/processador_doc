@@ -74,21 +74,53 @@ APPLIED_STEP = "aplicado"
 # Marcador ao qual o documento volta quando rebaixado para revisão (D-07).
 CLASSIFIED_STEP = "classificado"
 
-# Ação registrada no AuditLog write-ahead.
+# Ação registrada no AuditLog write-ahead do MOVE (alvo final que remove o original).
 _ACTION = "apply"
+
+# Ação registrada no AuditLog write-ahead de CADA cópia (Fase 06.2 — D-01/D-07). O
+# undo discrimina por este rótulo: "copy" apaga a cópia (nunca toca o original).
+_COPY_ACTION = "copy"
+
+
+@dataclass(frozen=True)
+class StageOutput:
+    """UMA saída de uma automação aplicada/simulada (Fase 06.2 — multi-saída).
+
+    `kind` discrimina `"copy"` (saída ADICIONAL que NÃO remove o original, D-01) de
+    `"move"` (o alvo final que remove o original ao fim, D-03). `dest_path` é o destino
+    efetivo (já com anti-colisão resolvida). `collision`/`skipped_identical` espelham
+    a semântica D-09/D-10 POR saída. `removes_original` deriva de `kind` (só o move
+    remove) — explícito para a UI mostrar o badge "não remove o original" na cópia.
+    """
+
+    kind: str  # "copy" | "move"
+    dest_path: str
+    collision: bool = False
+    skipped_identical: bool = False
+
+    @property
+    def removes_original(self) -> bool:
+        """True só para o move — a cópia NUNCA remove o original (D-01)."""
+        return self.kind == "move"
 
 
 @dataclass(frozen=True)
 class ApplyStageResult:
     """Resultado de `apply_stage`/`dry_run`: o plano origem→destino e o que ocorreu.
 
-    `materialized=True` só quando a operação física de fato escreveu no destino
+    `materialized=True` só quando alguma operação física de fato escreveu num destino
     (não em no-op idempotente, duplicata idêntica D-10, dry-run, bloqueio D-07 ou
     no-match D-25).
     `blocked=True` quando o destino não pôde ser resolvido (campo faltante/inválido
     ou confinamento V4) e o documento foi rebaixado para revisão.
     `collision=True` quando o nome de destino colidiu e foi resolvido por sufixo (D-09).
     `no_match=True` quando NENHUMA automação casou (no-op, doc fica na origem, D-25).
+
+    Multi-saída (Fase 06.2): `outputs` lista CADA saída (N cópias + 0..1 move), cada
+    uma com seu `kind`/`dest_path`/flags — a API emite uma linha por saída. Os campos
+    single-output (`dest_path`/`collision`/`skipped_identical`) permanecem preenchidos
+    pela saída de MOVE (ou, em copy-only, pela ÚLTIMA cópia) para não quebrar os
+    consumidores existentes (D-04: não-regressão).
     """
 
     document_id: int
@@ -100,6 +132,7 @@ class ApplyStageResult:
     skipped_identical: bool
     no_match: bool = False
     automation_id: int | None = None
+    outputs: tuple[StageOutput, ...] = ()
 
 
 def _conditions_to_pure(automation: Automation) -> list[ConditionSpec]:
@@ -316,6 +349,18 @@ def _plan_dest(source: Path, plan: AutomationPlan) -> Path:
     return folder / name
 
 
+def _copy_dest(source: Path, copy) -> Path:
+    """Compõe o destino de UMA `PlannedCopy`, preservando a extensão do original.
+
+    Mesma lógica de `_plan_dest` (sanitiza/preserva ext) aplicada à pasta confinada e
+    ao nome-alvo CORRENTE da cópia (D-03). `copy` é um `executor.PlannedCopy`.
+    """
+    name = copy.name if copy.name is not None else source.name
+    if not Path(name).suffix and source.suffix:
+        name = name + source.suffix
+    return copy.folder / name
+
+
 def _has_done(session: Session, document_id: int) -> bool:
     """True se já existe um AuditLog(status="done") para o doc (idempotência)."""
     existing = session.scalar(
@@ -367,32 +412,77 @@ def dry_run(session: Session, *, content_hash: str) -> ApplyStageResult | None:
             no_match=True,
         )
 
-    dest = _plan_dest(source, plan)
-
-    # Sinaliza colisão/duplicata SEM tocar o disco: só consulta a existência.
-    collision = False
-    skipped_identical = False
-    if dest.exists():
+    def _preview_collision(dst: Path) -> tuple[Path, bool, bool]:
+        """Consulta colisão/idêntico SEM tocar o disco (só lê a existência)."""
+        if not dst.exists():
+            return dst, False, False
         try:
-            resolved = fileops.resolve_collision(dest, source)
+            resolved = fileops.resolve_collision(dst, source)
         except OSError:
-            resolved = None
+            return dst, False, False
         if resolved is None:
-            skipped_identical = True  # D-10 (idêntico)
-        elif resolved != dest:
-            collision = True  # D-09 (sufixo)
-            dest = resolved
+            return dst, False, True  # D-10 (idêntico)
+        if resolved != dst:
+            return resolved, True, False  # D-09 (sufixo)
+        return dst, False, False
+
+    outputs: list[StageOutput] = []
+
+    # (Fase 06.2) Uma linha por CÓPIA — origem→destino, sem remover o original.
+    for planned_copy in plan.copies:
+        cdst, c_collision, c_identical = _preview_collision(
+            _copy_dest(source, planned_copy)
+        )
+        outputs.append(
+            StageOutput(
+                kind="copy",
+                dest_path=str(cdst),
+                collision=c_collision,
+                skipped_identical=c_identical,
+            )
+        )
+
+    # A saída de MOVE (alvo final) — emitida só quando há MOVE EFETIVO. Copy-only
+    # (cópias + plano-alvo no DEFAULT) NÃO gera linha de move (o original permanece).
+    base = _base_root().resolve()
+    default_name = Path(source).name
+    is_default_target = (
+        plan.target_folder is not None
+        and Path(plan.target_folder).resolve() == base
+        and (plan.target_name is None or plan.target_name == default_name)
+    )
+    has_effective_move = not (plan.copies and is_default_target)
+
+    m_collision = False
+    m_identical = False
+    move_dest = _plan_dest(source, plan)
+    if has_effective_move:
+        move_dest, m_collision, m_identical = _preview_collision(move_dest)
+        outputs.append(
+            StageOutput(
+                kind="move",
+                dest_path=str(move_dest),
+                collision=m_collision,
+                skipped_identical=m_identical,
+            )
+        )
 
     return ApplyStageResult(
         document_id=doc.id,
         source_path=str(source),
-        dest_path=str(dest),
+        dest_path=outputs[-1].dest_path if outputs else None,
         materialized=False,
         blocked=False,
-        collision=collision,
-        skipped_identical=skipped_identical,
+        collision=m_collision,
+        skipped_identical=m_identical,
         automation_id=plan.automation_id,
+        outputs=tuple(outputs),
     )
+
+
+# Alias do `dry_run` de módulo — o parâmetro `dry_run` de `apply_stage` sombreia o
+# nome da função, então o caminho dry_run=True reusa a simulação multi-saída por aqui.
+dry_run_result = dry_run
 
 
 async def apply_stage(
@@ -482,9 +572,9 @@ async def apply_stage(
 
     dest = _plan_dest(source, plan)
 
-    # (4) dry-run: plano puro, sem AuditLog e sem disco (AUT-03).
+    # (4) dry-run: plano puro multi-saída, sem AuditLog e sem disco (AUT-03).
     if dry_run:
-        return ApplyStageResult(
+        return dry_run_result(session, content_hash=content_hash) or ApplyStageResult(
             document_id=doc.id,
             source_path=str(source),
             dest_path=str(dest),
@@ -495,38 +585,153 @@ async def apply_stage(
             automation_id=plan.automation_id,
         )
 
-    # (5) Anti-colisão a MONTANTE (resolve_collision). Só consulta o disco para
-    # decidir o caminho livre; não escreve.
-    collision = False
-    skipped_identical = False
-    if dest.exists():
-        resolved = fileops.resolve_collision(dest, source)
+    def _resolve_for_write(dst: Path) -> tuple[Path, bool, bool]:
+        """Anti-colisão a MONTANTE (resolve_collision): devolve (dest, collision,
+        skipped_identical) sem escrever. idêntico → skip (D-10); diferente → sufixo (D-09)."""
+        if not dst.exists():
+            return dst, False, False
+        resolved = fileops.resolve_collision(dst, dst_src_for_collision(dst))
         if resolved is None:
-            # D-10: destino já contém conteúdo idêntico → conclui sem mover.
-            skipped_identical = True
-        elif resolved != dest:
-            collision = True
-            dest = resolved
+            return dst, False, True  # D-10
+        if resolved != dst:
+            return resolved, True, False  # D-09
+        return dst, False, False
 
-    if skipped_identical:
-        # No-op de disco mas CONCLUI o documento (operação já-feita, D-10).
+    def dst_src_for_collision(_dst: Path) -> Path:
+        # resolve_collision compara o conteúdo do destino contra o `src`; aqui o
+        # conteúdo real vem do CAS, mas a origem física (`source`) é idêntica por
+        # construção (mesmo content_hash) — usá-la mantém a semântica D-10.
+        return source
+
+    def _materialize(dst: Path) -> bool:
+        """Materializa o blob do CAS em `dst` e verifica o hash (AUT-06). Devolve
+        True se houve conteúdo físico; False se o blob não existe no CAS (conclusão
+        lógica). Erros de disco PROPAGAM (origem intacta — verify-then-remove)."""
+        try:
+            fileops.materialize_to_dest(content_hash, dst)
+            return True
+        except FileNotFoundError:
+            if cas.exists(content_hash):
+                raise  # blob existe, destino falhou — propaga (retryável)
+            logger.info(
+                "Documento %s: sem conteúdo físico no CAS — conclusão lógica", doc.id
+            )
+            return False
+
+    materialized_any = False
+    outputs: list[StageOutput] = []
+
+    # (5–7c) CÓPIAS PRIMEIRO (D-03): cada cópia com write-ahead próprio (D-07),
+    # anti-colisão por destino (D-07/D-09/D-10) e materialização SEM remover o
+    # original (D-01). O move (se houver) vem por ÚLTIMO.
+    for planned_copy in plan.copies:
+        cdst, c_collision, c_identical = _resolve_for_write(
+            _copy_dest(source, planned_copy)
+        )
+        if c_identical:
+            # D-10: a cópia idêntica já existe — registra como done sem re-materializar.
+            copy_audit = AuditLog(
+                document_id=doc.id,
+                action=_COPY_ACTION,
+                status="done",
+                source_path=str(source),
+                dest_path=str(cdst),
+                run_id=run_id,
+                content_hash=content_hash,
+            )
+            session.add(copy_audit)
+            session.commit()
+            outputs.append(
+                StageOutput(kind="copy", dest_path=str(cdst), skipped_identical=True)
+            )
+            continue
+
+        # WRITE-AHEAD por cópia (D-07): intenção persistida ANTES de materializar.
+        copy_audit = AuditLog(
+            document_id=doc.id,
+            action=_COPY_ACTION,
+            status="intent",
+            source_path=str(source),
+            dest_path=str(cdst),
+            run_id=run_id,
+            content_hash=content_hash,
+        )
+        session.add(copy_audit)
+        session.commit()
+        session.refresh(copy_audit)
+
+        copied = _materialize(cdst)  # D-01: NUNCA chama remove_original p/ cópia.
+        materialized_any = materialized_any or copied
+        copy_audit.status = "done"
+        session.commit()
+        outputs.append(
+            StageOutput(kind="copy", dest_path=str(cdst), collision=c_collision)
+        )
+
+    # Distingue MOVE EFETIVO de DEFAULT. Copy-only é LEGÍTIMO (cópias + nenhum move):
+    # o plano-alvo fica no DEFAULT (base_root + nome original) e NÃO deve materializar
+    # para a raiz. Há move efetivo quando a pasta-alvo difere do base_root OU o nome
+    # difere do original (rename mudou o nome). Sem cópias, o caminho legado roda
+    # sempre (não-regressão D-04: o move default vira o no-op/conclusão da Fase 6).
+    base = _base_root().resolve()
+    default_name = Path(source).name
+    is_default_target = (
+        plan.target_folder is not None
+        and Path(plan.target_folder).resolve() == base
+        and (plan.target_name is None or plan.target_name == default_name)
+    )
+    has_effective_move = not (plan.copies and is_default_target)
+
+    if not has_effective_move:
+        # COPY-ONLY (D-01/D-03): só cópias, sem move. Conclui o documento (D-05) sem
+        # tocar o original — ele permanece na origem.
         if doc.state in (DocState.PROCESSANDO, DocState.EM_REVISAO):
             transition(session, doc, DocState.CONCLUIDO, completed_step=APPLIED_STEP)
+        else:
+            session.commit()
+        logger.info(
+            "Documento %s: copy-only aplicado (original mantido, D-01) — concluído",
+            doc.id,
+        )
+        return ApplyStageResult(
+            document_id=doc.id,
+            source_path=str(source),
+            dest_path=outputs[-1].dest_path if outputs else None,
+            materialized=materialized_any,
+            blocked=False,
+            collision=False,
+            skipped_identical=False,
+            automation_id=plan.automation_id,
+            outputs=tuple(outputs),
+        )
+
+    # (5–9) MOVE por ÚLTIMO: o original é a garantia até todas as cópias estarem
+    # materializadas/verificadas (D-03). Mantém o comportamento da Fase 6.
+    dest, collision, skipped_identical = _resolve_for_write(dest)
+
+    if skipped_identical:
+        # No-op de disco do move mas CONCLUI o documento (operação já-feita, D-10).
+        outputs.append(
+            StageOutput(kind="move", dest_path=str(dest), skipped_identical=True)
+        )
+        if doc.state in (DocState.PROCESSANDO, DocState.EM_REVISAO):
+            transition(session, doc, DocState.CONCLUIDO, completed_step=APPLIED_STEP)
+        else:
+            session.commit()
         logger.info("Documento %s: destino idêntico já presente (D-10), concluído", doc.id)
         return ApplyStageResult(
             document_id=doc.id,
             source_path=str(source),
             dest_path=str(dest),
-            materialized=False,
+            materialized=materialized_any,
             blocked=False,
             collision=False,
             skipped_identical=True,
             automation_id=plan.automation_id,
+            outputs=tuple(outputs),
         )
 
-    # (6) WRITE-AHEAD (AUT-04): a INTENÇÃO é persistida ANTES de tocar o disco.
-    # Commit explícito aqui (não é o commit final do transition) para que um crash
-    # entre intent e done deixe um registro reconciliável.
+    # (6) WRITE-AHEAD do MOVE (AUT-04): intenção persistida ANTES de tocar o disco.
     audit = AuditLog(
         document_id=doc.id,
         action=_ACTION,
@@ -540,26 +745,18 @@ async def apply_stage(
     session.commit()
     session.refresh(audit)
 
-    # (7) Materializa do CAS e verifica o hash (AUT-06). Erros de disco PROPAGAM —
-    # a origem fica intacta (verify-then-remove). EXCEÇÃO controlada: se o blob NÃO
-    # existe no CAS (FileNotFoundError E `cas.exists` falso), não há conteúdo físico
-    # a relocar — a automação conclui logicamente (o audit `done` já registra a
-    # intenção) sem fabricar/perder arquivo.
-    physically_moved = True
-    try:
-        fileops.materialize_to_dest(content_hash, dest)
-    except FileNotFoundError:
-        if cas.exists(content_hash):
-            raise  # blob existe mas o destino falhou — propaga (retryável)
-        physically_moved = False
-        logger.info(
-            "Documento %s: sem conteúdo físico no CAS para mover — conclusão lógica",
-            doc.id,
-        )
+    # (7) Materializa o move do CAS e verifica o hash (AUT-06).
+    physically_moved = _materialize(dest)
+    materialized_any = materialized_any or physically_moved
 
-    # (8) Verificação passou → remove a origem (AUT-06: copia→verifica→remove).
+    # (8) Verificação passou → remove a origem (AUT-06: copia→verifica→remove). SÓ
+    # AQUI, e SÓ DEPOIS de todas as cópias materializadas (D-03).
     if physically_moved:
         fileops.remove_original(source)
+
+    outputs.append(
+        StageOutput(kind="move", dest_path=str(dest), collision=collision)
+    )
 
     # (9) status="done" + transition(CONCLUIDO) num COMMIT ÚNICO.
     audit.status = "done"
@@ -578,11 +775,12 @@ async def apply_stage(
         document_id=doc.id,
         source_path=str(source),
         dest_path=str(dest),
-        materialized=physically_moved,
+        materialized=materialized_any,
         blocked=False,
         collision=collision,
         skipped_identical=False,
         automation_id=plan.automation_id,
+        outputs=tuple(outputs),
     )
 
 

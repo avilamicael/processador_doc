@@ -328,23 +328,6 @@ def test_no_automations_is_no_match(
 # --------------------------------------------------------------------------- #
 
 
-def _seed_cas_blob(content_hash: str, data: bytes = b"conteudo-copia") -> None:
-    """Materializa o blob do bloco no CAS para que `materialize_to_dest` leia dele.
-
-    O `classified_doc` semeia só o registro do Document; o conteúdo físico no CAS
-    precisa existir para a cópia REAL acontecer (sem mock de materialize). Idempotente.
-    """
-    from app.storage import cas
-
-    if not cas.exists(content_hash):
-        # store grava endereçado pelo SHA-256 do conteúdo; o content_hash semeado é
-        # arbitrário ("a"*64), então gravamos o blob e forçamos o caminho esperado.
-        path = cas.path_for(content_hash) if hasattr(cas, "path_for") else None
-        if path is not None:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(data)
-
-
 def _copy_only_automation(automation_factory, dest="ARQUIVO") -> int:
     """Automação com UMA ação copy (sem move/rename) que casa todo .pdf semeado."""
     return automation_factory(
@@ -542,9 +525,10 @@ def test_copy_collision_suffix(
 ) -> None:
     """D-07/D-09: destino de cópia ocupado por conteúdo diferente → sufixo; nunca
     sobrescreve."""
+    from pathlib import Path
+
     import app.automation.fileops as real_fileops
     import app.automation.stage as stage_mod
-    from pathlib import Path
 
     base = tmp_path / "organizados"
     monkeypatch.setattr(stage_mod, "_base_root", lambda: base)
@@ -563,13 +547,15 @@ def test_copy_collision_suffix(
         materialized.append(str(dst))
         return str(dst)
 
-    # resolve_collision real (hash) precisa ler o src; force um caminho real:
     monkeypatch.setattr(real_fileops, "materialize_to_dest", spy_materialize)
     monkeypatch.setattr(real_fileops, "remove_original", lambda *a, **k: None)
-    # hash_file determinístico para diferenciar src (origem) do destino ocupado.
-    monkeypatch.setattr(
-        real_fileops, "hash_file", lambda p: "SRC" if "entrada.pdf" not in str(p) or "ARQUIVO" not in str(p) else "DST"
-    )
+
+    # hash_file determinístico: o destino ocupado ("ARQUIVO/entrada.pdf") tem hash
+    # diferente da origem → resolve_collision deve gerar sufixo "_1" (D-09).
+    def fake_hash(p):
+        return "DST" if "ARQUIVO" in str(p) else "SRC"
+
+    monkeypatch.setattr(real_fileops, "hash_file", fake_hash)
 
     _copy_only_automation(automation_factory)
 
