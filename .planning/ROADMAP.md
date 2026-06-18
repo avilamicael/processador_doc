@@ -2,7 +2,7 @@
 
 ## Overview
 
-O produto transforma pilhas de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados de forma automática e confiável, single-tenant, rodando primariamente em Windows. A jornada começa pela fundação que torna tudo seguro e testável — máquina de estados persistida, armazenamento imutável por hash (CAS) e migrações desde o dia 1 — sobre a qual se monta a ingestão multi-entrada com fila assíncrona idempotente in-process. Em seguida vem o núcleo do motor: extração **genérica via IA** dirigida pelo template, com medição de tokens para a cobrança por consumo. Sobre esse contrato de extração constroem-se os templates/sub-templates e a classificação, depois o gate de confiança com revisão humana e quarentena, e só então as automações de arquivo (renomear/mover) com dry-run, log de auditoria write-ahead e undo. O parsing determinístico de tipos conhecidos entra depois, como módulo opcional/plugável de otimização de custo (não como eixo do produto). A jornada fecha com distribuição, atualização segura entre versões e a documentação de primeira classe (instalação, atualização, uso e operação).
+O produto transforma pilhas de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados de forma automática e confiável, single-tenant, rodando primariamente em Windows. A jornada começa pela fundação que torna tudo seguro e testável — máquina de estados persistida, armazenamento imutável por hash (CAS) e migrações desde o dia 1 — sobre a qual se monta a ingestão multi-entrada com fila assíncrona idempotente. Em seguida vem o núcleo do motor: extração **genérica via IA** dirigida pelo template, com medição de tokens para a cobrança por consumo. Sobre esse contrato de extração constroem-se os templates/sub-templates e a classificação, depois o gate de confiança com revisão humana e quarentena, e só então as automações de arquivo (renomear/mover) com dry-run, log de auditoria write-ahead e undo. O parsing determinístico de tipos conhecidos entra depois, como módulo opcional/plugável de otimização de custo (não como eixo do produto). A jornada fecha com distribuição, atualização segura entre versões e a documentação de primeira classe (instalação, atualização, uso e operação).
 
 ## Phases
 
@@ -243,14 +243,24 @@ Plans:
 
 ### Phase 06.1: Redesign de Templates e Classificação por Sinais (E/OU + Regex) (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal:** A tela de criação/edição de Template comunica explicitamente o pipeline (Passo 1 reconhecer o tipo SEM IA por sinais; Passo 2 extrair campos COM IA) e o motor de classificação por sinais evolui de "fração de termos literais" para **grupos booleanos E/OU de condições texto|regex**, persistidos como JSON estruturado na coluna existente e avaliados com segurança (ReDoS) — preservando o seam `decide()`, o roteamento de quarentena/revisão e a ponte campo→token das automações.
+**Requirements**: D-T0..D-T9 (decisões do CONTEXT — sem REQ-IDs formais; cobertura por decision-coverage gate)
 **Depends on:** Phase 6
-**Plans:** 0 plans
+**Plans:** 3 plans
+**UI hint**: yes
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd:plan-phase 06.1 to break down)
+- [ ] 06.1-01-PLAN.md — Matcher booleano de grupos E/OU texto|regex (tetos ReDoS, parser forward-compatible, doc_type bonus removido, `decide()` preservado) + suite RED→GREEN (D-T1/D-T2)
+
+**Wave 2** *(blocked on 06.1-01)*
+
+- [ ] 06.1-02-PLAN.md — API/modelo de templates no schema de grupos (Pydantic `Literal` mode, serialização forward-compatible, regex string-only T-04-10, doc_type dormente) + testes de integração (D-T2/D-T5/D-T9)
+
+**Wave 3** *(blocked on 06.1-02)*
+
+- [ ] 06.1-03-PLAN.md — Frontend: reescrita de TemplatesPage conforme mockup (grupos E/OU, campos densos + ⚙ Avançado, tooltips ⓘ hover, sem doc_type) + tipos/cliente + token `--tip-shadow` + gate de build (D-T0/D-T3/D-T4/D-T6/D-T7/D-T8/D-T9)
 
 ### Phase 7: Módulo Determinístico Opcional e Roteamento de Custo
 
@@ -284,7 +294,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -294,5 +304,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
 | 6. Automações de Arquivo (Renomear/Mover) | 7/8 | In Progress|  |
+| 6.1. Redesign de Templates e Classificação por Sinais | 0/3 | Not started | - |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
