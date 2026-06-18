@@ -246,7 +246,7 @@ Plans:
 **Goal:** A tela de criação/edição de Template comunica explicitamente o pipeline (Passo 1 reconhecer o tipo SEM IA por sinais; Passo 2 extrair campos COM IA) e o motor de classificação por sinais evolui de "fração de termos literais" para **grupos booleanos E/OU de condições texto|regex**, persistidos como JSON estruturado na coluna existente e avaliados com segurança (ReDoS) — preservando o seam `decide()`, o roteamento de quarentena/revisão e a ponte campo→token das automações.
 **Requirements**: D-T0..D-T9 (decisões do CONTEXT — sem REQ-IDs formais; cobertura por decision-coverage gate)
 **Depends on:** Phase 6
-**Plans:** 4 plans (3 complete + 1 gap-closure)
+**Plans:** 4/4 plans complete
 **UI hint**: yes
 
 Plans:
@@ -264,7 +264,7 @@ Plans:
 
 **Gap closure** *(CR-01 + WR-01, do VERIFICATION/REVIEW)*
 
-- [ ] 06.1-04-PLAN.md — Fechar ReDoS real (timeout via lib `regex` + falha-fechada) e falha-fechada de `decide()` com threshold ≤ 0; docstring corrigida; testes reforçados (D-T1/D-T2)
+- [x] 06.1-04-PLAN.md — Fechar ReDoS real (timeout via lib `regex` + falha-fechada) e falha-fechada de `decide()` com threshold ≤ 0; docstring corrigida; testes reforçados (D-T1/D-T2)
 
 ### Phase 7: Módulo Determinístico Opcional e Roteamento de Custo
 
@@ -308,6 +308,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 7 �
 | 4. Templates, Sub-templates e Classificação | 6/6 | Complete   | 2026-06-16 |
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
 | 6. Automações de Arquivo (Renomear/Mover) | 7/8 | In Progress|  |
-| 6.1. Redesign de Templates e Classificação por Sinais | 3/3 | Complete   | 2026-06-18 |
+| 6.1. Redesign de Templates e Classificação por Sinais | 4/4 | Complete   | 2026-06-18 |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Not started | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |

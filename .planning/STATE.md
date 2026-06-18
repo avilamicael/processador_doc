@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Fase 06.1 inserida (redesign Templates + sinais E/OU); CONTEXT escrito; pronto p/ plan-phase
-last_updated: "2026-06-18T18:00:05.125Z"
-last_activity: 2026-06-18 -- Phase 06.1 planning complete
+status: verifying
+stopped_at: 06.1-04 (gap closure CR-01/WR-01) executado — ReDoS timeout real + decide() falha-fechada; pronto p/ verificação
+last_updated: "2026-06-18T18:08:07.019Z"
+last_activity: 2026-06-18
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 35
-  completed_plans: 38
-  percent: 67
+  completed_plans: 39
+  percent: 78
 ---
 
 # Project State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 
 Phase: 06.1 (redesign-de-templates-e-classifica-o-por-sinais-e-ou-regex) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
-Last activity: 2026-06-18 -- Phase 06.1 planning complete
+Status: Phase complete — ready for verification
+Last activity: 2026-06-18
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -82,6 +82,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 06.1 P01 | 12 | 2 tasks | 3 files |
 | Phase 06.1 P02 | 4 | 2 tasks | 3 files |
 | Phase 06.1 P03 | 6 | 2 tasks | 3 files |
+| Phase 06.1 P04 | 3 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -157,6 +158,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T17:24:43.800Z
+Last session: 2026-06-18T18:08:07.014Z
 Stopped at: Fase 06.1 inserida (redesign Templates + sinais E/OU); CONTEXT escrito; pronto p/ plan-phase
 Resume file: None
