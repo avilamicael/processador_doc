@@ -241,6 +241,17 @@ Plans:
 
 - [ ] 06-08-PLAN.md — Frontend construtor de pipeline (S1 lista ordenada/encadeada + S2 editor de etapa + S3 token com pré-visualização) + Dry-run (S4) + Aplicar/Desfazer (S5/S6) + verificação visual (sem visualizador; zero npm novo)
 
+### Phase 06.1: Redesign de Templates e Classificação por Sinais (E/OU + Regex) (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd:plan-phase 06.1 to break down)
+
 ### Phase 7: Módulo Determinístico Opcional e Roteamento de Custo
 
 **Goal**: Para clientes que recebem tipos conhecidos (boleto, NF-e), um módulo opcional/plugável extrai esses dados sem IA, e o roteador passa a escolher a rota mais barata (determinístico → texto nativo → IA), reduzindo o custo de tokens do cliente.

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: "Fase 06 em REPLAN: modelo de automações virou PIPELINE de etapas (D-12..D-16). Re-research em curso; depois UI-SPEC + replan + re-exec. Backend testado verde no modelo antigo (será refeito p/ pipeline)."
-last_updated: "2026-06-18T01:20:42Z"
+stopped_at: 06-08 — Tasks 1-3 executadas e commitadas (tipos/api/hooks de pipeline; AutomationsPage construtor S1/S2/S3; DryRunPage S4 + aplicar/desfazer S5/S6). tsc+build verdes; zero npm novo. PAUSADO no checkpoint human-verify (Task 4) — verificação visual humana pendente antes de fechar a fase.
+last_updated: "2026-06-18T15:54:04.971Z"
 last_activity: 2026-06-18
 progress:
-  total_phases: 8
-  completed_phases: 5
+  total_phases: 9
+  completed_phases: 6
   total_plans: 31
-  completed_plans: 30
-  percent: 63
+  completed_plans: 35
+  percent: 67
 ---
 
 # Project State
