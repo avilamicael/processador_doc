@@ -84,6 +84,27 @@ export interface Integration {
 // Tipos de campo do construtor (D-08): os 6 valores aceitos pelo select de S2.
 export type FieldType = 'texto' | 'numero' | 'data' | 'moeda' | 'cpf_cnpj' | 'booleano'
 
+// --- Sinais como GRUPOS E/OU (Fase 06.1, D-T2/D-T3/D-T4) ---
+// Espelha o contrato HTTP do Plano 02: TemplateIn/Out.signals =
+// list[list[SignalConditionIn]]. Cada condição é {mode, value}; um grupo é uma
+// lista de condições combinadas por E; a lista de grupos é combinada por OU.
+
+// Modo de uma condição de sinal (Literal no backend → 422 em valor inválido).
+// 'texto' = substring no documento; 'regex' = padrão (string-only no frontend).
+export type SignalMode = 'texto' | 'regex'
+
+// Uma condição de sinal: como buscar ('texto'|'regex') e o valor a casar.
+export interface SignalCondition {
+  mode: SignalMode
+  value: string
+}
+
+// Um grupo de condições combinadas por E (todas precisam casar).
+export type SignalGroup = SignalCondition[]
+
+// Lista de grupos combinados por OU (qualquer grupo casando → identifica o tipo).
+export type Signals = SignalGroup[]
+
 // Campo a extrair de um template (TemplateFieldOut do backend).
 export interface TemplateField {
   id: number
@@ -98,8 +119,9 @@ export interface TemplateField {
 export interface Template {
   id: number
   name: string
+  // doc_type: coluna dormente mantida no schema (D-T5) — o form não a alimenta.
   doc_type: string | null
-  signals: string[]
+  signals: Signals
   fields: TemplateField[]
   created_at: string
   updated_at: string
@@ -117,8 +139,9 @@ export interface TemplateFieldCreate {
 // Body de criação de template (POST /templates — TemplateIn).
 export interface TemplateCreate {
   name: string
-  doc_type: string | null
-  signals: string[]
+  // doc_type dormente (D-T5): opcional no contrato, fora do form do redesign.
+  doc_type?: string | null
+  signals: Signals
   fields: TemplateFieldCreate[]
 }
 
@@ -127,7 +150,7 @@ export interface TemplateCreate {
 export interface TemplatePatch {
   name?: string
   doc_type?: string | null
-  signals?: string[]
+  signals?: Signals
   fields?: TemplateFieldCreate[]
 }
 
