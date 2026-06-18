@@ -19,6 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Templates, Sub-templates e Classificação** - Construtor schema-first de templates e classificação automática contra eles (completed 2026-06-16)
 - [x] **Phase 5: Confiança, Revisão Humana e Quarentena** - Score de confiança determinístico, limiar, fila de revisão lado-a-lado e quarentena visível (completed 2026-06-17)
 - [x] **Phase 6: Automações de Arquivo (Renomear/Mover)** - Renomear/mover por tokens com dry-run, audit log write-ahead, anti-colisão e undo (modelo final Condições→Ações; verificado por testes 2026-06-18, 1 item de verificação ao vivo pendente)
+- [ ] **Phase 6.2: Ações de Automação: Copiar e Cortar (split por template)** (INSERTED) - Ações Copiar e Cortar nas automações (mantendo Mover/Renomear); corte do PDF por pasta monitorada OU por template
 - [ ] **Phase 7: Módulo Determinístico Opcional e Roteamento de Custo** - Parsing plugável de tipos conhecidos (boleto/NF-e) e cascata determinístico→nativo→IA — **ADIADA** (otimização opcional; revisitar após medir custo real de tokens em uso)
 - [ ] **Phase 8: Distribuição, Atualização e Documentação** - Releases versionadas, update com migração segura e guias de instalação/atualização/uso/operação
 
@@ -268,6 +269,22 @@ Plans:
 
 - [x] 06.1-04-PLAN.md — Fechar ReDoS real (timeout via lib `regex` + falha-fechada) e falha-fechada de `decide()` com threshold ≤ 0; docstring corrigida; testes reforçados (D-T1/D-T2)
 
+### Phase 06.2: Ações de Automação: Copiar e Cortar (split por template) (INSERTED)
+
+**Goal:** Estender o conjunto de **ações de automação** mantendo Mover e Renomear (sem regressão) e adicionando duas ações novas — **Copiar** (copia o arquivo para o destino e **deixa o original na origem**, mais seguro que Mover) e **Cortar** (separa o PDF por número de páginas como ação de automação). Com isso o corte do PDF passa a poder acontecer de **dois modos coexistentes**: na **pasta monitorada** (`pages_per_block`, como hoje — antes de ler) OU na **automação** (depois de ler/identificar o tipo, conforme o template), porque nem todo documento deve ser cortado — depende do tipo.
+**Requirements**: estende AUT-* / TPL-02 (sem REQ-IDs formais novos; cobertura por decision-coverage do CONTEXT, como a 06.1)
+**Depends on:** Phase 6
+**Success Criteria** (rascunho — refinar no discuss-phase):
+
+  1. O usuário adiciona a ação **Copiar** a uma automação e, após aplicar, o arquivo aparece no destino E o original permanece na pasta de origem
+  2. O usuário adiciona a ação **Cortar** e um PDF multipágina é separado em N arquivos conforme a configuração de páginas por bloco
+  3. Mover e Renomear continuam funcionando sem regressão; o split por pasta monitorada (`pages_per_block`) continua disponível
+  4. Dry-run, audit log write-ahead, anti-colisão e undo cobrem as novas ações (nenhum arquivo se perde)
+
+**Questão arquitetural a resolver no discuss-phase (NÃO decidida ainda):** quando **Cortar** roda como automação (após a leitura), os pedaços gerados são documentos novos — (a) **re-entram no pipeline** (cada pedaço extraído/classificado/automatizado individualmente; mais poderoso, mais complexo) vs. (b) **Cortar é só saída de arquivo** (gera N arquivos no destino e encerra, sem re-processar). Também definir **onde a regra de corte mora no template** e a ordem ingestão→split→extração. Ver memória de projeto `automacoes-acoes-copiar-cortar`.
+
+**Plans:** TBD (run /gsd:plan-phase 06.2 to break down)
+
 ### Phase 7: Módulo Determinístico Opcional e Roteamento de Custo
 
 **Goal**: Para clientes que recebem tipos conhecidos (boleto, NF-e), um módulo opcional/plugável extrai esses dados sem IA, e o roteador passa a escolher a rota mais barata (determinístico → texto nativo → IA), reduzindo o custo de tokens do cliente.
@@ -302,7 +319,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 7 → 8
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 6.2 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -313,5 +330,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 7 �
 | 5. Confiança, Revisão Humana e Quarentena | 4/4 | Complete   | 2026-06-17 |
 | 6. Automações de Arquivo (Renomear/Mover) | 8/8 (+06-09..06-12 refino) | Complete (test-verified) | 2026-06-18 |
 | 6.1. Redesign de Templates e Classificação por Sinais | 4/4 | Complete    | 2026-06-18 |
+| 6.2. Ações de Automação: Copiar e Cortar (split por template) | 0/TBD | Not started | - |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Deferred (2026-06-18) | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
