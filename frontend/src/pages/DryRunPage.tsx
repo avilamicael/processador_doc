@@ -12,8 +12,9 @@ import { useApply, useDryRun, useUndo } from '../hooks/useAutomations'
 
 // Badge de sinalização da situação da linha. Texto puro. Cores SEMPRE via tokens
 // --st-* (06-UI-SPEC §Cores semânticas): vermelho só bloqueio (D-07); colisão âmbar
-// (D-09); duplicata azul (D-10); sem-automação neutro; pronto verde. Ordem de
-// precedência: bloqueio → sem-automação → duplicata → colisão → pronto.
+// (D-09); duplicata azul (D-10); sem-automação neutro; cópia verde (06.2, D-07);
+// pronto verde. Ordem de precedência: bloqueio → sem-automação → duplicata →
+// colisão → cópia → pronto (cada saída de cópia é uma linha própria, D-03/D-07).
 function SituationBadge({ row }: { row: DryRunRow }) {
   if (row.blocked) {
     return (
@@ -55,6 +56,17 @@ function SituationBadge({ row }: { row: DryRunRow }) {
         title="Já existe um arquivo diferente com esse nome — será salvo com sufixo (ex.: nome_1)."
       >
         Renomeado p/ evitar colisão
+      </span>
+    )
+  }
+  if (row.action_kind === 'copy') {
+    return (
+      <span
+        className="badge"
+        style={{ color: 'var(--st-encontrado)', background: 'var(--st-encontrado-bg)' }}
+        title="O arquivo será copiado para o destino. O original permanece onde está."
+      >
+        Copiado — original mantido
       </span>
     )
   }
@@ -379,8 +391,9 @@ export function DryRunPage() {
               </p>
             ) : (
               <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 18px' }}>
-                Os arquivos deste lote voltam ao local de origem. Se o destino tiver sido movido,
-                restauramos a cópia íntegra preservada pelo sistema. Nada é apagado.
+                Os arquivos movidos deste lote voltam ao local de origem (se o destino tiver
+                sumido, restauramos a cópia íntegra preservada pelo sistema). As cópias criadas
+                são apagadas do destino — o original nunca é tocado. Nenhum arquivo se perde.
               </p>
             )}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
