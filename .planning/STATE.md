@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Fase 06.1 inserida (redesign Templates + sinais E/OU); CONTEXT escrito; pronto p/ plan-phase
-last_updated: "2026-06-18T16:59:22.592Z"
-last_activity: 2026-06-18 -- Phase 06.1 planning complete
+last_updated: "2026-06-18T17:11:08.968Z"
+last_activity: 2026-06-18
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 34
-  completed_plans: 35
+  completed_plans: 36
   percent: 67
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-15)
 
 **Core value:** Transformar uma pilha de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados corretamente de forma automática e confiável — sem o usuário perder arquivos nem confiar cegamente na IA.
-**Current focus:** Phase 06 — automa-es-de-arquivo-renomear-mover
+**Current focus:** Phase 06.1 — redesign-de-templates-e-classifica-o-por-sinais-e-ou-regex
 
 ## Current Position
 
-Phase: 06 (automa-es-de-arquivo-renomear-mover) — EXECUTING
-Plan: 5 of 5
+Phase: 06.1 (redesign-de-templates-e-classifica-o-por-sinais-e-ou-regex) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-06-18 -- Phase 06.1 planning complete
+Last activity: 2026-06-18
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -79,6 +79,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 06 P04 | 20min | 3 tasks | 6 files |
 | Phase 06 P06 | 14 | 2 tasks | 6 files |
 | Phase 06 P07 | 22 | 3 tasks | 7 files |
+| Phase 06.1 P01 | 12 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [06-04]: worker despacha APPLY_STEP como coroutine; enqueue_pending_applications auto-aplica alta confiança (D-01), baixa só após approve; FALHA por content_hash; API /automations CRUD+dry-run(AUT-03)+apply lote run_id(D-03)+undo run reabre CONCLUIDO→PROCESSANDO(AUT-05); approve dispara apply (Open Q3).
 - [Phase ?]: [06-06]: Modelo de pipeline AutomationPipeline 1:N PipelineStep 1:N StepFilter (D-12..D-14) substitui regra única; espelha Template→TemplateField (cascade delete-orphan + FK CASCADE); migração 0007 forward-only dropa regras da 0006 e cria pipeline sem tocar documents (trigger intacto) nem audit_log (write-ahead preservado); automation_rule.py deletado, stage/api ficam com import quebrado intencional até o 06-07.
 - [Phase ?]: 06-07: materialização única ao final do pipeline (Open Q1); Route não materializa (P9); no-match no-op (P10); apply_stage async; gate D-15 custo 0
+- [Phase ?]: [06.1-01]: matcher passou a confiança BOOLEANA (1.0/0.0) — grupos E/OU (OU entre grupos, E dentro do grupo) substituem fração de termos; sinais casam contra full_text (A2/D-T2); decide() byte-idêntico mantém seam D-03; doc_type bonus removido (D-T5/A3) com doc_type_guess mantido na assinatura por compat; regex de sinal endurecida ReDoS (teto pattern 512 + teto input 200000 + try/except re.error, falha fechada); _parse_groups forward-compatible lê legado list[str] e grupos novos; forma canônica de signals_json definida p/ Planos 02/03.
 
 ### Pending Todos
 
@@ -151,6 +153,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T15:55:00.139Z
+Last session: 2026-06-18T17:10:53.672Z
 Stopped at: Fase 06.1 inserida (redesign Templates + sinais E/OU); CONTEXT escrito; pronto p/ plan-phase
-Resume file: .planning/phases/06.1-redesign-de-templates-e-classifica-o-por-sinais-e-ou-regex/06.1-CONTEXT.md
+Resume file: None
