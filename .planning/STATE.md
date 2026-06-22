@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-22 - Completed quick task 260622-ebo: Instalação Windows (Python+uv) + servir frontend single-origin
+Last activity: 2026-06-22 - Completed quick task 260622-f4b: Entrega Windows via ZIP sem Git (GitHub Releases)
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -160,6 +160,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260622-ebo | Instalação Windows (Python+uv): servir frontend no FastAPI (single-origin), instalar.ps1, atualizar.ps1, INSTALL-WINDOWS.md | 2026-06-22 | 2c16a67 | [260622-ebo-criar-instalacao-windows-python-uv-servi](./quick/260622-ebo-criar-instalacao-windows-python-uv-servi/) |
+| 260622-f4b | Entrega Windows via ZIP sem Git (GitHub Releases): empacotar.ps1, atualizar.ps1 (Releases + -LocalZip), instalar.ps1 pula build com dist, guia 2 fluxos | 2026-06-22 | c81dcfe | [260622-f4b-entrega-windows-via-zip-sem-git-empacota](./quick/260622-f4b-entrega-windows-via-zip-sem-git-empacota/) |
 
 ## Deferred Items
 
