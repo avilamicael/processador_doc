@@ -1,7 +1,30 @@
 # BUG: páginas com carregamento infinito no Windows (cliente piloto)
 
 **Reportado:** 2026-06-22 — primeira instalação no Windows via release v0.1.0 (ZIP).
-**Status:** investigado, NÃO reproduzido no Linux/WSL; hipótese principal identificada; aguarda evidência do Windows para confirmar antes de corrigir.
+**Status:** ✅ RESOLVIDO 2026-06-22 — root cause confirmado e reproduzido; corrigido em `instalar.ps1`/`atualizar.ps1`; release v0.1.1.
+
+## ✅ ROOT CAUSE CONFIRMADO (reproduzido)
+As listas (`/documents` etc.) retornavam **500** porque **as migrações Alembic nunca rodaram no Windows** → banco sem tabelas → `no such table` → 500. `/health` passava porque só faz `SELECT 1` (não toca tabelas).
+
+**Por quê:** `instalar.ps1` rodava `uv run --project backend alembic upgrade head` **a partir da raiz do repo**. O alembic procura `alembic.ini` no diretório ATUAL; da raiz ele falha com `No 'script_location' key found` e NÃO migra. Pior: `$ErrorActionPreference='Stop'` não interrompe em exit code de executável nativo (PS 5.1) → o script imprimia "[OK] Schema atualizado" e subia o servidor com o banco vazio. Reproduzido 1:1 rodando o comando da raiz no WSL (`FAILED: No 'script_location'`). De dentro de `backend/` funciona (`alembic current` → `0008 (head)`).
+
+**2º problema latente corrigido junto:** o `uvicorn` também rodava da raiz → o app NÃO carregava `backend/.env` (pydantic lê `.env` relativo ao CWD) → `OPENAI_API_KEY`/`DATA_DIR` customizado seriam ignorados.
+
+## Correção aplicada (v0.1.1)
+- `instalar.ps1` e `atualizar.ps1`: rodar **alembic E uvicorn de dentro de `backend/`** (`Push-Location $BackendDir`) — alembic acha o `.ini` e o app carrega o `.env`.
+- **Falha-fechada:** checar `$LASTEXITCODE` após `uv sync` e `alembic upgrade head`; abortar (throw) em erro em vez de subir servidor quebrado.
+- Versão bumpada para 0.1.1 (`app/__init__.py` + `pyproject.toml`).
+
+## Correção imediata para instalações já feitas (sem reinstalar)
+```powershell
+cd backend
+uv run alembic upgrade head   # cria as tabelas no mesmo %ProgramData%\...\app.db
+```
+Depois reiniciar o servidor.
+
+---
+## (Histórico da investigação abaixo)
+
 
 ## Sintoma (relato do usuário)
 Instalou no Windows pela release, acessou o `localhost`, e as páginas "parecem querer carregar mas não carregam — parecem buscar dados que não existem e ficam carregando infinitamente". Banco vazio (instalação nova).

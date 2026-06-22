@@ -119,20 +119,35 @@ finally {
 # --- 3. Dependências do backend ---------------------------------------------
 Write-Passo 'Atualizando dependências do backend (uv sync)'
 uv sync --project $BackendDir
+if ($LASTEXITCODE -ne 0) { throw "uv sync falhou (codigo $LASTEXITCODE). Dependencias nao atualizadas." }
 Write-Ok 'Dependências sincronizadas'
 
-# --- 4. Migração do banco ---------------------------------------------------
-Write-Passo 'Migrando o schema do banco (alembic upgrade head)'
-uv run --project $BackendDir alembic upgrade head
-Write-Ok 'Schema migrado (dados preservados)'
-
-# --- 5. Reiniciar o servidor ------------------------------------------------
+# --- 4. Migração do banco + 5. Servidor (ambos de DENTRO de backend\) --------
+# Rodamos a partir de backend\ por DOIS motivos críticos (mesmos do instalar.ps1):
+#   1. O alembic procura o `alembic.ini` no diretório ATUAL — da raiz do repo ele
+#      falha ("No 'script_location' key found") e o schema NÃO é migrado.
+#   2. O app lê `backend\.env` (DATA_DIR / DATABASE_URL / OPENAI_API_KEY) relativo
+#      ao diretório atual — da raiz, o `.env` não é carregado.
+# Falha-fechada: se o alembic não retornar 0, ABORTA (não reinicia quebrado).
+#
 # OBRIGATÓRIO --workers 1 (mesmo motivo do instalar.ps1: watcher + worker sobem
 # como asyncio.Task uma vez por processo; >1 worker duplicaria e causaria
 # contenção de escrita no SQLite single-writer).
-Write-Passo 'Reiniciando o servidor'
-Write-Host ''
-Write-Host '    Abra http://localhost:8000 no navegador.' -ForegroundColor Green
-Write-Host '    (Pressione Ctrl+C para parar o servidor.)' -ForegroundColor Green
-Write-Host ''
-uv run --project $BackendDir uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+Push-Location $BackendDir
+try {
+    Write-Passo 'Migrando o schema do banco (alembic upgrade head)'
+    uv run alembic upgrade head
+    if ($LASTEXITCODE -ne 0) {
+        throw "alembic upgrade head falhou (codigo $LASTEXITCODE). O schema NAO foi migrado; abortando antes de reiniciar (seus dados em %ProgramData% estao intactos)."
+    }
+    Write-Ok 'Schema migrado (dados preservados)'
+
+    Write-Passo 'Reiniciando o servidor'
+    Write-Host ''
+    Write-Host '    Abra http://localhost:8000 no navegador.' -ForegroundColor Green
+    Write-Host '    (Pressione Ctrl+C para parar o servidor.)' -ForegroundColor Green
+    Write-Host ''
+    uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+} finally {
+    Pop-Location
+}

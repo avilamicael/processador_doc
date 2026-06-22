@@ -65,6 +65,7 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 # --- 3. Dependências do backend ---------------------------------------------
 Write-Passo 'Instalando dependências do backend (uv sync)'
 uv sync --project $BackendDir
+if ($LASTEXITCODE -ne 0) { throw "uv sync falhou (codigo $LASTEXITCODE). Dependencias nao instaladas." }
 Write-Ok 'Dependências sincronizadas'
 
 # --- 4. Arquivo .env --------------------------------------------------------
@@ -100,19 +101,35 @@ if (Test-Path $DistDir) {
     Write-Aviso 'A API continua funcionando. Veja INSTALL-WINDOWS.md (seção Troubleshooting) para buildar.'
 }
 
-# --- 6. Migração do banco ---------------------------------------------------
-Write-Passo 'Aplicando o schema do banco (alembic upgrade head)'
-uv run --project $BackendDir alembic upgrade head
-Write-Ok 'Schema do banco atualizado'
-
-# --- 7. Subir o servidor ----------------------------------------------------
+# --- 6. Migração do banco + 7. Servidor (ambos de DENTRO de backend\) --------
+# Rodamos a partir de backend\ por DOIS motivos críticos:
+#   1. O alembic procura o `alembic.ini` no diretório ATUAL. Rodando da raiz do
+#      repo ele falha com "No 'script_location' key found" e o schema NÃO é criado
+#      — banco fica sem tabelas e as rotas de lista respondem 500.
+#   2. O app lê `backend\.env` (DATA_DIR / DATABASE_URL / OPENAI_API_KEY) relativo
+#      ao diretório atual. Rodando da raiz, o `.env` não é carregado (a chave
+#      OpenAI não seria lida e um DATA_DIR customizado seria ignorado).
+# Falha-fechada: se o alembic não retornar 0, ABORTA (não sobe servidor quebrado).
+#
 # OBRIGATÓRIO --workers 1: o lifespan sobe watcher + worker como asyncio.Task UMA
 # vez por PROCESSO. Com mais de 1 worker, watcher e worker seriam duplicados,
 # causando processamento concorrente da mesma pasta e contenção de escrita no
 # SQLite (single-writer). NÃO aumente o número de workers.
-Write-Passo 'Iniciando o servidor'
-Write-Host ''
-Write-Host '    Abra http://localhost:8000 no navegador.' -ForegroundColor Green
-Write-Host '    (Pressione Ctrl+C para parar o servidor.)' -ForegroundColor Green
-Write-Host ''
-uv run --project $BackendDir uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+Push-Location $BackendDir
+try {
+    Write-Passo 'Aplicando o schema do banco (alembic upgrade head)'
+    uv run alembic upgrade head
+    if ($LASTEXITCODE -ne 0) {
+        throw "alembic upgrade head falhou (codigo $LASTEXITCODE). O schema do banco NAO foi aplicado; abortando antes de subir o servidor."
+    }
+    Write-Ok 'Schema do banco atualizado'
+
+    Write-Passo 'Iniciando o servidor'
+    Write-Host ''
+    Write-Host '    Abra http://localhost:8000 no navegador.' -ForegroundColor Green
+    Write-Host '    (Pressione Ctrl+C para parar o servidor.)' -ForegroundColor Green
+    Write-Host ''
+    uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+} finally {
+    Pop-Location
+}

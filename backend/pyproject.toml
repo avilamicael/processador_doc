@@ -1,6 +1,6 @@
 [project]
 name = "processador-documentos"
-version = "0.1.0"
+version = "0.1.1"
 description = "Processador de Documentos — backend (FastAPI + SQLite WAL), single-tenant, Windows-first"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
