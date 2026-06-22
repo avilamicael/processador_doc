@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-18 -- Phase 06.2 marked complete
+Last activity: 2026-06-22 - Completed quick task 260622-ebo: Instalação Windows (Python+uv) + servir frontend single-origin
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -153,7 +153,13 @@ None yet.
 - Modelo de confiança: OpenAI não expõe score por campo; usar validação determinística pós-extração (Phase 5). (research/SUMMARY.md)
 - Fila in-process SQLite sem lib consagrada: validar polling de tabela próprio (Phase 2). (research/SUMMARY.md)
 - Parser de boleto Python: sem lib madura; portar lógica + fixtures reais (Phase 7). (research/SUMMARY.md)
-- [04-VERIFICATION, WARNING] Encadeamento da fila: ingest_stage/extract_stage NÃO enfileiram o próximo step; os sweeps (enqueue_pending_extractions/classifications) rodam só no startup do worker. Doc ingerido em runtime não avança ingest→extract→classify sem reiniciar o worker. Fix recomendado (pequeno, idempotente): após mark_done de um job extract bem-sucedido em _run_once, enfileirar job classify do mesmo content_hash. Decidir se vira fix rápido avulso ou entra no escopo da Phase 5.
+- [04-VERIFICATION, WARNING — RESOLVIDO 2026-06-22] Encadeamento da fila: a nota original alertava que ingest_stage/extract_stage não enfileiravam o próximo step e os sweeps só rodavam no startup do worker. **Já corrigido no código atual**: `run_worker` chama `_sweep_pending(engine)` a CADA ciclo ocioso (worker.py:476), não só no startup — isso encadeia ingest→extract→classify→apply em runtime (docstring em worker.py:463-465). Documento jogado na pasta com o worker rodando avança sozinho. Nenhuma ação pendente.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260622-ebo | Instalação Windows (Python+uv): servir frontend no FastAPI (single-origin), instalar.ps1, atualizar.ps1, INSTALL-WINDOWS.md | 2026-06-22 | 2c16a67 | [260622-ebo-criar-instalacao-windows-python-uv-servi](./quick/260622-ebo-criar-instalacao-windows-python-uv-servi/) |
 
 ## Deferred Items
 
