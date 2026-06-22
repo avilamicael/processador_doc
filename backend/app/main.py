@@ -16,9 +16,12 @@ single-writer. O modo padrão (Windows, single-tenant) DEVE rodar com
 """
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import text
 
 from app import __version__
@@ -31,6 +34,14 @@ from app.config import ensure_data_dir, get_settings
 from app.ingest.watcher import run_watcher
 from app.queue.worker import run_worker
 from app.storage.db import create_db_engine, get_session
+
+logger = logging.getLogger(__name__)
+
+# Raiz do frontend buildado (Vite -> frontend/dist). Resolvido a partir do
+# arquivo (NÃO do CWD): __file__ = backend/app/main.py, logo a raiz do repo é
+# parents[2] e o dist é repo_root/frontend/dist. É git-ignored e pode não existir
+# num checkout limpo — o serviço degrada (ver `_serve_frontend`).
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
 @asynccontextmanager
@@ -95,3 +106,53 @@ def health() -> dict[str, str]:
     with get_session(engine) as session:
         session.execute(text("SELECT 1")).scalar()
     return {"status": "ok", "db": "ok", "version": __version__}
+
+
+if not FRONTEND_DIST.is_dir():
+    # Caso comum em dev/CI e em checkout limpo (dist é git-ignored). NÃO crashar:
+    # a API e o /health funcionam sem UI. Aviso acionável em PT-BR.
+    logger.warning(
+        "frontend/dist ausente em %s — UI não será servida; "
+        "rode 'npm run build' no frontend para gerar o bundle.",
+        FRONTEND_DIST,
+    )
+
+
+@app.get("/{full_path:path}")
+def _serve_frontend(full_path: str) -> FileResponse:
+    """Serve o frontend buildado (Vite) com fallback de SPA — registrado POR
+    ÚLTIMO, depois de todos os routers e do /health.
+
+    Por que catch-all em vez de `StaticFiles(html=True)` montado em "/":
+    `html=True` só serve index.html na raiz e dá 404 em subcaminhos inexistentes,
+    quebrando deep-links de SPA (ex.: GET /documentos). Aqui, como o handler é o
+    último a registrar, o FastAPI casa as rotas de API (/documents, /templates,
+    /health, ...) ANTES; este só pega o que sobra.
+
+    Comportamento:
+    - dist ausente            -> 404 (degradação aceitável; API segue de pé).
+    - arquivo real dentro do dist (favicon, vite.svg, assets/*.js) -> serve o arquivo.
+    - qualquer outro caminho  -> index.html (fallback SPA).
+
+    Segurança: o caminho pedido é resolvido e confinado a dentro do dist
+    (`is_relative_to`), rejeitando path traversal; fora do dist cai no index.html.
+    `FRONTEND_DIST` é lido do módulo a cada requisição (não capturado em closure),
+    para que testes possam apontar um dist temporário via monkeypatch.
+    """
+    dist = FRONTEND_DIST
+    if not dist.is_dir():
+        raise HTTPException(status_code=404, detail="frontend não disponível")
+
+    index = dist / "index.html"
+    candidate = (dist / full_path).resolve()
+    dist_root = dist.resolve()
+    # Arquivo real e CONFINADO ao dist -> serve o arquivo; senão -> fallback SPA.
+    if (
+        full_path
+        and candidate.is_file()
+        and candidate.is_relative_to(dist_root)
+    ):
+        return FileResponse(candidate)
+    if index.is_file():
+        return FileResponse(index)
+    raise HTTPException(status_code=404, detail="index.html ausente no dist")
