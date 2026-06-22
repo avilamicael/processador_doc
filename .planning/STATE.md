@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-22 - Completed quick task 260622-f4b: Entrega Windows via ZIP sem Git (GitHub Releases)
+Last activity: 2026-06-22 - Hotfix Windows: migração Alembic nunca aplicava (alembic/uvicorn agora rodam de backend/) → 500 nas listas resolvido; release v0.1.1. Ver .planning/notes/2026-06-22-bug-carregamento-infinito-windows.md
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
