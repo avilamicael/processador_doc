@@ -35,8 +35,17 @@ Diagnóstico refinado: o **shell estático carrega** (sidebar/layout/fontes OK =
 | `http://127.0.0.1:8000/health` | responde na hora | trava |
 | `http://localhost:8000/health` | trava | trava |
 
-## Hipótese principal (mais provável + barata de confirmar)
-**`localhost` (IPv6 `::1`) × uvicorn escutando só IPv4 `127.0.0.1`.**
+## ATUALIZAÇÃO 2026-06-22 (testes do usuário no Windows)
+- **`http://127.0.0.1:8000/health` E `http://localhost:8000/health` respondem na hora.**
+  → **DESCARTA hipótese IPv6** (localhost funciona) e **DESCARTA event loop bloqueado** (`/health` consulta o banco e responde). Servidor saudável e alcançável por `localhost`.
+- **Build do frontend auditada:** `frontend/dist/assets/*.js` só contém caminhos **relativos** (`/documents`, `/automations`, `/watched-folders`); nenhuma URL absoluta/porta embutida (só `http://www.w3.org` de SVG). Frontend entregue == testado no Linux (que funciona).
+- **Falta o dado decisivo:** os endpoints de LISTA (`/documents`, `/watched-folders`) respondem no Windows? (`/health` é leve e pode não exercitar o mesmo caminho de query/lock.) Pedido: abrir `http://localhost:8000/watched-folders` e `/documents` na barra de endereço.
+  - (A) JSON na hora → bug é no **frontend (fetch)**; investigar.
+  - (B) trava → endpoints travam no **servidor** (provável lock/WAL SQLite no Windows; ver hipótese secundária 1/2).
+  - (C) aparece a tela do app (HTML) → **catch-all SPA engolindo rotas de API** (ordem de rotas em main.py).
+
+## Hipótese (descartada) — IPv6
+**`localhost` (IPv6 `::1`) × uvicorn escutando só IPv4 `127.0.0.1`.** DESCARTADA: no Windows do usuário, `localhost:8000/health` respondeu na hora.
 
 - `instalar.ps1:118` e `atualizar.ps1:138` sobem `uvicorn ... --host 127.0.0.1` (somente IPv4).
 - Porém o guia e as mensagens mandam abrir **`http://localhost:8000`** (`instalar.ps1:115`, `INSTALL-WINDOWS.md:5,100`, etc.).
