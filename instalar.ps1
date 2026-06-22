@@ -84,7 +84,7 @@ if (Test-Path $EnvFile) {
 # --- 5. Frontend (opcional) -------------------------------------------------
 Write-Passo 'Verificando o frontend buildado (frontend\dist)'
 if (Test-Path $DistDir) {
-    Write-Ok 'frontend\dist já existe'
+    Write-Ok 'frontend\dist já presente (pacote de release ou build anterior) — build pulado'
 } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
     Write-Aviso 'frontend\dist ausente. Buildando com npm...'
     Push-Location $FrontendDir
