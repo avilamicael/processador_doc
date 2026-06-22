@@ -21,6 +21,20 @@ Subi a build **idêntica** (mesmo `frontend/dist` da release) servida pelo FastA
 
 ➡️ **Conclusão: não reproduz no Linux.** O código do frontend/API está ok com banco vazio. O problema é **específico do ambiente Windows**.
 
+## Evidência visual do Windows (prints enviados 2026-06-22)
+Três prints confirmam **carregamento perpétuo**, NÃO estado vazio:
+- **Documentos:** tabela travada em *skeleton* (barras cinzas) para sempre; cards "0" e "Mostrando 0 de 0" são apenas os **defaults exibidos durante o loading** (`?? 0`), não dados resolvidos.
+- **Automações:** 3 caixas de *skeleton* travadas.
+- **Configurações → Pastas monitoradas:** texto **"Carregando pastas…"** travado.
+
+Diagnóstico refinado: o **shell estático carrega** (sidebar/layout/fontes OK = catch-all/StaticFiles serve), mas **TODAS as chamadas de lista da API ficam penduradas uniformemente** (`/documents`, `/automations`, `/watched-folders`). No Linux/WSL essas mesmas chamadas resolveram na hora (empty states corretos). Logo: diferença de **ambiente/conexão**, não bug de página. As duas hipóteses abaixo explicam isso; o teste `127.0.0.1` direto na barra de endereço as distingue.
+
+### Teste discriminador (barra de endereço, sem frontend)
+| URL | IPv6 (hipótese 1) | Event loop bloqueado (hipótese 2) |
+|-----|-------------------|-----------------------------------|
+| `http://127.0.0.1:8000/health` | responde na hora | trava |
+| `http://localhost:8000/health` | trava | trava |
+
 ## Hipótese principal (mais provável + barata de confirmar)
 **`localhost` (IPv6 `::1`) × uvicorn escutando só IPv4 `127.0.0.1`.**
 
