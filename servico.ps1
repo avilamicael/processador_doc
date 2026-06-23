@@ -36,6 +36,7 @@
 #   status      mostra o estado
 #   remover     para e remove
 #   logs        mostra o caminho e as ultimas linhas dos logs
+#   diagnostico gera um relatorio unico (sem segredos) p/ enviar ao suporte
 #
 # SEGREDO: a chave da IA (no backend\.env) NUNCA e lida, exibida nem logada por
 #   este script. O servidor le a chave do `backend\.env` via CWD; ela NUNCA e
@@ -230,6 +231,144 @@ function Test-Health {
         }
     }
     return $false
+}
+
+# --- Diagnostico (relatorio unico, SEM segredos) ----------------------------------
+# Coleta versoes, caminhos/existencia, estado de persistencia, rede/health e tails
+# dos logs num UNICO arquivo em $LogsDir\diagnostico-<ts>.log para o usuario enviar
+# ao suporte. NUNCA inclui a chave da IA nem o conteudo do backend\.env (so reporta
+# se o .env EXISTE). Cada coletor e isolado em try/catch: uma falha vira uma linha e
+# nao aborta o relatorio.
+function Invoke-Diagnostico {
+    $dts       = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $relatorio = Join-Path $LogsDir ("diagnostico-" + $dts + ".log")
+    New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
+
+    $linhas = New-Object System.Collections.Generic.List[string]
+    function Add-Linha($txt) { $linhas.Add([string]$txt) }
+    function Add-Secao($txt) { $linhas.Add(''); $linhas.Add('=== ' + $txt + ' ==='); }
+
+    # (a) Cabecalho
+    Add-Linha 'Processador de Documentos — diagnostico'
+    try { Add-Linha ('Gerado em: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) }
+    catch { Add-Linha '(nao foi possivel coletar a data: ' + $_.Exception.Message + ')' }
+
+    # (b) Ambiente
+    Add-Secao 'Ambiente'
+    try { Add-Linha ('PowerShell: ' + $PSVersionTable.PSVersion.ToString()) }
+    catch { Add-Linha '(nao foi possivel coletar a versao do PowerShell: ' + $_.Exception.Message + ')' }
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        Add-Linha ('SO: ' + $os.Caption + ' (versao ' + $os.Version + ')')
+    } catch { Add-Linha ('(nao foi possivel coletar o SO: ' + $_.Exception.Message + ')') }
+
+    # (c) Caminhos e existencia (so caminho/existencia — NUNCA conteudo)
+    Add-Secao 'Caminhos e existencia'
+    $alvos = @{
+        'RepoRoot'    = $RepoRoot
+        'BackendDir'  = $BackendDir
+        'VenvPython'  = $VenvPython
+        'VenvPythonw' = $VenvPythonw
+        'NssmExe'     = $NssmExe
+        'Launcher'    = $Launcher
+        'backend\.env (existencia apenas)' = (Join-Path $BackendDir '.env')
+    }
+    foreach ($nome in $alvos.Keys) {
+        try {
+            $p = $alvos[$nome]
+            if (Test-Path $p) { Add-Linha ('[OK]    ' + $nome + ' -> ' + $p) }
+            else              { Add-Linha ('[FALTA] ' + $nome + ' -> ' + $p) }
+        } catch { Add-Linha ('(nao foi possivel checar ' + $nome + ': ' + $_.Exception.Message + ')') }
+    }
+
+    # (d) Python / uv
+    Add-Secao 'Python / uv'
+    try {
+        if (Get-Command uv -ErrorAction SilentlyContinue) {
+            Add-Linha ('uv --version: ' + ((& uv --version 2>&1 | Out-String).Trim()))
+        } else { Add-Linha '(uv nao encontrado no PATH)' }
+    } catch { Add-Linha ('(nao foi possivel coletar uv: ' + $_.Exception.Message + ')') }
+    try {
+        if (Test-Path $VenvPython) {
+            $exe = (& $VenvPython -c "import sys;print(sys.executable)" 2>&1 | Out-String).Trim()
+            Add-Linha ('sys.executable do venv: ' + $exe)
+        } else { Add-Linha '(venv python.exe ausente — sys.executable nao coletado)' }
+    } catch { Add-Linha ('(nao foi possivel coletar sys.executable: ' + $_.Exception.Message + ')') }
+    try {
+        $pyvenvCfg = Join-Path $BackendDir '.venv\pyvenv.cfg'
+        if (Test-Path $pyvenvCfg) {
+            # Apenas a linha 'home' (relevante p/ Pegadinha 1) — nao despeja o arquivo todo.
+            $linhaHome = Get-Content $pyvenvCfg | Where-Object { $_ -like 'home*' }
+            if ($linhaHome) { Add-Linha ('pyvenv.cfg ' + ($linhaHome -join '; ')) }
+            else            { Add-Linha 'pyvenv.cfg: (linha home nao encontrada)' }
+        } else { Add-Linha '(pyvenv.cfg ausente)' }
+    } catch { Add-Linha ('(nao foi possivel ler pyvenv.cfg: ' + $_.Exception.Message + ')') }
+
+    # (e) Persistencia (Tarefa Agendada e Servico NSSM)
+    Add-Secao 'Persistencia'
+    try {
+        if (Test-TaskExists) {
+            $t    = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+            $info = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction Stop
+            Add-Linha ('Tarefa: ' + $TaskName)
+            Add-Linha ('  State:          ' + $t.State)
+            Add-Linha ('  LastRunTime:    ' + $info.LastRunTime)
+            Add-Linha ('  LastTaskResult: ' + $info.LastTaskResult)
+        } else { Add-Linha '(Tarefa Agendada nao instalada)' }
+    } catch { Add-Linha ('(nao foi possivel coletar a Tarefa: ' + $_.Exception.Message + ')') }
+    try {
+        if (Test-ServiceExists) {
+            Add-Linha ('Servico NSSM: ' + $ServiceName)
+            Add-Linha ('  nssm status: ' + ((& $NssmExe status $ServiceName 2>&1 | Out-String).Trim()))
+            Add-Linha ('  sc query:')
+            (& sc.exe query $ServiceName 2>&1) | ForEach-Object { Add-Linha ('    ' + $_) }
+        } else { Add-Linha '(Servico NSSM nao instalado)' }
+    } catch { Add-Linha ('(nao foi possivel coletar o Servico: ' + $_.Exception.Message + ')') }
+
+    # (f) Rede
+    Add-Secao 'Rede'
+    try {
+        $conns = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+        if ($conns) {
+            foreach ($c in $conns) { Add-Linha ('Porta 8000 LISTEN — OwningProcess: ' + $c.OwningProcess) }
+        } else { Add-Linha 'Porta 8000: ninguem escutando.' }
+    } catch { Add-Linha ('(nao foi possivel checar a porta 8000: ' + $_.Exception.Message + ')') }
+    try {
+        $resp = Invoke-WebRequest -Uri $HealthUrl -UseBasicParsing -TimeoutSec 3
+        Add-Linha ('/health StatusCode: ' + $resp.StatusCode)
+    } catch { Add-Linha '(health nao respondeu)' }
+
+    # (g) Tails dos logs (so se existirem; ultimas ~40 linhas)
+    Add-Secao 'Tails de logs'
+    $tailAlvos = @(
+        @{ Nome = 'servidor.log (modo tarefa)';     Path = $TaskLog },
+        @{ Nome = 'service.out.log (modo servico)'; Path = $OutLog },
+        @{ Nome = 'service.err.log (modo servico)'; Path = $ErrLog }
+    )
+    foreach ($ta in $tailAlvos) {
+        try {
+            Add-Linha ('--- ' + $ta.Nome + ' (' + $ta.Path + ') ---')
+            if (Test-Path $ta.Path) { Get-Content -Tail 40 $ta.Path | ForEach-Object { Add-Linha $_ } }
+            else { Add-Linha '(arquivo nao existe)' }
+        } catch { Add-Linha ('(nao foi possivel ler ' + $ta.Nome + ': ' + $_.Exception.Message + ')') }
+    }
+    try {
+        $ultInstalar = Get-ChildItem $LogsDir -Filter 'instalar-*.log' -ErrorAction SilentlyContinue |
+                        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($ultInstalar) {
+            Add-Linha ('--- ultimo instalar-*.log (' + $ultInstalar.FullName + ') ---')
+            Get-Content -Tail 40 $ultInstalar.FullName | ForEach-Object { Add-Linha $_ }
+        } else { Add-Linha '--- ultimo instalar-*.log: (nenhum encontrado) ---' }
+    } catch { Add-Linha ('(nao foi possivel ler o ultimo instalar-*.log: ' + $_.Exception.Message + ')') }
+
+    # (h) Rodape — confirmacao de ausencia de segredos
+    Add-Secao 'Seguranca'
+    Add-Linha 'NENHUM valor de .env / chave da IA foi incluido neste relatorio.'
+
+    # Grava o relatorio unico e imprime o caminho DESTACADO.
+    Set-Content -Path $relatorio -Encoding UTF8 -Value $linhas
+    Write-Ok 'Diagnostico gravado.'
+    Write-Host ("Envie este arquivo ao suporte: " + $relatorio) -ForegroundColor Cyan
 }
 
 # ==================================================================================
@@ -474,6 +613,14 @@ $cmd = $Comando.ToLower()
 
 if ($cmd -eq 'instalar') {
     if ($Modo -eq 'servico') { Invoke-Instalar } else { Invoke-InstalarTarefa }
+    return
+}
+
+# diagnostico e INDEPENDENTE de modo (coleta os dois) e nao exige admin nem
+# Resolve-ModoInstalado. O finally do transcript acima ainda fecha o log da propria
+# execucao do diagnostico (servico-diagnostico-<ts>.log).
+if ($cmd -eq 'diagnostico') {
+    Invoke-Diagnostico
     return
 }
 
