@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-23 - Release v0.1.4 publicada (logs de execução + servico.ps1 diagnostico). Aguardando log/diagnostico do Windows para achar a causa do instalar que fechava.
+Last activity: 2026-06-23 - BUG do terminal achado e corrigido: .ps1 sem BOM UTF-8 quebrava o parse no PS 5.1. v0.1.5 (BOM + Register falha-fechada). Scripts já sincronizados em D: via WSL. Falta: usuario rodar servico.ps1 instalar na sessao interativa.
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
