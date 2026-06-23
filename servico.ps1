@@ -1,4 +1,4 @@
-# servico.ps1 — Persistencia do Processador de Documentos no Windows (2 modos)
+﻿# servico.ps1 — Persistencia do Processador de Documentos no Windows (2 modos)
 #
 # Roda o backend (uvicorn) SEMPRE em background, de duas formas:
 #
@@ -421,7 +421,15 @@ function Invoke-InstalarTarefa {
                     -AllowStartIfOnBatteries `
                     -DontStopIfGoingOnBatteries
     Register-ScheduledTask -TaskName $TaskName -Trigger $trigger -Action $acao `
-        -Principal $principal -Settings $settings -Force | Out-Null
+        -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
+    # Confirma que a Tarefa REALMENTE existe (o Register-ScheduledTask pode emitir
+    # "Acesso negado" como erro NAO-terminante e seguir sem criar nada). Falha-fechada:
+    # se nao existir, aborta com orientacao acionavel em vez de mascarar com um [OK].
+    if (-not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) {
+        throw ("Nao foi possivel registrar a Tarefa '$TaskName' (Acesso negado?). " +
+            "Rode este script num PowerShell ABERTO MANUALMENTE pela sua conta (Menu Iniciar " +
+            "-> Windows PowerShell), NAO por duplo-clique nem por sessao remota/nao-interativa.")
+    }
     Write-Ok "Tarefa '$TaskName' registrada (AtLogOn, RunLevel Limited, IgnoreNew, auto-restart)"
 
     # (f) INICIAR agora (sem esperar o proximo logon)

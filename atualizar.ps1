@@ -1,4 +1,4 @@
-# atualizar.ps1 — Atualizador do Processador de Documentos (Windows)
+﻿# atualizar.ps1 — Atualizador do Processador de Documentos (Windows)
 #
 # Atualiza a instância a partir de um ZIP de release AUTO-CONTIDO (sem Git e sem
 # Node): baixa o ZIP da última GitHub Release (modo ONLINE) ou usa um ZIP local

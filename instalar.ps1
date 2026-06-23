@@ -1,4 +1,4 @@
-# instalar.ps1 — Instalador do Processador de Documentos (Windows)
+﻿# instalar.ps1 — Instalador do Processador de Documentos (Windows)
 #
 # Instalador IDEMPOTENTE: rodar duas vezes não quebra (todas as checagens são
 # condicionais; `uv sync` e `alembic upgrade head` já são idempotentes).
