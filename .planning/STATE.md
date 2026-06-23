@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-23 - Quick 260623-kly: serviço Windows via NSSM (servico.ps1) para rodar sempre em background (boot + auto-restart). Falta teste em Windows real + empacotar/publicar v0.1.2.
+Last activity: 2026-06-23 - Serviço Windows via NSSM (servico.ps1) publicado na release v0.1.2 (nssm.exe embutido). Falta validação em Windows real (instalar como serviço + boot + auto-restart).
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
