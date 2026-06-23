@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-23 - Serviço Windows via NSSM (servico.ps1) publicado na release v0.1.2 (nssm.exe embutido). Falta validação em Windows real (instalar como serviço + boot + auto-restart).
+Last activity: 2026-06-23 - servico.ps1 vira 2 modos (Tarefa Agendada no logon = PADRÃO, após Pegadinha 1 confirmada no piloto; NSSM = --modo servico). Empacotar e publicar v0.1.3.
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -162,6 +162,7 @@ None yet.
 | 260622-ebo | Instalação Windows (Python+uv): servir frontend no FastAPI (single-origin), instalar.ps1, atualizar.ps1, INSTALL-WINDOWS.md | 2026-06-22 | 2c16a67 | [260622-ebo-criar-instalacao-windows-python-uv-servi](./quick/260622-ebo-criar-instalacao-windows-python-uv-servi/) |
 | 260622-f4b | Entrega Windows via ZIP sem Git (GitHub Releases): empacotar.ps1, atualizar.ps1 (Releases + -LocalZip), instalar.ps1 pula build com dist, guia 2 fluxos | 2026-06-22 | c81dcfe | [260622-f4b-entrega-windows-via-zip-sem-git-empacota](./quick/260622-f4b-entrega-windows-via-zip-sem-git-empacota/) |
 | 260623-kly | Serviço Windows via NSSM: servico.ps1 (instalar/iniciar/parar/reiniciar/status/remover/logs), auto-start no boot + auto-restart + health-check falha-fechada; empacotar inclui nssm.exe; guia | 2026-06-23 | 25f5fdb | [260623-kly-servico-windows-via-nssm-servico-ps1-ins](./quick/260623-kly-servico-windows-via-nssm-servico-ps1-ins/) |
+| 260623-lpj | Persistência Windows: servico.ps1 vira 2 modos — Tarefa Agendada no logon (PADRÃO, como usuário, contorna Pegadinha 1) + NSSM via --modo servico; launcher tools/iniciar-servidor.py; guia 2 modos. Valida correção do piloto (NSSM-LocalSystem falhou: Python per-user) | 2026-06-23 | 7fb3451 | [260623-lpj-persistencia-windows-servico-ps1-padrao-](./quick/260623-lpj-persistencia-windows-servico-ps1-padrao-/) |
 
 ## Deferred Items
 
