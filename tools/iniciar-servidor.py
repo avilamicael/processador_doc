@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import socket
 import sys
 from pathlib import Path
 
@@ -51,6 +52,23 @@ def _resolver_dir_logs() -> Path:
     return raiz / "ProcessadorDocumentos" / "logs"
 
 
+def _porta_em_uso(host: str, porta: int) -> bool:
+    """Retorna True se ja ha algo escutando em host:porta (servidor de pe).
+
+    Guarda de instancia unica: quando o .vbs da pasta Inicializar roda no logon,
+    pode acontecer de ja haver um servidor de pe (ex.: o proprio `instalar` do
+    modo startup ja subiu, ou um `instalar.ps1` ficou em primeiro plano). Subir um
+    SEGUNDO uvicorn na mesma porta gera conflito de porta + escrita concorrente no
+    SQLite single-writer. Esta checagem tenta uma conexao TCP curta: se CONECTA, ja
+    ha servidor (True); se falha (recusada/timeout), ninguem escuta (False).
+    """
+    try:
+        with socket.create_connection((host, porta), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
 def main() -> None:
     backend = _resolver_backend()
     # CWD e sys.path em backend\\ ANTES de importar o app: o app le backend\\.env
@@ -75,6 +93,17 @@ def main() -> None:
     agora = datetime.datetime.now().isoformat(timespec="seconds")
     print(f"[{agora}] iniciar-servidor: subindo uvicorn | cwd={os.getcwd()}")
     log.flush()
+
+    # GUARDA DE INSTANCIA UNICA: se ja ha um servidor escutando na 8000, NAO sobe
+    # um segundo (conflito de porta + SQLite single-writer). Sai com codigo 0 — nao
+    # e erro: e o comportamento esperado quando o .vbs roda no logon e algo ja
+    # estava de pe. So loga (sem segredos) e encerra limpo.
+    if _porta_em_uso("127.0.0.1", 8000):
+        agora = datetime.datetime.now().isoformat(timespec="seconds")
+        print(f"[{agora}] ja ha um servidor escutando em 127.0.0.1:8000 — saindo")
+        log.flush()
+        log.close()
+        sys.exit(0)
 
     # uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
     # OBRIGATORIO workers=1: watcher+worker sobem 1x por processo; SQLite
