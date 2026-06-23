@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-23 - servico.ps1 vira 2 modos (Tarefa Agendada no logon = PADRÃO, após Pegadinha 1 confirmada no piloto; NSSM = --modo servico). Empacotar e publicar v0.1.3.
+Last activity: 2026-06-23 - servico.ps1 vira 2 modos (Tarefa Agendada no logon = PADRÃO, após Pegadinha 1 confirmada no piloto; NSSM = --modo servico). Release v0.1.3 publicada (Tarefa Agendada padrão). Falta validar em Windows real: .\servico.ps1 instalar (sem admin) + reproduzir no cliente.
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
