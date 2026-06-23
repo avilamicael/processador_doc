@@ -28,6 +28,25 @@ function Write-Passo($texto) { Write-Host "`n==> $texto" -ForegroundColor Cyan }
 function Write-Aviso($texto) { Write-Host "[AVISO] $texto" -ForegroundColor Yellow }
 function Write-Ok($texto)    { Write-Host "[OK] $texto"   -ForegroundColor Green }
 
+# --- Log de execucao (transcript) — FAIL-SOFT -------------------------------
+# Cada execucao grava um log timestampado em %ProgramData%\ProcessadorDocumentos\logs\.
+# Mesmo que a janela feche apos um erro, o log fica gravado em disco e o caminho e
+# impresso no fim (sucesso OU erro). Se o Start-Transcript falhar (sem permissao),
+# seguimos SEM log — o logging NUNCA quebra o script.
+$LogsDir = Join-Path (Join-Path $env:ProgramData 'ProcessadorDocumentos') 'logs'
+$ts      = Get-Date -Format 'yyyyMMdd-HHmmss'
+$LogFile = Join-Path $LogsDir "instalar-$ts.log"
+$transcriptOn = $false
+try {
+    New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
+    Start-Transcript -Path $LogFile -Force | Out-Null
+    $transcriptOn = $true
+} catch {
+    Write-Aviso ("Nao foi possivel iniciar o log de execucao (seguindo sem log): " + $_.Exception.Message)
+}
+
+try {
+
 # --- 1. Python 3.12 ---------------------------------------------------------
 Write-Passo 'Verificando Python 3.12'
 $temPython = $false
@@ -132,4 +151,15 @@ try {
     uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 } finally {
     Pop-Location
+}
+
+} finally {
+    # Caminho do log impresso DESTACADO (entra no proprio log antes de pararmos o
+    # transcript). Stop-Transcript e tolerante a falhas — nunca quebra o script.
+    if ($transcriptOn) {
+        Write-Host ''
+        Write-Host ("Log desta execucao: " + $LogFile) -ForegroundColor Cyan
+        Write-Host ''
+        try { Stop-Transcript | Out-Null } catch { }
+    }
 }
