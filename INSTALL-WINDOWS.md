@@ -104,60 +104,107 @@ Para **parar** o servidor, volte ao PowerShell e pressione **Ctrl+C**. Para subi
 de novo mais tarde, rode `.\instalar.ps1` outra vez (é seguro — idempotente).
 
 > O `instalar.ps1` mantém uma **janela do PowerShell aberta** com o servidor
-> rodando. Para que o sistema rode **sempre em background** (e suba sozinho no boot
-> do Windows), instale-o como **serviço Windows** — veja a próxima seção.
+> rodando. Para que o sistema rode **sempre em background** (e suba sozinho), use um
+> dos **dois modos de background** — veja a próxima seção.
 
-### 6. Rodar sempre em background (serviço Windows) — recomendado em produção
+### 6. Rodar sempre em background — recomendado em produção
 
 Em produção, o sistema **não deve depender de uma janela do PowerShell aberta**.
-Instale-o como **serviço Windows**: ele **inicia no boot** (antes do login),
-**reinicia sozinho** se cair e grava os **logs em arquivo** (com rotação).
+Há **dois modos** de manter o servidor rodando em background, ambos pelo
+`servico.ps1`:
 
-1. Abra o **PowerShell como Administrador** na pasta extraída (onde está
-   `servico.ps1`) e rode:
+- **Modo padrão — Tarefa Agendada no logon (sem admin):** sobe sozinho quando você
+  **faz logon** no Windows e reinicia se cair. Roda como a **sua própria conta de
+  usuário** — por isso **não exige Administrador** nem configuração extra de Python.
+  É o modo recomendado para a maioria das instalações (o computador onde uma pessoa
+  faz login e usa o sistema).
+- **Modo servidor 24/7 — Serviço Windows (NSSM, avançado):** inicia no **boot**,
+  antes do login, ideal para um **PC-servidor headless** sem sessão aberta. Exige
+  **Administrador** e um **pré-requisito de Python** (veja abaixo).
+
+> **Como escolher:** se uma pessoa loga e usa a máquina, fique no **modo padrão**.
+> Só use o **modo servidor 24/7** se o sistema precisa rodar **antes/sem ninguém
+> logado** (ex.: um servidor dedicado).
+
+#### Modo padrão — Tarefa Agendada no logon (sem admin)
+
+1. Abra o **PowerShell** na pasta extraída (onde está `servico.ps1`) e rode (sem
+   `-Modo`, pois **tarefa é o padrão**; **não precisa** de Administrador):
 
    ```powershell
    .\servico.ps1 instalar
    ```
 
-   (se você não abriu como Administrador, o script **se auto-eleva** pedindo a
-   confirmação do **UAC**).
+O `instalar` cuida de tudo: prepara o ambiente Python, aplica o schema do banco e
+registra a Tarefa Agendada **`ProcessadorDocumentos-Servidor`** (gatilho **ao
+logon**, reinício automático se cair, uma única instância). Ao final, faz uma
+**verificação de saúde** em `http://localhost:8000/health` — se algo falhar, ele
+**avisa** e mostra onde olhar. A partir daí, o servidor **sobe sozinho toda vez
+que você fizer logon**.
 
-O `instalar` do serviço cuida de tudo: garante o `nssm.exe`, prepara o ambiente
-Python acessível à conta do serviço, aplica o schema do banco e registra/inicia o
-serviço **`ProcessadorDocumentos`**. Ao final, faz uma **verificação de saúde** em
-`http://localhost:8000/health` — se algo falhar, ele **avisa** e mostra onde olhar.
+**Logs deste modo:**
 
-**Comandos de controle:**
+```
+%LOCALAPPDATA%\ProcessadorDocumentos\logs\servidor.log
+```
 
-| Comando                    | O que faz                                       |
-| -------------------------- | ----------------------------------------------- |
-| `.\servico.ps1 status`     | mostra se o serviço está rodando                |
-| `.\servico.ps1 parar`      | para o serviço                                  |
-| `.\servico.ps1 iniciar`    | inicia o serviço                                |
-| `.\servico.ps1 reiniciar`  | reinicia o serviço                              |
-| `.\servico.ps1 logs`       | mostra onde estão os logs e as últimas linhas   |
-| `.\servico.ps1 remover`    | para e remove o serviço                         |
+> **Limitação (honesta):** a Tarefa roda **enquanto o usuário está logado**. Ela
+> **não** sobe o servidor **antes do login**, nem mantém o sistema no ar num
+> servidor **headless** sem ninguém com a sessão aberta. Se você precisa disso, use
+> o **modo servidor 24/7** abaixo.
 
-**Onde ficam os logs do serviço** (com rotação automática quando crescem):
+#### Modo servidor 24/7 — Serviço Windows (NSSM, avançado)
+
+1. Abra o **PowerShell** na pasta extraída e rode (o script **se auto-eleva** via
+   **UAC**, pois este modo **exige Administrador**):
+
+   ```powershell
+   .\servico.ps1 instalar -Modo servico
+   ```
+
+O `instalar -Modo servico` garante o `nssm.exe`, prepara o ambiente Python, aplica
+o schema do banco e registra/inicia o serviço **`ProcessadorDocumentos`** (auto-start
+no boot, reinício automático, logs com rotação), terminando com a mesma
+**verificação de saúde**.
+
+> **Pré-requisito importante:** este modo roda o servidor como a conta do sistema
+> (**LocalSystem**) e **exige Python instalado para TODOS os usuários (all-users)**.
+> Sem ele, a conta LocalSystem **não consegue ler** o Python que o `uv` instalou no
+> seu perfil de usuário, e **o serviço sobe e cai** (a verificação de saúde avisa).
+> O **modo padrão (Tarefa)** não tem essa exigência — por isso é o recomendado na
+> maioria dos casos.
+
+**Logs deste modo** (com rotação automática quando crescem):
 
 ```
 %ProgramData%\ProcessadorDocumentos\logs\service.out.log
 %ProgramData%\ProcessadorDocumentos\logs\service.err.log
 ```
 
-> **AVISO — não rode duas instâncias.** Com o serviço instalado/rodando, **NÃO**
-> execute o `instalar.ps1` em primeiro plano: isso sobe uma **segunda instância**
-> na porta 8000 e causa conflito (porta ocupada + escrita concorrente no banco
-> SQLite). Em produção, use **apenas o serviço** (`servico.ps1`). O `instalar.ps1`
-> em primeiro plano serve só para teste rápido / desenvolvimento.
+#### Comandos de controle (valem para os dois modos)
 
-> **Risco conhecido (raro).** O serviço roda como a conta do sistema
-> (**LocalSystem**). Em casos raros, o ambiente Python pode não ficar acessível a
-> essa conta — por isso o `servico.ps1 instalar` faz a **verificação de saúde** e
-> **avisa** com o caminho do `service.err.log` se algo falhar. Se a instalação do
-> serviço reportar falha de saúde, abra esse log para diagnóstico (ou rode
-> `.\servico.ps1 logs`).
+Os subcomandos abaixo **detectam automaticamente** o modo instalado (Tarefa ou
+Serviço) e agem sobre ele:
+
+| Comando                    | O que faz                                       |
+| -------------------------- | ----------------------------------------------- |
+| `.\servico.ps1 status`     | mostra se está rodando                          |
+| `.\servico.ps1 parar`      | para o servidor                                 |
+| `.\servico.ps1 iniciar`    | inicia o servidor                               |
+| `.\servico.ps1 reiniciar`  | reinicia o servidor                             |
+| `.\servico.ps1 logs`       | mostra onde estão os logs e as últimas linhas   |
+| `.\servico.ps1 remover`    | para e remove (Tarefa ou Serviço)               |
+
+> **Forçar um modo nos comandos de controle:** normalmente a detecção automática
+> resolve. Se precisar, passe `-Modo servico` (ou `-Modo tarefa`) explicitamente,
+> por exemplo `.\servico.ps1 status -Modo servico`.
+
+> **AVISO — não rode duas instâncias.** Com um modo de background ativo, **NÃO**
+> execute o `instalar.ps1` em primeiro plano (e não instale os **dois** modos ao
+> mesmo tempo): isso sobe uma **segunda instância** na porta 8000 e causa conflito
+> (porta ocupada + escrita concorrente no banco SQLite). Em produção, use **apenas
+> um** modo de background. O `instalar.ps1` em primeiro plano serve só para teste
+> rápido / desenvolvimento.
 
 ### 7. Atualizar para uma nova versão (`atualizar.ps1`)
 
@@ -311,21 +358,26 @@ cd ..
 
 Depois rode `.\instalar.ps1` (ele detecta o `dist` e pula o build).
 
-### O serviço não inicia / health-check falhou
+### O servidor não inicia em background / health-check falhou
 
 **Sintoma:** `.\servico.ps1 instalar` termina com aviso de falha na verificação de
-saúde, ou `.\servico.ps1 status` não mostra o serviço em execução.
+saúde, ou `.\servico.ps1 status` não mostra o servidor em execução.
 
-**Solução:** abra o log de erros do serviço e veja a causa:
+**Solução:** abra os logs e veja a causa:
 
 ```powershell
 .\servico.ps1 logs
 ```
 
-ou diretamente em `%ProgramData%\ProcessadorDocumentos\logs\service.err.log`. A
-causa mais provável é o ambiente Python não estar acessível à conta do serviço
-(**LocalSystem**) — reinstale com `.\servico.ps1 instalar` (como Administrador), que
-recria o ambiente a partir de um Python acessível ao sistema.
+- **Modo padrão (Tarefa):** o log fica em
+  `%LOCALAPPDATA%\ProcessadorDocumentos\logs\servidor.log`. Reinstale com
+  `.\servico.ps1 instalar` (não precisa de Administrador).
+- **Modo servidor 24/7 (Serviço NSSM):** o log de erros fica em
+  `%ProgramData%\ProcessadorDocumentos\logs\service.err.log`. A causa mais provável
+  é o ambiente Python **não estar acessível à conta LocalSystem** — confirme que há
+  **Python instalado para todos os usuários (all-users)** e reinstale com
+  `.\servico.ps1 instalar -Modo servico` (como Administrador). Se não houver Python
+  all-users, prefira o **modo padrão (Tarefa)**, que não tem essa exigência.
 
 ### Onde ficam os dados e os logs
 

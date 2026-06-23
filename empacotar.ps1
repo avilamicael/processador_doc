@@ -11,8 +11,9 @@
 #   4. Monta uma área de staging com APENAS os arquivos de código necessários,
 #      por INCLUSÃO EXPLÍCITA (nunca copia .env, .git, node_modules, frontend\src,
 #      tests, *.db*, data, etc.).
-#   5. Garante tools\nssm.exe (baixa nssm-2.24.zip se ausente) e o inclui no pacote
-#      junto com o servico.ps1 (controle do serviço Windows).
+#   5. Garante tools\nssm.exe (baixa nssm-2.24.zip se ausente) e inclui no pacote,
+#      junto com o servico.ps1 (controle do background) e o launcher versionado
+#      tools\iniciar-servidor.py (usado pelo modo padrão — Tarefa Agendada).
 #   6. Gera processador-doc-<versao>.zip na raiz do repositório.
 #   7. Imprime o caminho do ZIP e instrui (sem executar) o `gh release create`.
 #
@@ -29,6 +30,7 @@ $DistDir     = Join-Path $FrontendDir 'dist'
 $PyProject   = Join-Path $BackendDir 'pyproject.toml'
 $ToolsDir    = Join-Path $RepoRoot 'tools'
 $NssmExe     = Join-Path $ToolsDir 'nssm.exe'
+$Launcher    = Join-Path $ToolsDir 'iniciar-servidor.py'
 $NssmZipUrl  = 'https://nssm.cc/release/nssm-2.24.zip'
 
 function Write-Passo($texto) { Write-Host "`n==> $texto" -ForegroundColor Cyan }
@@ -146,13 +148,21 @@ foreach ($raizItem in @('instalar.ps1', 'atualizar.ps1', 'servico.ps1', 'INSTALL
     Copy-Item -Path $origem -Destination $staging -Force
 }
 
-# 4d. tools\nssm.exe — INCLUÍDO explicitamente (binário de terceiro, só no pacote).
+# 4d. tools\ — nssm.exe (binário de terceiro, gitignored, só no pacote) +
+# iniciar-servidor.py (FONTE versionada — o launcher do modo tarefa). Ambos
+# PRECISAM estar no pacote: o servico.ps1 usa o nssm no modo servico e o launcher
+# no modo tarefa (padrão).
 $stagingTools = Join-Path $staging 'tools'
 New-Item -ItemType Directory -Path $stagingTools | Out-Null
 Copy-Item -Path $NssmExe -Destination (Join-Path $stagingTools 'nssm.exe') -Force
+# O launcher é fonte do repo (versionado) — basta validar a presença e copiar.
+if (-not (Test-Path $Launcher)) {
+    throw "iniciar-servidor.py ausente — o pacote PRECISA do launcher do modo tarefa (tools\iniciar-servidor.py)."
+}
+Copy-Item -Path $Launcher -Destination (Join-Path $stagingTools 'iniciar-servidor.py') -Force
 
 # NÃO incluídos por desenho: .git, .planning, node_modules, frontend\src, .env.
-Write-Ok 'Staging montado (com servico.ps1 + tools\nssm.exe; sem .env, .git, node_modules, frontend\src, tests)'
+Write-Ok 'Staging montado (com servico.ps1 + tools\iniciar-servidor.py + tools\nssm.exe; sem .env, .git, node_modules, frontend\src, tests)'
 
 # --- 6. Gerar o ZIP ---------------------------------------------------------
 Write-Passo "Gerando o pacote $nome"
