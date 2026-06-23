@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-23 - BUG do terminal achado e corrigido: .ps1 sem BOM UTF-8 quebrava o parse no PS 5.1. v0.1.5 (BOM + Register falha-fechada). Scripts já sincronizados em D: via WSL. Falta: usuario rodar servico.ps1 instalar na sessao interativa.
+Last activity: 2026-06-23 - Modo startup (pasta Inicializar, pythonw invisivel) vira PADRAO do servico.ps1. VALIDADO AO VIVO na maquina piloto (instalar do WSL: .vbs criado, servidor invisivel, health 200). v0.1.6.
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -164,6 +164,7 @@ None yet.
 | 260623-kly | Serviço Windows via NSSM: servico.ps1 (instalar/iniciar/parar/reiniciar/status/remover/logs), auto-start no boot + auto-restart + health-check falha-fechada; empacotar inclui nssm.exe; guia | 2026-06-23 | 25f5fdb | [260623-kly-servico-windows-via-nssm-servico-ps1-ins](./quick/260623-kly-servico-windows-via-nssm-servico-ps1-ins/) |
 | 260623-lpj | Persistência Windows: servico.ps1 vira 2 modos — Tarefa Agendada no logon (PADRÃO, como usuário, contorna Pegadinha 1) + NSSM via --modo servico; launcher tools/iniciar-servidor.py; guia 2 modos. Valida correção do piloto (NSSM-LocalSystem falhou: Python per-user) | 2026-06-23 | 7fb3451 | [260623-lpj-persistencia-windows-servico-ps1-padrao-](./quick/260623-lpj-persistencia-windows-servico-ps1-padrao-/) |
 | 260623-mod | Logs de execução nos scripts Windows: Start-Transcript fail-soft em instalar/atualizar/servico.ps1 (logs timestampados em %ProgramData%\...\logs\, caminho impresso no fim); subcomando servico.ps1 diagnostico (relatório único sem segredos); fix Resolve-ModoInstalado; guia. Para depurar instalações remotas | 2026-06-23 | 3b15bae | [260623-mod-logs-de-execucao-nos-scripts-windows-sta](./quick/260623-mod-logs-de-execucao-nos-scripts-windows-sta/) |
+| 260623-no9 | Modo startup (pasta Inicializar, pythonw invisível, sem janela/admin) vira PADRÃO do servico.ps1; guarda de instância única no launcher; controles+diagnóstico cobrem startup. VALIDADO ao vivo (instalar do WSL → .vbs + servidor invisível + health 200) | 2026-06-23 | 8221d72 | [260623-no9-servico-ps1-modo-startup-pasta-inicializ](./quick/260623-no9-servico-ps1-modo-startup-pasta-inicializ/) |
 
 ## Deferred Items
 
