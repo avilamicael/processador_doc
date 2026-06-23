@@ -379,6 +379,45 @@ saúde, ou `.\servico.ps1 status` não mostra o servidor em execução.
   `.\servico.ps1 instalar -Modo servico` (como Administrador). Se não houver Python
   all-users, prefira o **modo padrão (Tarefa)**, que não tem essa exigência.
 
+### Logs de execução dos scripts e diagnóstico
+
+Cada execução de `instalar.ps1`, `atualizar.ps1` e `servico.ps1` agora grava um
+**log de execução** com data e hora em:
+
+```
+%ProgramData%\ProcessadorDocumentos\logs\
+```
+
+com nomes como `instalar-AAAAMMDD-HHMMSS.log`, `atualizar-AAAAMMDD-HHMMSS.log` e
+`servico-<comando>-AAAAMMDD-HHMMSS.log` (por exemplo, `servico-status-...log`).
+
+**Mesmo que a janela do PowerShell feche** após um erro (típico do duplo-clique), o
+**arquivo de log fica gravado** nessa pasta. O caminho do log também é **impresso no
+fim** de cada execução, na linha `Log desta execucao: ...`.
+
+> **Dica para não perder a mensagem na hora:** em vez de dar **duplo-clique** no
+> script, abra o **PowerShell manualmente** (menu Iniciar → digite *PowerShell*),
+> vá até a pasta do programa e rode o script de lá (ex.: `.\instalar.ps1`). Assim a
+> janela **não fecha** ao terminar nem ao dar erro, e você lê a mensagem na própria
+> tela — além de o log continuar gravado em disco.
+
+Para gerar e enviar um **diagnóstico** ao suporte:
+
+```powershell
+.\servico.ps1 diagnostico
+```
+
+Isso gera **um único arquivo**
+`%ProgramData%\ProcessadorDocumentos\logs\diagnostico-AAAAMMDD-HHMMSS.log` com as
+versões (PowerShell e Windows), os caminhos da instalação, o estado da persistência
+(Tarefa/Serviço), a porta 8000 / `/health` e trechos finais dos logs. O comando
+**imprime o caminho do arquivo** ao final — basta **anexar esse arquivo** no contato
+com o suporte.
+
+> **Segurança:** o log de execução e o diagnóstico **nunca incluem a chave da
+> OpenAI** nem o conteúdo do `backend\.env` — o `.env` aparece no diagnóstico apenas
+> como "existe sim/não". Pode enviar o arquivo ao suporte sem expor o segredo.
+
 ### Onde ficam os dados e os logs
 
 Todos os dados do cliente ficam em:
@@ -388,6 +427,7 @@ Todos os dados do cliente ficam em:
 ```
 
 Isso inclui o banco SQLite (ex.: `app.db`), o armazenamento de arquivos (CAS) e a
-configuração. Como os **dados são separados do código**, a atualização
-(`.\atualizar.ps1`) é segura e não apaga nada dessa pasta. Para fazer **backup**,
-basta copiar essa pasta inteira.
+configuração. Os **logs de execução dos scripts** (`instalar.ps1`, `atualizar.ps1`,
+`servico.ps1`) e o **diagnóstico** ficam na subpasta `logs\` dessa mesma pasta. Como
+os **dados são separados do código**, a atualização (`.\atualizar.ps1`) é segura e
+não apaga nada dessa pasta. Para fazer **backup**, basta copiar essa pasta inteira.
