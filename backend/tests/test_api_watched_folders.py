@@ -98,6 +98,20 @@ def test_relative_path_is_normalized(client: TestClient) -> None:
     assert ".." not in resp.json()["path"]
 
 
+def test_quoted_path_has_quotes_stripped(client: TestClient, tmp_path: Path) -> None:
+    """Caminho colado COM aspas (Windows 'Copiar como caminho' → `"C:\\...\\X"`) tem
+    as aspas removidas e é tratado como ABSOLUTO — NÃO resolvido relativo ao CWD do
+    backend. Regressão: sem o strip, `Path('"/abs/x"').resolve()` virava
+    `<cwd>/"/abs/x"` (bug reportado no piloto)."""
+    folder = tmp_path / "com aspas"
+    folder.mkdir()
+    resp = client.post("/watched-folders", json={"path": f'"{folder}"'})
+    assert resp.status_code == 201, resp.text
+    stored = resp.json()["path"]
+    assert stored == str(folder.resolve())
+    assert '"' not in stored
+
+
 def test_path_that_is_a_file_returns_422(client: TestClient, tmp_path: Path) -> None:
     """CR-01: um path que existe mas é ARQUIVO (não diretório) é rejeitado."""
     f = tmp_path / "nota.pdf"

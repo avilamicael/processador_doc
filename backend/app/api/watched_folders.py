@@ -34,6 +34,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from app.automation.naming import strip_quotes
 from app.models.watched_folder import WatchedFolder
 from app.storage.db import get_session
 
@@ -50,13 +51,19 @@ def _normalize_path(raw: str) -> str:
     Retorna a forma resolvida. Um path AINDA inexistente é aceito (a pasta pode
     ser criada depois) — sem alegação de segurança.
     """
-    if raw is None or not str(raw).strip():
+    # Remove aspas das PONTAS antes de qualquer coisa: o "Copiar como caminho" do
+    # Windows Explorer envolve o caminho em aspas (`"C:\...\TESTE"`). Sem remover, o
+    # `Path("\"C:\\...")` NÃO é reconhecido como absoluto (começa com `"`) e o
+    # `resolve()` o trata como RELATIVO ao CWD do backend, gerando um caminho errado
+    # tipo `D:\...\backend\"C:\...\TESTE"`. `strip_quotes` também faz o trim.
+    cleaned = strip_quotes(raw)
+    if not cleaned:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="path da pasta não pode ser vazio",
         )
 
-    source = Path(str(raw).strip())
+    source = Path(cleaned)
 
     # Checagens no path NÃO-resolvido (antes do resolve, que seguiria o symlink):
     # rejeitar symlink reduz a superfície de leitura fora da pasta (WR-03). Se o
