@@ -1,2 +1,7 @@
 # Pacotes de release gerados por empacotar.ps1 (artefato de build — nunca versionar)
 processador-doc-*.zip
+
+# NSSM (supervisor do serviço Windows) — binário de TERCEIRO, baixado pelo
+# servico.ps1/empacotar.ps1. Nunca versionado; entra SÓ no pacote de release.
+tools/nssm.exe
+nssm-*.zip

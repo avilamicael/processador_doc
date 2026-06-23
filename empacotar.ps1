@@ -11,8 +11,10 @@
 #   4. Monta uma área de staging com APENAS os arquivos de código necessários,
 #      por INCLUSÃO EXPLÍCITA (nunca copia .env, .git, node_modules, frontend\src,
 #      tests, *.db*, data, etc.).
-#   5. Gera processador-doc-<versao>.zip na raiz do repositório.
-#   6. Imprime o caminho do ZIP e instrui (sem executar) o `gh release create`.
+#   5. Garante tools\nssm.exe (baixa nssm-2.24.zip se ausente) e o inclui no pacote
+#      junto com o servico.ps1 (controle do serviço Windows).
+#   6. Gera processador-doc-<versao>.zip na raiz do repositório.
+#   7. Imprime o caminho do ZIP e instrui (sem executar) o `gh release create`.
 #
 # SEGREDO: a OPENAI_API_KEY NUNCA é lida, exibida nem logada por este script.
 # O .env do desenvolvedor NUNCA entra no pacote (só o .env.example).
@@ -25,6 +27,9 @@ $BackendDir  = Join-Path $RepoRoot 'backend'
 $FrontendDir = Join-Path $RepoRoot 'frontend'
 $DistDir     = Join-Path $FrontendDir 'dist'
 $PyProject   = Join-Path $BackendDir 'pyproject.toml'
+$ToolsDir    = Join-Path $RepoRoot 'tools'
+$NssmExe     = Join-Path $ToolsDir 'nssm.exe'
+$NssmZipUrl  = 'https://nssm.cc/release/nssm-2.24.zip'
 
 function Write-Passo($texto) { Write-Host "`n==> $texto" -ForegroundColor Cyan }
 function Write-Aviso($texto) { Write-Host "[AVISO] $texto" -ForegroundColor Yellow }
@@ -68,6 +73,36 @@ $nome    = "processador-doc-$versao.zip"
 $zipFinal = Join-Path $RepoRoot $nome
 Write-Ok "Versão: $versao  ->  $nome"
 
+# --- 3b. Garantir tools\nssm.exe (binário de terceiro, vai SÓ no pacote) -----
+# O nssm.exe NÃO é versionado (.gitignore) — o pacote de release PRECISA dele para
+# o servico.ps1 registrar o serviço Windows no cliente. Mesma lógica do Get-Nssm
+# do servico.ps1 (scripts independentes no pacote — duplicação intencional).
+Write-Passo 'Garantindo tools\nssm.exe para o pacote'
+if ((Test-Path $NssmExe) -and ((Get-Item $NssmExe).Length -gt 0)) {
+    Write-Ok 'tools\nssm.exe já presente'
+} else {
+    Write-Aviso 'tools\nssm.exe ausente — baixando NSSM 2.24...'
+    if (-not (Test-Path $ToolsDir)) { New-Item -ItemType Directory -Force -Path $ToolsDir | Out-Null }
+    $tmpNssm = Join-Path $env:TEMP ("nssm-pack-" + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $tmpNssm | Out-Null
+    try {
+        $zipNssm = Join-Path $tmpNssm 'nssm-2.24.zip'
+        Invoke-WebRequest -Uri $NssmZipUrl -OutFile $zipNssm -UseBasicParsing
+        Expand-Archive -Path $zipNssm -DestinationPath $tmpNssm -Force
+        $origemNssm = Join-Path $tmpNssm 'nssm-2.24\win64\nssm.exe'
+        if (-not (Test-Path $origemNssm)) {
+            throw "nssm.exe (win64) não encontrado no ZIP baixado. O pacote de release PRECISA do nssm.exe."
+        }
+        Copy-Item -Path $origemNssm -Destination $NssmExe -Force
+    } finally {
+        Remove-Item -Recurse -Force $tmpNssm -ErrorAction SilentlyContinue
+    }
+    if (-not ((Test-Path $NssmExe) -and ((Get-Item $NssmExe).Length -gt 0))) {
+        throw "Falha ao obter tools\nssm.exe. O pacote de release PRECISA do nssm.exe."
+    }
+    Write-Ok 'tools\nssm.exe obtido (NSSM 2.24, win64)'
+}
+
 # --- 4. Staging (inclusão EXPLÍCITA) ----------------------------------------
 Write-Passo 'Montando a área de staging do pacote'
 $staging = Join-Path $env:TEMP "pacote-procdoc-$versao"
@@ -105,15 +140,21 @@ New-Item -ItemType Directory -Path $stagingFrontend | Out-Null
 Copy-Item -Path $DistDir -Destination $stagingFrontend -Recurse -Force
 
 # 4c. Scripts e guia da raiz.
-foreach ($raizItem in @('instalar.ps1', 'atualizar.ps1', 'INSTALL-WINDOWS.md')) {
+foreach ($raizItem in @('instalar.ps1', 'atualizar.ps1', 'servico.ps1', 'INSTALL-WINDOWS.md')) {
     $origem = Join-Path $RepoRoot $raizItem
     if (-not (Test-Path $origem)) { throw "Arquivo obrigatório da raiz ausente: $raizItem" }
     Copy-Item -Path $origem -Destination $staging -Force
 }
-# NÃO incluídos por desenho: .git, .planning, node_modules, frontend\src, .env.
-Write-Ok 'Staging montado (sem .env, .git, node_modules, frontend\src, tests)'
 
-# --- 5. Gerar o ZIP ---------------------------------------------------------
+# 4d. tools\nssm.exe — INCLUÍDO explicitamente (binário de terceiro, só no pacote).
+$stagingTools = Join-Path $staging 'tools'
+New-Item -ItemType Directory -Path $stagingTools | Out-Null
+Copy-Item -Path $NssmExe -Destination (Join-Path $stagingTools 'nssm.exe') -Force
+
+# NÃO incluídos por desenho: .git, .planning, node_modules, frontend\src, .env.
+Write-Ok 'Staging montado (com servico.ps1 + tools\nssm.exe; sem .env, .git, node_modules, frontend\src, tests)'
+
+# --- 6. Gerar o ZIP ---------------------------------------------------------
 Write-Passo "Gerando o pacote $nome"
 Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zipFinal -Force
 Write-Ok "Pacote gerado: $zipFinal"
@@ -121,7 +162,7 @@ Write-Ok "Pacote gerado: $zipFinal"
 # Limpeza best-effort do staging.
 Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
 
-# --- 6. Instrução de upload (NÃO executar) ----------------------------------
+# --- 7. Instrução de upload (NÃO executar) ----------------------------------
 Write-Passo 'Próximo passo: publicar a release (manual)'
 Write-Host ''
 Write-Host '    O upload NÃO foi feito automaticamente. Para publicar a release,' -ForegroundColor Yellow
