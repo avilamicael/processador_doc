@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-23 - servico.ps1 vira 2 modos (Tarefa Agendada no logon = PADRÃO, após Pegadinha 1 confirmada no piloto; NSSM = --modo servico). Release v0.1.3 publicada (Tarefa Agendada padrão). Falta validar em Windows real: .\servico.ps1 instalar (sem admin) + reproduzir no cliente.
+Last activity: 2026-06-23 - Logs de execução (transcript) nos scripts + servico.ps1 diagnostico (quick 260623-mod). Empacotar e publicar v0.1.4.
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -163,6 +163,7 @@ None yet.
 | 260622-f4b | Entrega Windows via ZIP sem Git (GitHub Releases): empacotar.ps1, atualizar.ps1 (Releases + -LocalZip), instalar.ps1 pula build com dist, guia 2 fluxos | 2026-06-22 | c81dcfe | [260622-f4b-entrega-windows-via-zip-sem-git-empacota](./quick/260622-f4b-entrega-windows-via-zip-sem-git-empacota/) |
 | 260623-kly | Serviço Windows via NSSM: servico.ps1 (instalar/iniciar/parar/reiniciar/status/remover/logs), auto-start no boot + auto-restart + health-check falha-fechada; empacotar inclui nssm.exe; guia | 2026-06-23 | 25f5fdb | [260623-kly-servico-windows-via-nssm-servico-ps1-ins](./quick/260623-kly-servico-windows-via-nssm-servico-ps1-ins/) |
 | 260623-lpj | Persistência Windows: servico.ps1 vira 2 modos — Tarefa Agendada no logon (PADRÃO, como usuário, contorna Pegadinha 1) + NSSM via --modo servico; launcher tools/iniciar-servidor.py; guia 2 modos. Valida correção do piloto (NSSM-LocalSystem falhou: Python per-user) | 2026-06-23 | 7fb3451 | [260623-lpj-persistencia-windows-servico-ps1-padrao-](./quick/260623-lpj-persistencia-windows-servico-ps1-padrao-/) |
+| 260623-mod | Logs de execução nos scripts Windows: Start-Transcript fail-soft em instalar/atualizar/servico.ps1 (logs timestampados em %ProgramData%\...\logs\, caminho impresso no fim); subcomando servico.ps1 diagnostico (relatório único sem segredos); fix Resolve-ModoInstalado; guia. Para depurar instalações remotas | 2026-06-23 | 3b15bae | [260623-mod-logs-de-execucao-nos-scripts-windows-sta](./quick/260623-mod-logs-de-execucao-nos-scripts-windows-sta/) |
 
 ## Deferred Items
 
