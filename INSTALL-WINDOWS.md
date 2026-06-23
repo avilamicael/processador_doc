@@ -110,37 +110,46 @@ de novo mais tarde, rode `.\instalar.ps1` outra vez (é seguro — idempotente).
 ### 6. Rodar sempre em background — recomendado em produção
 
 Em produção, o sistema **não deve depender de uma janela do PowerShell aberta**.
-Há **dois modos** de manter o servidor rodando em background, ambos pelo
+Há **três modos** de manter o servidor rodando em background, todos pelo
 `servico.ps1`:
 
-- **Modo padrão — Tarefa Agendada no logon (sem admin):** sobe sozinho quando você
-  **faz logon** no Windows e reinicia se cair. Roda como a **sua própria conta de
-  usuário** — por isso **não exige Administrador** nem configuração extra de Python.
-  É o modo recomendado para a maioria das instalações (o computador onde uma pessoa
-  faz login e usa o sistema).
+- **Modo padrão — startup (pasta Inicializar, invisível, sem admin):** escreve um
+  `ProcessadorDocumentos.vbs` na **pasta Inicializar** do Windows. O servidor sobe
+  sozinho **a cada logon do usuário**, **completamente invisível** — **não fica
+  nenhuma janela nem terminal aberto**. Roda como a **sua própria conta** (sem
+  Administrador) e você acessa `http://localhost:8000` quando quiser. É o
+  **recomendado** para a máquina de uma pessoa que faz login e usa o sistema.
+- **Modo tarefa (opcional, auto-restart):** Tarefa Agendada no logon que **reinicia
+  automaticamente** se o servidor cair. **Deixou de ser o padrão** porque o registro
+  da Tarefa **exige** uma sessão PowerShell **aberta manualmente** (duplo-clique
+  **não** registra) — frágil para o usuário final.
 - **Modo servidor 24/7 — Serviço Windows (NSSM, avançado):** inicia no **boot**,
   antes do login, ideal para um **PC-servidor headless** sem sessão aberta. Exige
   **Administrador** e um **pré-requisito de Python** (veja abaixo).
 
-> **Como escolher:** se uma pessoa loga e usa a máquina, fique no **modo padrão**.
-> Só use o **modo servidor 24/7** se o sistema precisa rodar **antes/sem ninguém
-> logado** (ex.: um servidor dedicado).
+> **Como escolher:** se uma pessoa loga e usa a máquina, fique no **modo padrão
+> (startup)**. Use **tarefa** se quiser o **reinício automático** da Tarefa
+> Agendada (e topa registrá-la numa sessão PowerShell aberta manualmente). Só use o
+> **modo servidor 24/7** se o sistema precisa rodar **antes/sem ninguém logado**
+> (ex.: um servidor dedicado).
 
-#### Modo padrão — Tarefa Agendada no logon (sem admin)
+#### Modo padrão — startup (pasta Inicializar, invisível, sem admin)
 
 1. Abra o **PowerShell** na pasta extraída (onde está `servico.ps1`) e rode (sem
-   `-Modo`, pois **tarefa é o padrão**; **não precisa** de Administrador):
+   `-Modo`, pois **startup é o padrão**; **não precisa** de Administrador):
 
    ```powershell
    .\servico.ps1 instalar
    ```
 
-O `instalar` cuida de tudo: prepara o ambiente Python, aplica o schema do banco e
-registra a Tarefa Agendada **`ProcessadorDocumentos-Servidor`** (gatilho **ao
-logon**, reinício automático se cair, uma única instância). Ao final, faz uma
-**verificação de saúde** em `http://localhost:8000/health` — se algo falhar, ele
-**avisa** e mostra onde olhar. A partir daí, o servidor **sobe sozinho toda vez
-que você fizer logon**.
+O `instalar` cuida de tudo: prepara o ambiente Python, aplica o schema do banco,
+escreve o `ProcessadorDocumentos.vbs` na **pasta Inicializar** e **sobe o servidor
+já**, invisível. Ao final, faz uma **verificação de saúde** em
+`http://localhost:8000/health` — se algo falhar, ele **avisa** e mostra onde olhar.
+
+A partir daí, **não fica nenhuma janela/terminal aberto**, o servidor **sobe sozinho
+a cada logon do usuário** e você acessa `http://localhost:8000` no navegador quando
+quiser.
 
 **Logs deste modo:**
 
@@ -148,10 +157,29 @@ que você fizer logon**.
 %LOCALAPPDATA%\ProcessadorDocumentos\logs\servidor.log
 ```
 
-> **Limitação (honesta):** a Tarefa roda **enquanto o usuário está logado**. Ela
+> **Limitação (honesta):** o startup roda **enquanto o usuário está logado**. Ele
 > **não** sobe o servidor **antes do login**, nem mantém o sistema no ar num
 > servidor **headless** sem ninguém com a sessão aberta. Se você precisa disso, use
 > o **modo servidor 24/7** abaixo.
+
+#### Modo tarefa (opcional — auto-restart pela Tarefa Agendada)
+
+1. Abra o **PowerShell** **manualmente** (Menu Iniciar → *PowerShell*), vá até a
+   pasta extraída e rode (**não** funciona por duplo-clique):
+
+   ```powershell
+   .\servico.ps1 instalar -Modo tarefa
+   ```
+
+O `instalar -Modo tarefa` registra a Tarefa Agendada
+**`ProcessadorDocumentos-Servidor`** (gatilho **ao logon**, **reinício automático**
+se cair, uma única instância) e a inicia, terminando com a mesma **verificação de
+saúde**. Logs no mesmo `servidor.log` do modo padrão.
+
+> **Por que deixou de ser o padrão:** o registro da Tarefa **exige uma sessão
+> PowerShell aberta manualmente** — clicar/duplo-clicar no script **não registra**
+> (erro "Acesso negado"). O **modo startup** evita isso e por isso é o recomendado.
+> Use **tarefa** quando quiser especificamente o **auto-restart** da Tarefa Agendada.
 
 #### Modo servidor 24/7 — Serviço Windows (NSSM, avançado)
 
@@ -171,8 +199,8 @@ no boot, reinício automático, logs com rotação), terminando com a mesma
 > (**LocalSystem**) e **exige Python instalado para TODOS os usuários (all-users)**.
 > Sem ele, a conta LocalSystem **não consegue ler** o Python que o `uv` instalou no
 > seu perfil de usuário, e **o serviço sobe e cai** (a verificação de saúde avisa).
-> O **modo padrão (Tarefa)** não tem essa exigência — por isso é o recomendado na
-> maioria dos casos.
+> Os modos **startup** e **tarefa** não têm essa exigência — por isso o startup é o
+> recomendado na maioria dos casos.
 
 **Logs deste modo** (com rotação automática quando crescem):
 
@@ -181,10 +209,10 @@ no boot, reinício automático, logs com rotação), terminando com a mesma
 %ProgramData%\ProcessadorDocumentos\logs\service.err.log
 ```
 
-#### Comandos de controle (valem para os dois modos)
+#### Comandos de controle (valem para os três modos)
 
-Os subcomandos abaixo **detectam automaticamente** o modo instalado (Tarefa ou
-Serviço) e agem sobre ele:
+Os subcomandos abaixo **detectam automaticamente** o modo instalado (startup,
+Tarefa ou Serviço) e agem sobre ele:
 
 | Comando                    | O que faz                                       |
 | -------------------------- | ----------------------------------------------- |
@@ -193,18 +221,18 @@ Serviço) e agem sobre ele:
 | `.\servico.ps1 iniciar`    | inicia o servidor                               |
 | `.\servico.ps1 reiniciar`  | reinicia o servidor                             |
 | `.\servico.ps1 logs`       | mostra onde estão os logs e as últimas linhas   |
-| `.\servico.ps1 remover`    | para e remove (Tarefa ou Serviço)               |
+| `.\servico.ps1 remover`    | para e remove (startup, Tarefa ou Serviço)      |
 
 > **Forçar um modo nos comandos de controle:** normalmente a detecção automática
-> resolve. Se precisar, passe `-Modo servico` (ou `-Modo tarefa`) explicitamente,
-> por exemplo `.\servico.ps1 status -Modo servico`.
+> resolve. Se precisar, passe `-Modo startup` (ou `-Modo tarefa`/`-Modo servico`)
+> explicitamente, por exemplo `.\servico.ps1 status -Modo servico`.
 
-> **AVISO — não rode duas instâncias.** Com um modo de background ativo, **NÃO**
-> execute o `instalar.ps1` em primeiro plano (e não instale os **dois** modos ao
-> mesmo tempo): isso sobe uma **segunda instância** na porta 8000 e causa conflito
-> (porta ocupada + escrita concorrente no banco SQLite). Em produção, use **apenas
-> um** modo de background. O `instalar.ps1` em primeiro plano serve só para teste
-> rápido / desenvolvimento.
+> **AVISO — não combine modos / não rode duas instâncias.** Com um modo de
+> background ativo, **NÃO** execute o `instalar.ps1` em primeiro plano e **não
+> instale dois modos** (startup + tarefa + serviço) ao mesmo tempo: isso sobe uma
+> **segunda instância** na porta 8000 e causa conflito (porta ocupada + escrita
+> concorrente no banco SQLite). Em produção, use **apenas um** modo de background. O
+> `instalar.ps1` em primeiro plano serve só para teste rápido / desenvolvimento.
 
 ### 7. Atualizar para uma nova versão (`atualizar.ps1`)
 
@@ -369,15 +397,18 @@ saúde, ou `.\servico.ps1 status` não mostra o servidor em execução.
 .\servico.ps1 logs
 ```
 
-- **Modo padrão (Tarefa):** o log fica em
-  `%LOCALAPPDATA%\ProcessadorDocumentos\logs\servidor.log`. Reinstale com
-  `.\servico.ps1 instalar` (não precisa de Administrador).
+- **Modo padrão (startup) e modo tarefa:** o log fica em
+  `%LOCALAPPDATA%\ProcessadorDocumentos\logs\servidor.log` (ambos usam o mesmo
+  `servidor.log` do launcher). Reinstale com `.\servico.ps1 instalar` (startup, não
+  precisa de Administrador). No modo startup, confira também se o
+  `ProcessadorDocumentos.vbs` existe na **pasta Inicializar**
+  (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`).
 - **Modo servidor 24/7 (Serviço NSSM):** o log de erros fica em
   `%ProgramData%\ProcessadorDocumentos\logs\service.err.log`. A causa mais provável
   é o ambiente Python **não estar acessível à conta LocalSystem** — confirme que há
   **Python instalado para todos os usuários (all-users)** e reinstale com
   `.\servico.ps1 instalar -Modo servico` (como Administrador). Se não houver Python
-  all-users, prefira o **modo padrão (Tarefa)**, que não tem essa exigência.
+  all-users, prefira o **modo padrão (startup)**, que não tem essa exigência.
 
 ### Logs de execução dos scripts e diagnóstico
 
