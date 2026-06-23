@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-23 - Logs de execução (transcript) nos scripts + servico.ps1 diagnostico (quick 260623-mod). Empacotar e publicar v0.1.4.
+Last activity: 2026-06-23 - Release v0.1.4 publicada (logs de execução + servico.ps1 diagnostico). Aguardando log/diagnostico do Windows para achar a causa do instalar que fechava.
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
