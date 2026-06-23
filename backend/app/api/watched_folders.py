@@ -98,6 +98,7 @@ class WatchedFolderIn(BaseModel):
     path: str
     pages_per_block: int | None = None
     active: bool = True
+    split_to_files: bool = False
 
     @field_validator("pages_per_block")
     @classmethod
@@ -113,6 +114,7 @@ class WatchedFolderPatch(BaseModel):
     path: str | None = None
     pages_per_block: int | None = None
     active: bool | None = None
+    split_to_files: bool | None = None
 
     @field_validator("pages_per_block")
     @classmethod
@@ -131,6 +133,7 @@ class WatchedFolderOut(BaseModel):
     path: str
     pages_per_block: int | None
     active: bool
+    split_to_files: bool
     created_at: datetime
     updated_at: datetime
 
@@ -153,6 +156,7 @@ def create_folder(request: Request, body: WatchedFolderIn) -> WatchedFolder:
             path=resolved,
             pages_per_block=body.pages_per_block,
             active=body.active,
+            split_to_files=body.split_to_files,
         )
         session.add(folder)
         try:
@@ -184,6 +188,8 @@ def update_folder(request: Request, folder_id: int, body: WatchedFolderPatch) ->
             folder.pages_per_block = body.pages_per_block
         if body.active is not None:
             folder.active = body.active
+        if body.split_to_files is not None:
+            folder.split_to_files = body.split_to_files
         try:
             session.commit()
         except IntegrityError as exc:

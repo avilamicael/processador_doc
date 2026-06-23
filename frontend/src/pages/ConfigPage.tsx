@@ -57,7 +57,7 @@ function splitLabel(pages: number | null): string {
   return pages === 1 ? 'Separar a cada 1 página' : `Separar a cada ${pages} páginas`
 }
 
-type FormState = { id: number | null; path: string; pages: string }
+type FormState = { id: number | null; path: string; pages: string; splitToFiles: boolean }
 
 function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWatcher: () => void }) {
   const foldersQuery = useWatchedFolders()
@@ -73,11 +73,16 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
 
   const openAdd = () => {
     setFormError(null)
-    setForm({ id: null, path: '', pages: '' })
+    setForm({ id: null, path: '', pages: '', splitToFiles: false })
   }
   const openEdit = (f: Folder) => {
     setFormError(null)
-    setForm({ id: f.id, path: f.path, pages: f.pages_per_block ? String(f.pages_per_block) : '' })
+    setForm({
+      id: f.id,
+      path: f.path,
+      pages: f.pages_per_block ? String(f.pages_per_block) : '',
+      splitToFiles: f.split_to_files,
+    })
   }
   const closeForm = () => {
     setForm(null)
@@ -100,12 +105,12 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
       setFormError('Não foi possível salvar a pasta. Confira o caminho e tente novamente.')
     if (form.id == null) {
       createFolder.mutate(
-        { path, pages_per_block, active: true },
+        { path, pages_per_block, active: true, split_to_files: form.splitToFiles },
         { onSuccess: closeForm, onError },
       )
     } else {
       updateFolder.mutate(
-        { id: form.id, body: { path, pages_per_block } },
+        { id: form.id, body: { path, pages_per_block, split_to_files: form.splitToFiles } },
         { onSuccess: closeForm, onError },
       )
     }
@@ -167,6 +172,31 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
               <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
                 Cada bloco de N páginas vira um documento independente. Deixe vazio (ou 0) em
                 "Não separar" para tratar o arquivo inteiro como um documento.
+              </span>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--text-2)',
+                }}
+              >
+                <Switch
+                  on={form.splitToFiles}
+                  onToggle={() => setForm({ ...form, splitToFiles: !form.splitToFiles })}
+                  title="Separar fisicamente o PDF em arquivos na pasta"
+                />
+                Separar fisicamente o PDF em arquivos na pasta
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                Quando ligado, ao chegar um PDF a separação acontece NA PRÓPRIA PASTA: o PDF é
+                dividido em arquivos (substituindo o original) antes do processamento. O arquivo
+                original continua recuperável — nada é perdido. Depende de "Separar a cada N
+                páginas" estar configurado.
               </span>
             </label>
             {formError && (
@@ -245,6 +275,12 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
                 <span>{splitLabel(f.pages_per_block)}</span>
                 <span>·</span>
                 <span>{f.active ? 'Ativa' : 'Inativa'}</span>
+                {f.split_to_files && (
+                  <>
+                    <span>·</span>
+                    <span>Separa em arquivos</span>
+                  </>
+                )}
               </div>
             </div>
             <Switch on={f.active} onToggle={() => toggleActive(f)} title="Ativar/desativar pasta" />

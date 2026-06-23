@@ -96,11 +96,17 @@ async def _stabilize_hash_gate_enqueue(
     file_path: Path,
     folder_id: int | None,
     pages_per_block: int | None,
+    split_to_files: bool = False,
 ) -> bool:
     """Caminho de um candidato: estabiliza → hash → dedup gate → enqueue.
 
     Retorna True se um job foi enfileirado (candidato novo); False se o arquivo
     não estabilizou, é duplicata (gate) ou já estava enfileirado (idempotência).
+
+    `split_to_files` (opt-in da pasta, quick 260623-pzy): viaja no payload do job
+    ingest para o worker/stage materializarem os blocos na pasta. Como o gate de
+    cada bloco é registrado ANTES do arquivo aparecer, este mesmo caminho reconhece
+    os arquivos de bloco como duplicata (gate) e NÃO os re-enfileira (anti-loop).
     """
     if not is_supported_ext(file_path):
         return False
@@ -139,6 +145,7 @@ async def _stabilize_hash_gate_enqueue(
                 "source_path": str(file_path),
                 "folder_id": folder_id,
                 "pages_per_block": pages_per_block,
+                "split_to_files": split_to_files,
             }
         )
         job = repo.enqueue(session, original_hash=original_hash, step="ingest", payload=payload)
@@ -182,7 +189,11 @@ async def scan_and_enqueue(engine: Engine, paths: list[Path]) -> int:
             if not file_path.is_file() or not is_supported_ext(file_path):
                 continue
             if await _stabilize_hash_gate_enqueue(
-                engine, file_path, folder.id, folder.pages_per_block
+                engine,
+                file_path,
+                folder.id,
+                folder.pages_per_block,
+                folder.split_to_files,
             ):
                 enqueued += 1
     return enqueued
@@ -283,9 +294,10 @@ async def _handle_changes(
         folder = _folder_for_path(file_path.resolve(), folders) if folders else None
         folder_id = folder.id if folder is not None else None
         pages_per_block = folder.pages_per_block if folder is not None else None
+        split_to_files = folder.split_to_files if folder is not None else False
         try:
             await _stabilize_hash_gate_enqueue(
-                engine, file_path, folder_id, pages_per_block
+                engine, file_path, folder_id, pages_per_block, split_to_files
             )
         except Exception:  # noqa: BLE001 — um candidato ruim não derruba o watcher
             logger.exception("Falha ao processar candidato %s", file_path)

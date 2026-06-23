@@ -39,11 +39,14 @@ export interface DocumentList {
 }
 
 // Pasta monitorada exposta por GET /watched-folders (D-02).
+// `split_to_files` (opt-in, quick 260623-pzy): quando true, o PDF é separado em
+// arquivos físicos na própria pasta (substituindo o original) antes do processamento.
 export interface Folder {
   id: number
   path: string
   pages_per_block: number | null
   active: boolean
+  split_to_files: boolean
   created_at: string
   updated_at: string
 }
@@ -53,6 +56,7 @@ export interface FolderCreate {
   path: string
   pages_per_block: number | null
   active: boolean
+  split_to_files: boolean
 }
 
 // Body de edição parcial de pasta (PATCH /watched-folders/{id}).
@@ -60,6 +64,7 @@ export interface FolderPatch {
   path?: string
   pages_per_block?: number | null
   active?: boolean
+  split_to_files?: boolean
 }
 
 // --- Tipos de UI ainda mock (telas de fases futuras; não fiados na Fase 2) ---

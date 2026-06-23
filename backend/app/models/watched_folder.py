@@ -8,6 +8,14 @@ o watcher (plano posterior) lê desta tabela.
 
 `pages_per_block = None` significa "não separar" (cada original vira um único
 bloco) — é o default da UI. Schema evolui SOMENTE via Alembic (D-10).
+
+`split_to_files` (opt-in, default DESLIGADO): quando LIGADO, ao ingerir um PDF
+multipágina o sistema SEPARA o PDF em arquivos físicos NA PRÓPRIA PASTA,
+substituindo o original pelos blocos (`<stem>_p1-2.pdf`, …) ANTES do pipeline de
+IA. Materialização segura e reversível: o original já vai ao CAS antes do split
+(rede de não-perda — CLAUDE.md) e só é removido do disco DEPOIS dos blocos
+gravados e verificados por hash; cada gravação/remoção é registrada em AuditLog
+write-ahead. Default OFF preserva o comportamento atual (nada gravado/removido).
 """
 
 from datetime import datetime
@@ -39,6 +47,14 @@ class WatchedFolder(Base):
         Boolean, default=True, server_default=text("1"), nullable=False
     )
 
+    # Opt-in de separação física em arquivos na própria pasta (default OFF).
+    # LIGADO: ao ingerir um PDF multipágina, o original é substituído pelos
+    # blocos gravados na pasta (ANTES da IA), de forma reversível e sem perda
+    # (original no CAS; remoção só após blocos verificados; AuditLog write-ahead).
+    split_to_files: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("0"), nullable=False
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -54,4 +70,5 @@ class WatchedFolder(Base):
         # flush) — a UI/watcher leem `active`/`pages_per_block` antes de persistir.
         kwargs.setdefault("active", True)
         kwargs.setdefault("pages_per_block", None)
+        kwargs.setdefault("split_to_files", False)
         super().__init__(**kwargs)
