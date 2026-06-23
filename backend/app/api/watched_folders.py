@@ -42,20 +42,23 @@ router = APIRouter(prefix="/watched-folders", tags=["watched-folders"])
 
 
 def _normalize_path(raw: str) -> str:
-    """Normaliza/valida um path de pasta (T-02-10).
+    """Valida um path de pasta e o devolve LITERAL — exatamente o que o usuário
+    digitou (T-02-10).
 
-    Rejeita (HTTP 422): vazio/branco; path que já existe e NÃO é diretório (ex.:
-    arquivo); e symlinks (não seguimos um link como pasta monitorada). `resolve()`
-    apenas canoniza o formato (absolutiza, colapsa `..`) — NÃO confina raiz nem
-    barra path traversal; no v1 single-tenant a pasta é escolha do operador.
-    Retorna a forma resolvida. Um path AINDA inexistente é aceito (a pasta pode
-    ser criada depois) — sem alegação de segurança.
+    Decisão (2026-06-23): guardar o caminho EXATAMENTE como o usuário informou,
+    só removendo as aspas das pontas e espaços. NÃO chamamos `resolve()`: ele
+    canonizaria/absolutizaria contra o CWD do backend e, para um caminho que não
+    fosse reconhecido como absoluto, geraria um caminho errado relativo ao app
+    (ex.: `D:\\...\\backend\\C:\\...`). O usuário cadastra um caminho ABSOLUTO do
+    Windows e é esse, ipsis litteris, que é gravado e monitorado.
+
+    Aspas das pontas: o "Copiar como caminho" do Windows Explorer envolve o
+    caminho em aspas (`"C:\\...\\TESTE"`); `strip_quotes` as remove + faz o trim.
+
+    Rejeita (HTTP 422): vazio/branco; symlink; e path que já existe e NÃO é
+    diretório (ex.: arquivo). Um path AINDA inexistente é aceito (a pasta pode ser
+    criada depois) — sem alegação de segurança/confinamento (v1 single-tenant).
     """
-    # Remove aspas das PONTAS antes de qualquer coisa: o "Copiar como caminho" do
-    # Windows Explorer envolve o caminho em aspas (`"C:\...\TESTE"`). Sem remover, o
-    # `Path("\"C:\\...")` NÃO é reconhecido como absoluto (começa com `"`) e o
-    # `resolve()` o trata como RELATIVO ao CWD do backend, gerando um caminho errado
-    # tipo `D:\...\backend\"C:\...\TESTE"`. `strip_quotes` também faz o trim.
     cleaned = strip_quotes(raw)
     if not cleaned:
         raise HTTPException(
@@ -65,8 +68,8 @@ def _normalize_path(raw: str) -> str:
 
     source = Path(cleaned)
 
-    # Checagens no path NÃO-resolvido (antes do resolve, que seguiria o symlink):
-    # rejeitar symlink reduz a superfície de leitura fora da pasta (WR-03). Se o
+    # Checagens no path LITERAL (sem resolver — não seguimos symlink nem mudamos o
+    # valor gravado). Rejeitar symlink reduz a superfície de leitura (WR-03); se o
     # alvo existe e não é diretório (ex.: arquivo), também rejeitar.
     try:
         if source.is_symlink():
@@ -79,13 +82,14 @@ def _normalize_path(raw: str) -> str:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="path da pasta precisa ser um diretório",
             )
-        # strict=False: não exige que a pasta exista já; só normaliza o formato.
-        return str(source.resolve())
     except OSError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"path da pasta inválido: {raw!r}",
         ) from exc
+
+    # LITERAL: o caminho do usuário, sem resolução relativa ao app.
+    return cleaned
 
 
 class WatchedFolderIn(BaseModel):

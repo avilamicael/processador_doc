@@ -49,7 +49,7 @@ def test_crud_lifecycle(client: TestClient, tmp_path: Path) -> None:
     resp = client.post("/watched-folders", json={"path": str(folder), "pages_per_block": 2})
     assert resp.status_code == 201, resp.text
     created = resp.json()
-    assert created["path"] == str(folder.resolve())  # normalizado
+    assert created["path"] == str(folder)  # LITERAL — o caminho do usuário, sem resolução
     assert created["pages_per_block"] == 2
     assert created["active"] is True
     folder_id = created["id"]
@@ -90,25 +90,27 @@ def test_empty_path_returns_422(client: TestClient) -> None:
     assert resp.status_code == 422, resp.text
 
 
-def test_relative_path_is_normalized(client: TestClient) -> None:
-    """Path com '..' é resolvido (V5/V12) — barra path traversal acidental."""
-    resp = client.post("/watched-folders", json={"path": "/tmp/foo/../bar"})
+def test_path_is_stored_literally(client: TestClient) -> None:
+    """O caminho é gravado LITERAL — exatamente o que o usuário informou (decisão
+    2026-06-23). NÃO resolvemos relativo ao CWD do backend (era a origem do bug do
+    prefixo `D:\\...\\backend\\` no piloto)."""
+    informado = "/tmp/foo/bar/baz"
+    resp = client.post("/watched-folders", json={"path": informado})
     assert resp.status_code == 201
-    assert resp.json()["path"] == str(Path("/tmp/foo/../bar").resolve())
-    assert ".." not in resp.json()["path"]
+    assert resp.json()["path"] == informado  # ipsis litteris, sem resolução
 
 
 def test_quoted_path_has_quotes_stripped(client: TestClient, tmp_path: Path) -> None:
     """Caminho colado COM aspas (Windows 'Copiar como caminho' → `"C:\\...\\X"`) tem
-    as aspas removidas e é tratado como ABSOLUTO — NÃO resolvido relativo ao CWD do
-    backend. Regressão: sem o strip, `Path('"/abs/x"').resolve()` virava
+    as aspas das pontas removidas e é gravado LITERAL — NÃO resolvido relativo ao
+    CWD do backend. Regressão: sem o strip, `Path('"/abs/x"').resolve()` virava
     `<cwd>/"/abs/x"` (bug reportado no piloto)."""
     folder = tmp_path / "com aspas"
     folder.mkdir()
     resp = client.post("/watched-folders", json={"path": f'"{folder}"'})
     assert resp.status_code == 201, resp.text
     stored = resp.json()["path"]
-    assert stored == str(folder.resolve())
+    assert stored == str(folder)  # literal, sem aspas, sem resolução
     assert '"' not in stored
 
 
