@@ -28,9 +28,21 @@ from app.ingest.hashing import sha256_file
 from app.models.audit_log import AuditLog
 from app.models.document import Document
 from app.models.ingested_original import IngestedOriginal
+from app.models.watched_folder import WatchedFolder
 from app.pipeline import ingest_stage
 from app.storage import cas
 from app.storage.db import get_session
+
+
+def _make_folder(engine: Engine, path: Path) -> int:
+    """Cria uma WatchedFolder real (FK de source_folder_id) e devolve seu id."""
+    with get_session(engine) as session:
+        folder = WatchedFolder(
+            path=str(path), pages_per_block=2, split_to_files=True
+        )
+        session.add(folder)
+        session.commit()
+        return folder.id
 
 
 def _make_pdf(path: Path, pages: int) -> Path:
@@ -72,10 +84,11 @@ def test_opt_in_grava_n_arquivos_e_remove_original(
     """split_to_files=True, pages_per_block=2, PDF 5pp → 3 blocos na pasta, original some."""
     folder = tmp_path / "hot"
     folder.mkdir()
+    fid = _make_folder(schema_engine, folder)
     src = _make_pdf(folder / "doc.pdf", pages=5)
 
     result = _ingest(
-        schema_engine, src, folder_id=1, pages_per_block=2, split_to_files=True
+        schema_engine, src, folder_id=fid, pages_per_block=2, split_to_files=True
     )
     assert result.status == "ingested"
 
@@ -102,12 +115,13 @@ def test_original_recuperavel_do_cas(
     """Após a substituição, o original é recuperável do CAS byte-a-byte (não perde)."""
     folder = tmp_path / "hot"
     folder.mkdir()
+    fid = _make_folder(schema_engine, folder)
     src = folder / "doc.pdf"
     _make_pdf(src, pages=5)
     original_bytes = src.read_bytes()
     original_hash = sha256_file(src)
 
-    _ingest(schema_engine, src, folder_id=1, pages_per_block=2, split_to_files=True)
+    _ingest(schema_engine, src, folder_id=fid, pages_per_block=2, split_to_files=True)
 
     assert not src.exists()
     # O original inteiro continua no CAS, recuperável pelo hash.
@@ -125,9 +139,10 @@ def test_anti_loop_gate_reconhece_blocos(
     """
     folder = tmp_path / "hot"
     folder.mkdir()
+    fid = _make_folder(schema_engine, folder)
     src = _make_pdf(folder / "doc.pdf", pages=5)
 
-    _ingest(schema_engine, src, folder_id=1, pages_per_block=2, split_to_files=True)
+    _ingest(schema_engine, src, folder_id=fid, pages_per_block=2, split_to_files=True)
 
     # Para cada arquivo de bloco no disco: seu sha256 == content_hash, e existe um
     # IngestedOriginal com original_hash == esse hash (o gate reconhece o bloco).
@@ -152,29 +167,30 @@ def test_audit_write_ahead_intent_done(
     """Há AuditLog 'done' por bloco gravado E pela remoção do original (reversível)."""
     folder = tmp_path / "hot"
     folder.mkdir()
-    src = src = _make_pdf(folder / "doc.pdf", pages=5)
+    fid = _make_folder(schema_engine, folder)
+    src = _make_pdf(folder / "doc.pdf", pages=5)
     original_hash = sha256_file(src)
 
-    _ingest(schema_engine, src, folder_id=1, pages_per_block=2, split_to_files=True)
+    _ingest(schema_engine, src, folder_id=fid, pages_per_block=2, split_to_files=True)
 
     with get_session(schema_engine) as session:
         logs = session.scalars(select(AuditLog)).all()
         # Nenhum AuditLog pode ficar pendurado em 'intent' (todos concluídos).
         assert all(log.status == "done" for log in logs), (
-            f"AuditLog não-concluído: {[(l.action, l.status) for l in logs]}"
+            f"AuditLog não-concluído: {[(log.action, log.status) for log in logs]}"
         )
         # 3 gravações de bloco + 1 remoção do original = 4 registros 'done'.
         assert len(logs) == 4, f"esperados 4 AuditLog, achei {len(logs)}"
 
         # As gravações de bloco têm dest_path preenchido (o arquivo na pasta).
-        writes = [l for l in logs if l.dest_path is not None]
+        writes = [log for log in logs if log.dest_path is not None]
         assert len(writes) == 3
         for w in writes:
             assert w.content_hash is not None
             assert w.source_path is not None
 
         # A remoção do original referencia o original_hash e não tem dest_path.
-        removal = [l for l in logs if l.dest_path is None]
+        removal = [log for log in logs if log.dest_path is None]
         assert len(removal) == 1
         assert removal[0].content_hash == original_hash
         assert removal[0].source_path == str(src)
@@ -186,11 +202,12 @@ def test_opt_in_off_comportamento_atual(
     """split_to_files=False (default) → nada gravado na pasta, original intacto."""
     folder = tmp_path / "hot"
     folder.mkdir()
+    fid = _make_folder(schema_engine, folder)
     src = _make_pdf(folder / "doc.pdf", pages=5)
     original_bytes = src.read_bytes()
 
     result = _ingest(
-        schema_engine, src, folder_id=1, pages_per_block=2, split_to_files=False
+        schema_engine, src, folder_id=fid, pages_per_block=2, split_to_files=False
     )
     assert result.status == "ingested"
 
@@ -217,6 +234,7 @@ def test_opt_in_off_default_sem_argumento(
     """O parâmetro split_to_files tem default False — callers atuais ficam intactos."""
     folder = tmp_path / "hot"
     folder.mkdir()
+    fid = _make_folder(schema_engine, folder)
     src = _make_pdf(folder / "doc.pdf", pages=4)
     original_hash = sha256_file(src)
 
@@ -225,7 +243,7 @@ def test_opt_in_off_default_sem_argumento(
         result = ingest_stage.process_ingest(
             session,
             source_path=src,
-            folder_id=1,
+            folder_id=fid,
             pages_per_block=2,
             original_hash=original_hash,
         )
@@ -240,9 +258,10 @@ def test_idempotencia_crash_safety(
     """Rodar process_ingest 2x não duplica arquivos nem perde o original."""
     folder = tmp_path / "hot"
     folder.mkdir()
+    fid = _make_folder(schema_engine, folder)
     src = _make_pdf(folder / "doc.pdf", pages=5)
 
-    _ingest(schema_engine, src, folder_id=1, pages_per_block=2, split_to_files=True)
+    _ingest(schema_engine, src, folder_id=fid, pages_per_block=2, split_to_files=True)
     blocos_1 = sorted(p.name for p in folder.glob("*.pdf"))
     assert len(blocos_1) == 3
 
@@ -253,7 +272,7 @@ def test_idempotencia_crash_safety(
         result2 = ingest_stage.process_ingest(
             session,
             source_path=src,  # não existe mais no disco, mas o gate barra antes
-            folder_id=1,
+            folder_id=fid,
             pages_per_block=2,
             original_hash=original_hash,
             split_to_files=True,

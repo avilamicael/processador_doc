@@ -234,13 +234,65 @@ def test_0008_preserva_trigger_documents_updated_at(db_url: str) -> None:
     assert trigger == "trg_documents_updated_at", "trigger de documents perdido após 0008"
 
 
-def test_downgrade_um_passo_reverte_so_o_modelo_final(db_url: str) -> None:
-    """downgrade -1 (de head=0008) reverte SOMENTE a 0008: dropa as tabelas do modelo
-    final e RECRIA as tabelas de pipeline da 0007 (reversibilidade do histórico),
-    preservando o write-ahead de `audit_log` e o schema das Fases 1–5."""
+def test_0009_adiciona_split_to_files_em_watched_folders(db_url: str) -> None:
+    """quick 260623-pzy (0009): após upgrade head, `watched_folders` tem a coluna
+    `split_to_files`; a 0009 NÃO toca `documents` (trigger trg_documents_updated_at
+    intacto) nem nenhuma outra tabela."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+
+    engine = create_engine(db_url)
+    try:
+        cols_wf = {c["name"] for c in inspect(engine).get_columns("watched_folders")}
+        with engine.connect() as conn:
+            trigger = conn.execute(
+                text(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type = 'trigger' AND name = 'trg_documents_updated_at'"
+                )
+            ).scalar()
+    finally:
+        engine.dispose()
+
+    assert "split_to_files" in cols_wf, "coluna split_to_files ausente após 0009"
+    assert trigger == "trg_documents_updated_at", "0009 não pode tocar o trigger de documents"
+
+
+def test_0009_downgrade_um_passo_remove_so_split_to_files(db_url: str) -> None:
+    """downgrade -1 (de head=0009) reverte SOMENTE a 0009: dropa `split_to_files` e
+    preserva TODO o restante do schema (modelo final de automações, Fases 1–5)."""
     cfg = _make_config(db_url)
     command.upgrade(cfg, "head")
     command.downgrade(cfg, "-1")
+
+    engine = create_engine(db_url)
+    try:
+        insp = inspect(engine)
+        tabelas = set(insp.get_table_names())
+        cols_wf = {c["name"] for c in insp.get_columns("watched_folders")}
+    finally:
+        engine.dispose()
+
+    # A coluna do opt-in saiu; nada mais foi tocado pela 0009.
+    assert "split_to_files" not in cols_wf, "split_to_files não removida no downgrade -1"
+    # O modelo final de automações (0008) permanece — a 0009 não o toca.
+    assert {"automations", "automation_conditions", "automation_actions"}.issubset(
+        tabelas
+    ), "downgrade -1 da 0009 não pode remover o modelo final de automações"
+    assert "watched_folders" in tabelas
+
+
+def test_downgrade_um_passo_reverte_so_o_modelo_final(db_url: str) -> None:
+    """downgrade -2 (de head=0009) reverte 0009 (split_to_files) + 0008: dropa as
+    tabelas do modelo final e RECRIA as tabelas de pipeline da 0007 (reversibilidade
+    do histórico), preservando o write-ahead de `audit_log` e o schema das Fases 1–5.
+
+    NOTA: a 0009 (quick 260623-pzy) só adiciona `watched_folders.split_to_files`;
+    o passo a mais aqui (-2 em vez de -1) a reverte primeiro, isolando o teste do
+    modelo FINAL de automações exatamente como antes."""
+    cfg = _make_config(db_url)
+    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "-2")
 
     engine = create_engine(db_url)
     try:
@@ -255,10 +307,10 @@ def test_downgrade_um_passo_reverte_so_o_modelo_final(db_url: str) -> None:
     # As tabelas do modelo final saíram; as tabelas de pipeline da 0007 voltaram.
     assert not (
         {"automations", "automation_conditions", "automation_actions"} & tabelas
-    ), "tabelas do modelo final não removidas no downgrade -1"
+    ), "tabelas do modelo final não removidas no downgrade -2"
     assert {"automation_pipelines", "pipeline_steps", "step_filters"}.issubset(
         tabelas
-    ), "tabelas de pipeline da 0007 não recriadas no downgrade -1"
+    ), "tabelas de pipeline da 0007 não recriadas no downgrade -2"
     # O write-ahead de audit_log (0006) permanece — a 0008 não o toca.
     assert {"status", "source_path", "dest_path", "run_id", "content_hash"} <= cols_audit
     # As colunas da Fase 5 permanecem.
@@ -267,12 +319,15 @@ def test_downgrade_um_passo_reverte_so_o_modelo_final(db_url: str) -> None:
 
 
 def test_downgrade_remove_toda_a_automacao(db_url: str) -> None:
-    """downgrade -3 (de head=0008) reverte 0008 + 0007 + 0006: remove as tabelas do
-    modelo final, de pipeline E de regra E as 5 colunas write-ahead de `audit_log`,
-    preservando intactos os schemas das Fases 1–5 (confidence_score/manually_corrected)."""
+    """downgrade -4 (de head=0009) reverte 0009 + 0008 + 0007 + 0006: remove as tabelas
+    do modelo final, de pipeline E de regra E as 5 colunas write-ahead de `audit_log`,
+    preservando intactos os schemas das Fases 1–5 (confidence_score/manually_corrected).
+
+    NOTA: a 0009 (split_to_files) é o passo extra; descê-la primeiro mantém o alvo
+    do teste idêntico (remoção de TODA a automação)."""
     cfg = _make_config(db_url)
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-3")
+    command.downgrade(cfg, "-4")
 
     engine = create_engine(db_url)
     try:
@@ -289,9 +344,9 @@ def test_downgrade_remove_toda_a_automacao(db_url: str) -> None:
         "automation_rules", "rule_conditions",
     }
     sobrando = fase6 & tabelas
-    assert not sobrando, f"tabelas da Fase 6 não removidas no downgrade -3: {sobrando}"
+    assert not sobrando, f"tabelas da Fase 6 não removidas no downgrade -4: {sobrando}"
     assert not ({"status", "source_path", "dest_path", "run_id", "content_hash"} & cols_audit), (
-        "colunas write-ahead da Fase 6 não removidas no downgrade -3"
+        "colunas write-ahead da Fase 6 não removidas no downgrade -4"
     )
     # As colunas da Fase 5 permanecem.
     assert "confidence_score" in cols_cls

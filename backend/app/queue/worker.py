@@ -70,6 +70,9 @@ def _process_job_blocking(engine: Engine, *, original_hash: str, payload: str) -
     source_path = Path(data["source_path"])
     folder_id = data.get("folder_id")
     pages_per_block = data.get("pages_per_block")
+    # Opt-in de separação física na pasta (quick 260623-pzy). Default False
+    # preserva o comportamento atual de payloads legados (sem a chave).
+    split_to_files = data.get("split_to_files", False)
 
     with get_session(engine) as session:
         ingest_stage.process_ingest(
@@ -78,6 +81,7 @@ def _process_job_blocking(engine: Engine, *, original_hash: str, payload: str) -
             folder_id=folder_id,
             pages_per_block=pages_per_block,
             original_hash=original_hash,
+            split_to_files=split_to_files,
         )
 
 
