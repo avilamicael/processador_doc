@@ -103,7 +103,63 @@ http://localhost:8000
 Para **parar** o servidor, volte ao PowerShell e pressione **Ctrl+C**. Para subir
 de novo mais tarde, rode `.\instalar.ps1` outra vez (é seguro — idempotente).
 
-### 6. Atualizar para uma nova versão (`atualizar.ps1`)
+> O `instalar.ps1` mantém uma **janela do PowerShell aberta** com o servidor
+> rodando. Para que o sistema rode **sempre em background** (e suba sozinho no boot
+> do Windows), instale-o como **serviço Windows** — veja a próxima seção.
+
+### 6. Rodar sempre em background (serviço Windows) — recomendado em produção
+
+Em produção, o sistema **não deve depender de uma janela do PowerShell aberta**.
+Instale-o como **serviço Windows**: ele **inicia no boot** (antes do login),
+**reinicia sozinho** se cair e grava os **logs em arquivo** (com rotação).
+
+1. Abra o **PowerShell como Administrador** na pasta extraída (onde está
+   `servico.ps1`) e rode:
+
+   ```powershell
+   .\servico.ps1 instalar
+   ```
+
+   (se você não abriu como Administrador, o script **se auto-eleva** pedindo a
+   confirmação do **UAC**).
+
+O `instalar` do serviço cuida de tudo: garante o `nssm.exe`, prepara o ambiente
+Python acessível à conta do serviço, aplica o schema do banco e registra/inicia o
+serviço **`ProcessadorDocumentos`**. Ao final, faz uma **verificação de saúde** em
+`http://localhost:8000/health` — se algo falhar, ele **avisa** e mostra onde olhar.
+
+**Comandos de controle:**
+
+| Comando                    | O que faz                                       |
+| -------------------------- | ----------------------------------------------- |
+| `.\servico.ps1 status`     | mostra se o serviço está rodando                |
+| `.\servico.ps1 parar`      | para o serviço                                  |
+| `.\servico.ps1 iniciar`    | inicia o serviço                                |
+| `.\servico.ps1 reiniciar`  | reinicia o serviço                              |
+| `.\servico.ps1 logs`       | mostra onde estão os logs e as últimas linhas   |
+| `.\servico.ps1 remover`    | para e remove o serviço                         |
+
+**Onde ficam os logs do serviço** (com rotação automática quando crescem):
+
+```
+%ProgramData%\ProcessadorDocumentos\logs\service.out.log
+%ProgramData%\ProcessadorDocumentos\logs\service.err.log
+```
+
+> **AVISO — não rode duas instâncias.** Com o serviço instalado/rodando, **NÃO**
+> execute o `instalar.ps1` em primeiro plano: isso sobe uma **segunda instância**
+> na porta 8000 e causa conflito (porta ocupada + escrita concorrente no banco
+> SQLite). Em produção, use **apenas o serviço** (`servico.ps1`). O `instalar.ps1`
+> em primeiro plano serve só para teste rápido / desenvolvimento.
+
+> **Risco conhecido (raro).** O serviço roda como a conta do sistema
+> (**LocalSystem**). Em casos raros, o ambiente Python pode não ficar acessível a
+> essa conta — por isso o `servico.ps1 instalar` faz a **verificação de saúde** e
+> **avisa** com o caminho do `service.err.log` se algo falhar. Se a instalação do
+> serviço reportar falha de saúde, abra esse log para diagnóstico (ou rode
+> `.\servico.ps1 logs`).
+
+### 7. Atualizar para uma nova versão (`atualizar.ps1`)
 
 O atualizador funciona **sem Git e sem Node** e traz o frontend já buildado no
 pacote. Há dois modos:
@@ -254,6 +310,22 @@ cd ..
 ```
 
 Depois rode `.\instalar.ps1` (ele detecta o `dist` e pula o build).
+
+### O serviço não inicia / health-check falhou
+
+**Sintoma:** `.\servico.ps1 instalar` termina com aviso de falha na verificação de
+saúde, ou `.\servico.ps1 status` não mostra o serviço em execução.
+
+**Solução:** abra o log de erros do serviço e veja a causa:
+
+```powershell
+.\servico.ps1 logs
+```
+
+ou diretamente em `%ProgramData%\ProcessadorDocumentos\logs\service.err.log`. A
+causa mais provável é o ambiente Python não estar acessível à conta do serviço
+(**LocalSystem**) — reinstale com `.\servico.ps1 instalar` (como Administrador), que
+recria o ambiente a partir de um Python acessível ao sistema.
 
 ### Onde ficam os dados e os logs
 
