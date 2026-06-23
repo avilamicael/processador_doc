@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-23 - Modo startup (pasta Inicializar, pythonw invisivel) vira PADRAO do servico.ps1. VALIDADO AO VIVO na maquina piloto (instalar do WSL: .vbs criado, servidor invisivel, health 200). v0.1.6.
+Last activity: 2026-06-23 - Fix: path de pasta monitorada com aspas (Copiar como caminho do Windows) resolvia relativo ao backend (prefixo D: errado). strip_quotes no _normalize_path + teste. Validado ao vivo. v0.1.7.
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
