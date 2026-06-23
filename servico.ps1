@@ -51,6 +51,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Captura, NO CORPO do script, se -Modo foi passado explicitamente. Aqui
+# $PSBoundParameters reflete os parametros REAIS do script (dentro de uma funcao
+# ele e o da funcao, sempre vazio — origem do bug do Resolve-ModoInstalado).
+$script:ModoExplicito = $PSBoundParameters.ContainsKey('Modo')
+
 # --- Constantes (caminhos derivados de $PSScriptRoot — NUNCA do CWD, pois a -------
 # --- auto-elevacao muda o diretorio atual) ----------------------------------------
 $RepoRoot       = $PSScriptRoot
@@ -206,7 +211,7 @@ function Test-TaskExists {
 #   - senao, se a Tarefa existe -> 'tarefa'; senao se o Servico existe -> 'servico';
 #   - senao, o padrao 'tarefa'.
 function Resolve-ModoInstalado {
-    if ($PSBoundParameters.ContainsKey('Modo')) { return $Modo }
+    if ($script:ModoExplicito) { return $Modo }
     if (Test-TaskExists) { return 'tarefa' }
     if (Test-ServiceExists) { return 'servico' }
     return 'tarefa'
@@ -444,6 +449,26 @@ function Invoke-Instalar {
     }
 }
 
+# --- Log de execucao (transcript) por subcomando — FAIL-SOFT ----------------------
+# Cada execucao grava um log timestampado em $LogsDir (%ProgramData%\...\logs\).
+# Mesmo que a janela feche apos um erro, o log fica em disco e o caminho e impresso
+# no fim (sucesso OU erro). Se o Start-Transcript falhar, seguimos SEM log (o
+# logging NUNCA quebra o script).
+$ts      = Get-Date -Format 'yyyyMMdd-HHmmss'
+$cmdSlug = ($Comando.ToLower() -replace '[^a-z]','')
+if (-not $cmdSlug) { $cmdSlug = 'cmd' }
+$LogFile = Join-Path $LogsDir ("servico-" + $cmdSlug + "-" + $ts + ".log")
+$transcriptOn = $false
+try {
+    New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
+    Start-Transcript -Path $LogFile -Force | Out-Null
+    $transcriptOn = $true
+} catch {
+    Write-Aviso ("Nao foi possivel iniciar o log desta execucao (seguindo sem log): " + $_.Exception.Message)
+}
+
+try {
+
 # --- Roteador de subcomandos ------------------------------------------------------
 $cmd = $Comando.ToLower()
 
@@ -514,11 +539,24 @@ switch ($cmd) {
         Write-Host '    status      mostra o estado'
         Write-Host '    remover     para e remove'
         Write-Host '    logs        mostra os caminhos e as ultimas linhas dos logs'
+        Write-Host '    diagnostico gera um relatorio unico (sem segredos) p/ enviar ao suporte'
         Write-Host ''
         Write-Host '  Os subcomandos de controle detectam automaticamente o modo instalado.'
         Write-Host '  Exemplos: .\servico.ps1 instalar          (modo tarefa, padrao)'
         Write-Host '            .\servico.ps1 instalar -Modo servico'
         Write-Host '            .\servico.ps1 status'
-        exit 1
+        # `return` (em vez de `exit 1`) para o finally do transcript rodar e imprimir
+        # o caminho do log mesmo no caminho de uso invalido. Sinaliza o codigo de saida.
+        $global:LASTEXITCODE = 1
+        return
+    }
+}
+
+} finally {
+    # Caminho do log impresso DESTACADO (entra no proprio log antes de pararmos o
+    # transcript). Stop-Transcript e tolerante a falhas — nunca quebra o script.
+    if ($transcriptOn) {
+        Write-Host ("`nLog desta execucao: " + $LogFile + "`n") -ForegroundColor Cyan
+        try { Stop-Transcript | Out-Null } catch { }
     }
 }
