@@ -5,3 +5,6 @@ processador-doc-*.zip
 # servico.ps1/empacotar.ps1. Nunca versionado; entra SÓ no pacote de release.
 tools/nssm.exe
 nssm-*.zip
+
+# Artefatos locais do Playwright MCP (testes manuais)
+.playwright-mcp/
