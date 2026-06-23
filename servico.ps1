@@ -1,15 +1,29 @@
-﻿# servico.ps1 — Persistencia do Processador de Documentos no Windows (2 modos)
+﻿# servico.ps1 — Persistencia do Processador de Documentos no Windows (3 modos)
 #
-# Roda o backend (uvicorn) SEMPRE em background, de duas formas:
+# Roda o backend (uvicorn) SEMPRE em background, de tres formas:
 #
-#   MODO PADRAO  -> -Modo tarefa  (Tarefa Agendada no logon, como o usuario atual)
+#   MODO PADRAO -> -Modo startup  (.vbs na pasta Inicializar do Windows)
+#     - sobe sozinho a cada LOGON do usuario, INVISIVEL (sem janela/terminal)
+#     - roda como a propria conta do usuario (sem admin, sem API de tarefas)
+#     - escreve um ProcessadorDocumentos.vbs na pasta Inicializar (Startup) que
+#       chama pythonw.exe -> tools\iniciar-servidor.py (sem console)
+#     - logs em %LOCALAPPDATA%\ProcessadorDocumentos\logs\servidor.log
+#     - FOI a solucao que FUNCIONOU: nao exige registrar Tarefa numa sessao
+#       interativa (a Tarefa Agendada se mostrou fragil — clicar no script nao
+#       registra), nao exige admin, e nao deixa terminal aberto.
+#     LIMITACAO: so roda enquanto o usuario esta logado (nao antes do login,
+#     nem em servidor headless sem sessao).
+#
+#   MODO OPCIONAL -> -Modo tarefa  (Tarefa Agendada no logon, auto-restart)
 #     - sobe sozinho ao FAZER LOGON do usuario      -> trigger AtLogOn
 #     - reinicia sozinho se cair                     -> RestartCount/RestartInterval
 #     - roda como a propria conta do usuario (sem admin, sem senha de servico)
 #     - executa pythonw.exe -> tools\iniciar-servidor.py (sem console)
 #     - logs em %LOCALAPPDATA%\ProcessadorDocumentos\logs\servidor.log
-#     LIMITACAO: so roda enquanto o usuario esta logado (nao antes do login,
-#     nem em servidor headless sem sessao).
+#     POR QUE DEIXOU DE SER O PADRAO: o registro da Tarefa EXIGE uma sessao
+#     PowerShell ABERTA MANUALMENTE (duplo-clique nao registra) — fragil para o
+#     usuario final. Mantida por dar auto-restart pela Tarefa Agendada.
+#     LIMITACAO: so roda enquanto o usuario esta logado.
 #
 #   MODO AVANCADO -> -Modo servico (Servico Windows nativo via NSSM, LocalSystem)
 #     - inicia no boot (antes do login)              -> Start=SERVICE_AUTO_START
@@ -17,16 +31,19 @@
 #     - logs em %ProgramData%\ProcessadorDocumentos\logs\service.{out,err}.log
 #     PRE-REQUISITO: Python instalado para TODOS os usuarios (all-users). A conta
 #     LocalSystem NAO le o Python gerenciado pelo uv no perfil do usuario (ACL) —
-#     sem Python all-users o servico sobe e MORRE (Pegadinha 1). O modo tarefa
-#     (padrao) NAO tem essa exigencia.
+#     sem Python all-users o servico sobe e MORRE (Pegadinha 1). Os modos startup
+#     e tarefa NAO tem essa exigencia.
 #
-# Por que o padrao e a Tarefa: na maioria das instalacoes o `uv` instala o Python
-# no perfil do usuario e o venv (backend\.venv) aponta pra la; nao ha Python
-# all-users. A Tarefa roda como o dono do venv -> sem Pegadinha 1.
+# Por que o padrao e o startup: roda no logon SEM precisar registrar Tarefa numa
+# sessao interativa (o que travava o usuario), SEM admin e SEM janela. Na maioria
+# das instalacoes o `uv` instala o Python no perfil do usuario e o venv
+# (backend\.venv) aponta pra la; o .vbs roda como o dono do venv -> sem Pegadinha 1.
 #
-# EM PRODUCAO use SO UM modo de background por vez. NAO rode `instalar.ps1` em
-# primeiro plano enquanto a Tarefa/Servico estiver ativa — isso sobe uma SEGUNDA
-# instancia na porta 8000 (conflito de porta + escrita concorrente no SQLite).
+# EM PRODUCAO use SO UM modo de background por vez. NAO combine startup + tarefa +
+# servico, e NAO rode `instalar.ps1` em primeiro plano enquanto qualquer um estiver
+# ativo — isso sobe uma SEGUNDA instancia na porta 8000 (conflito de porta +
+# escrita concorrente no SQLite). A guarda de instancia unica do launcher
+# (tools\iniciar-servidor.py) atenua, mas a regra continua: UM modo por vez.
 #
 # Subcomandos (detectam automaticamente o modo instalado p/ controle):
 #   instalar    registra e inicia (alembic + registro + health-check falha-fechada)
@@ -47,7 +64,7 @@
 
 param(
     [Parameter(Position = 0)][string]$Comando = 'status',
-    [ValidateSet('tarefa','servico')][string]$Modo = 'tarefa'
+    [ValidateSet('startup','tarefa','servico')][string]$Modo = 'startup'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -81,6 +98,13 @@ $Launcher       = Join-Path $ToolsDir 'iniciar-servidor.py'
 $TaskName       = 'ProcessadorDocumentos-Servidor'
 $TaskLogsDir    = Join-Path $env:LOCALAPPDATA 'ProcessadorDocumentos\logs'
 $TaskLog        = Join-Path $TaskLogsDir 'servidor.log'
+
+# Modo startup (PADRAO) — .vbs na pasta Inicializar (Startup) do usuario.
+# Reusa $VenvPythonw + $Launcher + $BackendDir + $TaskLogsDir/$TaskLog (o launcher
+# loga no MESMO servidor.log do modo tarefa). O .vbs so contem CAMINHOS resolvidos
+# de $PSScriptRoot — NUNCA a chave da IA (lida pelo app de backend\.env via CWD).
+$StartupDir     = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
+$VbsFile        = Join-Path $StartupDir 'ProcessadorDocumentos.vbs'
 
 function Write-Passo($texto) { Write-Host "`n==> $texto" -ForegroundColor Cyan }
 function Write-Aviso($texto) { Write-Host "[AVISO] $texto" -ForegroundColor Yellow }
@@ -207,15 +231,42 @@ function Test-TaskExists {
     return $false
 }
 
+function Test-StartupExists {
+    if (Test-Path $VbsFile) { return $true }
+    return $false
+}
+
 # Resolve o modo efetivo para os subcomandos de CONTROLE:
 #   - se o usuario passou -Modo explicitamente, respeita;
-#   - senao, se a Tarefa existe -> 'tarefa'; senao se o Servico existe -> 'servico';
-#   - senao, o padrao 'tarefa'.
+#   - senao, se o .vbs da Startup existe -> 'startup'; senao se a Tarefa existe ->
+#     'tarefa'; senao se o Servico existe -> 'servico';
+#   - senao, o padrao 'startup'.
 function Resolve-ModoInstalado {
     if ($script:ModoExplicito) { return $Modo }
+    if (Test-StartupExists) { return 'startup' }
     if (Test-TaskExists) { return 'tarefa' }
     if (Test-ServiceExists) { return 'servico' }
-    return 'tarefa'
+    return 'startup'
+}
+
+# Helper compartilhado pelos subcomandos startup (parar/status/diagnostico):
+# retorna o PID que serve a 8000, ou $null. Primeiro via Get-NetTCPConnection
+# (OwningProcess); fallback: processo pythonw cujo CommandLine aponta para o
+# launcher. Robusto a ausencia (qualquer falha -> $null).
+function Get-ServidorPid {
+    try {
+        $conns = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+        if ($conns) {
+            $owning = ($conns | Select-Object -First 1).OwningProcess
+            if ($owning) { return [int]$owning }
+        }
+    } catch { }
+    try {
+        $procs = Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'" -ErrorAction SilentlyContinue |
+                    Where-Object { $_.CommandLine -like '*iniciar-servidor.py*' }
+        if ($procs) { return [int]($procs | Select-Object -First 1).ProcessId }
+    } catch { }
+    return $null
 }
 
 # --- Health-check compartilhado (falha-fechada) -----------------------------------
@@ -271,6 +322,7 @@ function Invoke-Diagnostico {
         'VenvPythonw' = $VenvPythonw
         'NssmExe'     = $NssmExe
         'Launcher'    = $Launcher
+        'VbsFile (startup)' = $VbsFile
         'backend\.env (existencia apenas)' = (Join-Path $BackendDir '.env')
     }
     foreach ($nome in $alvos.Keys) {
@@ -304,8 +356,16 @@ function Invoke-Diagnostico {
         } else { Add-Linha '(pyvenv.cfg ausente)' }
     } catch { Add-Linha ('(nao foi possivel ler pyvenv.cfg: ' + $_.Exception.Message + ')') }
 
-    # (e) Persistencia (Tarefa Agendada e Servico NSSM)
+    # (e) Persistencia (Startup .vbs, Tarefa Agendada e Servico NSSM)
     Add-Secao 'Persistencia'
+    try {
+        if (Test-StartupExists) {
+            Add-Linha ('Startup (.vbs): ' + $VbsFile)
+            $spid = Get-ServidorPid
+            if ($null -ne $spid) { Add-Linha ('  PID na porta 8000: ' + $spid) }
+            else { Add-Linha '  PID na porta 8000: (ninguem escutando)' }
+        } else { Add-Linha '(Modo startup nao instalado — .vbs ausente)' }
+    } catch { Add-Linha ('(nao foi possivel coletar o startup: ' + $_.Exception.Message + ')') }
     try {
         if (Test-TaskExists) {
             $t    = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
@@ -372,7 +432,162 @@ function Invoke-Diagnostico {
 }
 
 # ==================================================================================
-# MODO TAREFA (padrao) — Tarefa Agendada no logon, como o usuario atual
+# MODO STARTUP (PADRAO) — .vbs na pasta Inicializar (Startup), invisivel, sem admin
+# ==================================================================================
+# Escreve um ProcessadorDocumentos.vbs na pasta Inicializar do usuario. No logon, o
+# Windows roda o .vbs, que chama pythonw.exe (sem console) -> tools\iniciar-servidor.py.
+# Resultado: servidor de pe, INVISIVEL, sem janela/terminal, sem admin, sem a API de
+# Tarefas Agendadas (que se mostrou fragil para o usuario). A guarda de instancia
+# unica do launcher evita 2a instancia se algo ja estiver de pe.
+function Invoke-InstalarStartup {
+    # (a) ambiente Python (NAO exige admin)
+    Ensure-Venv
+
+    # (b) o launcher roda via pythonw.exe (sem console)
+    if (-not (Test-Path $VenvPythonw)) {
+        throw "pythonw.exe do venv nao encontrado em backend\.venv\Scripts. O modo startup nao pode ser instalado."
+    }
+    if (-not (Test-Path $Launcher)) {
+        throw "Launcher ausente: tools\iniciar-servidor.py. O pacote PRECISA do launcher do modo startup."
+    }
+
+    # (c) ALEMBIC FALHA-FECHADA (de dentro de backend\ — alembic procura alembic.ini
+    # no CWD; o servidor NAO roda alembic). Mesmo padrao dos demais modos.
+    Write-Passo 'Aplicando o schema do banco (alembic upgrade head)'
+    Push-Location $BackendDir
+    try {
+        & uv run alembic upgrade head
+        if ($LASTEXITCODE -ne 0) {
+            throw "alembic upgrade head falhou (codigo $LASTEXITCODE). Schema NAO aplicado; abortando antes de instalar o startup."
+        }
+    } finally {
+        Pop-Location
+    }
+    Write-Ok 'Schema do banco atualizado'
+
+    # (d) pastas: logs (servidor.log) e a propria pasta Inicializar
+    New-Item -ItemType Directory -Force -Path $TaskLogsDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $StartupDir | Out-Null
+
+    # (e) ESCREVER o .vbs com CAMINHOS RESOLVIDOS de $PSScriptRoot (NUNCA hardcoded,
+    # NUNCA a chave da IA). O wscript le ASCII/ANSI — sem BOM (e .vbs, nao .ps1).
+    # Em VBScript, aspas dentro de string sao duplicadas (""). O alvo literal e:
+    #   sh.Run """<pythonw>"" ""<launcher>""", 0, False
+    # Montado por concatenacao explicita (aspas " escapadas como "" em PowerShell):
+    Write-Passo 'Escrevendo o ProcessadorDocumentos.vbs na pasta Inicializar'
+    $runLinha = 'sh.Run """' + $VenvPythonw + '"" ""' + $Launcher + '""", 0, False'
+    $linhasVbs = @(
+        'Set sh = CreateObject("WScript.Shell")',
+        ('sh.CurrentDirectory = "' + $BackendDir + '"'),
+        $runLinha
+    )
+    Set-Content -Path $VbsFile -Encoding ASCII -Value $linhasVbs
+    if (-not (Test-Path $VbsFile)) {
+        throw "Nao foi possivel escrever o .vbs em $VbsFile."
+    }
+    Write-Ok "Inicializacao automatica configurada: $VbsFile"
+
+    # (f) INICIAR agora (sem esperar o proximo logon). O .vbs sobe pythonw invisivel;
+    # a guarda do launcher impede uma 2a instancia se algo ja estiver de pe.
+    Write-Passo 'Iniciando o servidor agora (invisivel, sem janela)'
+    Start-Process -FilePath 'wscript.exe' -ArgumentList ('"' + $VbsFile + '"')
+
+    # (g) HEALTH-CHECK FALHA-FECHADA.
+    Write-Passo 'Verificando a saude do servidor (/health)'
+    if (Test-Health) {
+        Write-Ok 'Servidor saudavel.'
+        Write-Host ''
+        Write-Host '    NAO foi aberta nenhuma janela/terminal — o servidor roda invisivel.' -ForegroundColor Green
+        Write-Host '    Ele sobe sozinho a cada logon do usuario.' -ForegroundColor Green
+        Write-Host '    Abra http://localhost:8000 no navegador quando quiser.' -ForegroundColor Green
+        Write-Host '    Controle: .\servico.ps1 status | parar | iniciar | reiniciar | logs | remover' -ForegroundColor Green
+        Write-Host ''
+    } else {
+        Write-Aviso 'O servidor NAO ficou saudavel em ~30s.'
+        Write-Aviso "Veja o log: $TaskLog"
+        if (Test-Path $TaskLog) {
+            Write-Host '----- ultimas linhas de servidor.log -----' -ForegroundColor Yellow
+            Get-Content -Tail 30 $TaskLog
+            Write-Host '------------------------------------------' -ForegroundColor Yellow
+        }
+        throw "Instalacao do modo startup falhou no health-check. Diagnostique pelo servidor.log acima."
+    }
+}
+
+function Invoke-IniciarStartup {
+    $conns = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+    if ($conns) {
+        Write-Aviso 'Ja ha um servidor escutando na porta 8000 — nada a fazer.'
+        return
+    }
+    if (-not (Test-Path $VbsFile)) {
+        Write-Aviso "O .vbs de inicializacao nao existe ($VbsFile). Rode: .\servico.ps1 instalar"
+        return
+    }
+    Start-Process -FilePath 'wscript.exe' -ArgumentList ('"' + $VbsFile + '"')
+    Write-Ok 'Servidor iniciado (invisivel, sem janela).'
+}
+
+function Invoke-PararStartup {
+    $servidorPid = Get-ServidorPid
+    if ($null -ne $servidorPid) {
+        Stop-Process -Id $servidorPid -Force
+        Write-Ok "Servidor (PID $servidorPid) na porta 8000 encerrado."
+    } else {
+        Write-Aviso 'Nenhum servidor escutando na porta 8000.'
+    }
+}
+
+function Invoke-ReiniciarStartup {
+    Invoke-PararStartup
+    Start-Sleep -Seconds 1
+    Invoke-IniciarStartup
+    Write-Ok 'Servidor reiniciado.'
+}
+
+function Invoke-StatusStartup {
+    Write-Passo 'Status do modo startup (.vbs na pasta Inicializar)'
+    if (Test-StartupExists) { Write-Host ("  .vbs de inicializacao: presente -> " + $VbsFile) }
+    else { Write-Aviso "  .vbs de inicializacao: AUSENTE ($VbsFile) — modo startup nao instalado." }
+    $conns = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+    if ($conns) {
+        foreach ($c in $conns) { Write-Host ("  Porta 8000: LISTEN (OwningProcess " + $c.OwningProcess + ")") }
+    } else {
+        Write-Host '  Porta 8000: ninguem escutando.'
+    }
+    Write-Passo 'Verificando /health'
+    try {
+        $resp = Invoke-WebRequest -Uri $HealthUrl -UseBasicParsing -TimeoutSec 3
+        if ($resp.StatusCode -eq 200) { Write-Ok 'Servidor respondendo em /health (200).' }
+    } catch {
+        Write-Aviso 'Servidor NAO respondeu em /health (pode estar parado ou subindo).'
+    }
+}
+
+function Invoke-RemoverStartup {
+    Invoke-PararStartup
+    Remove-Item $VbsFile -Force -ErrorAction SilentlyContinue
+    if (Test-Path $VbsFile) {
+        Write-Aviso "Nao foi possivel remover $VbsFile."
+    } else {
+        Write-Ok "Inicializacao automatica removida ($VbsFile)."
+    }
+}
+
+function Invoke-LogsStartup {
+    # NUNCA expoe a chave da IA — so o servidor.log do uvicorn (mesmo do modo tarefa).
+    Write-Passo 'Logs do servidor (modo startup)'
+    Write-Host "  log: $TaskLog"
+    if (Test-Path $TaskLog) {
+        Write-Passo 'Ultimas linhas de servidor.log'
+        Get-Content -Tail 40 $TaskLog
+    } else {
+        Write-Aviso 'servidor.log ainda nao existe.'
+    }
+}
+
+# ==================================================================================
+# MODO TAREFA (opcional) — Tarefa Agendada no logon, como o usuario atual
 # ==================================================================================
 function Invoke-InstalarTarefa {
     # (a) ambiente Python (NAO exige admin)
@@ -620,7 +835,9 @@ try {
 $cmd = $Comando.ToLower()
 
 if ($cmd -eq 'instalar') {
-    if ($Modo -eq 'servico') { Invoke-Instalar } else { Invoke-InstalarTarefa }
+    if     ($Modo -eq 'servico') { Invoke-Instalar }
+    elseif ($Modo -eq 'tarefa')  { Invoke-InstalarTarefa }
+    else                          { Invoke-InstalarStartup }
     return
 }
 
@@ -665,7 +882,7 @@ switch ($cmd) {
                     else { Write-Aviso 'service.err.log ainda nao existe.' }
                 }
             }
-        } else {
+        } elseif ($modoEfetivo -eq 'tarefa') {
             # --- modo tarefa (Tarefa Agendada) ---
             switch ($cmd) {
                 'iniciar'   { Invoke-IniciarTarefa }
@@ -675,16 +892,32 @@ switch ($cmd) {
                 'remover'   { Invoke-RemoverTarefa }
                 'logs'      { Invoke-LogsTarefa }
             }
+        } else {
+            # --- modo startup (.vbs na pasta Inicializar) — PADRAO ---
+            switch ($cmd) {
+                'iniciar'   { Invoke-IniciarStartup }
+                'parar'     { Invoke-PararStartup }
+                'reiniciar' { Invoke-ReiniciarStartup }
+                'status'    { Invoke-StatusStartup }
+                'remover'   { Invoke-RemoverStartup }
+                'logs'      { Invoke-LogsStartup }
+            }
         }
     }
     default {
-        Write-Host "Uso: .\servico.ps1 <subcomando> [-Modo tarefa|servico]" -ForegroundColor Cyan
+        Write-Host "Uso: .\servico.ps1 <subcomando> [-Modo startup|tarefa|servico]" -ForegroundColor Cyan
         Write-Host ''
         Write-Host '  Modos de background:' -ForegroundColor Cyan
-        Write-Host '    -Modo tarefa   (PADRAO) Tarefa Agendada no logon, como o usuario; sem admin.'
+        Write-Host '    -Modo startup  (PADRAO) .vbs na pasta Inicializar; sobe no logon, INVISIVEL'
+        Write-Host '                   (sem janela/terminal), sem admin. Recomendado.'
         Write-Host '                   Limitacao: so roda enquanto o usuario esta logado.'
+        Write-Host '    -Modo tarefa   Tarefa Agendada no logon (auto-restart). EXIGE registrar numa'
+        Write-Host '                   sessao PowerShell interativa (duplo-clique nao registra).'
         Write-Host '    -Modo servico  Servico Windows (NSSM/LocalSystem); inicia no boot.'
         Write-Host '                   EXIGE Python all-users (senao falha — Pegadinha 1); auto-eleva (UAC).'
+        Write-Host ''
+        Write-Host '  AVISO: use SO UM modo por vez. Combinar startup + tarefa + servico sobe' -ForegroundColor Yellow
+        Write-Host '         2a instancia na porta 8000 (conflito + SQLite single-writer).' -ForegroundColor Yellow
         Write-Host ''
         Write-Host '  Subcomandos:' -ForegroundColor Cyan
         Write-Host '    instalar    registra e inicia (alembic + registro + health-check)'
@@ -697,7 +930,8 @@ switch ($cmd) {
         Write-Host '    diagnostico gera um relatorio unico (sem segredos) p/ enviar ao suporte'
         Write-Host ''
         Write-Host '  Os subcomandos de controle detectam automaticamente o modo instalado.'
-        Write-Host '  Exemplos: .\servico.ps1 instalar          (modo tarefa, padrao)'
+        Write-Host '  Exemplos: .\servico.ps1 instalar          (modo startup, padrao)'
+        Write-Host '            .\servico.ps1 instalar -Modo tarefa'
         Write-Host '            .\servico.ps1 instalar -Modo servico'
         Write-Host '            .\servico.ps1 status'
         # `return` (em vez de `exit 1`) para o finally do transcript rodar e imprimir
