@@ -598,7 +598,6 @@ function ReviewThresholdField() {
 function IntegracoesTab() {
   return (
     <div>
-      <SoonBanner />
       <div style={{ marginBottom: 18 }}>
         <h2 className="sec-title">Integrações</h2>
         <p className="sec-desc">Destinos e serviços conectados para onde os documentos tratados são enviados.</p>
@@ -611,7 +610,7 @@ function IntegracoesTab() {
               <div className="integ-name">{i.name}</div>
               <div className="integ-cat">{i.cat}</div>
             </div>
-            <span className={i.on ? 'badge badge-ok' : 'badge badge-off'}>{i.on ? 'Conectado' : 'Desconectado'}</span>
+            <span className="badge badge-off">Indisponível</span>
           </div>
         ))}
       </div>

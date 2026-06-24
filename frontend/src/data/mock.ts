@@ -15,9 +15,7 @@ export const RULES: Rule[] = [
 
 export const INTEGRATIONS: Integration[] = [
   { id: 1, name: 'Google Drive', cat: 'Armazenamento', mono: 'GD', on: true },
-  { id: 2, name: 'SharePoint', cat: 'Armazenamento', mono: 'SP', on: true },
   { id: 3, name: 'Amazon S3', cat: 'Armazenamento', mono: 'S3', on: false },
-  { id: 4, name: 'ERP Omie', cat: 'Gestão', mono: 'OM', on: true },
   { id: 5, name: 'Webhook', cat: 'Integração', mono: '{}', on: true },
   { id: 6, name: 'E-mail (SMTP)', cat: 'Notificação', mono: '@', on: true },
 ]
