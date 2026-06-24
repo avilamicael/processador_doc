@@ -350,3 +350,11 @@ export interface AttentionList {
 export interface ReviewThreshold {
   threshold: number
 }
+
+// --- Status do watcher (GET /watcher/status — quick 260624-far) ---
+// Estado REAL exibido na Sidebar (substitui o hardcode "4 pastas · varredura há 2 min").
+export interface WatcherStatus {
+  active: boolean
+  active_folder_count: number
+  last_scan_at: string | null
+}

@@ -35,6 +35,7 @@ Interface pública: `run_watcher`, `scan_and_enqueue`, `active_folder_paths`.
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import Engine, select
@@ -54,6 +55,23 @@ logger = logging.getLogger(__name__)
 # Intervalo do supervisor: de quanto em quanto tempo o watcher relê as pastas
 # ativas do DB para detectar reconfiguração (add/remove/ativar pasta — A5).
 _SUPERVISOR_INTERVAL_SECONDS = 5.0
+
+# Timestamp (UTC) da ÚLTIMA varredura concluída — atualizado ao final de
+# `scan_and_enqueue` (startup, /rescan e watcher passam por lá). Mantido como
+# estado de MÓDULO (não no app.state) para preservar o desacoplamento atual entre
+# o watcher e o FastAPI app: `scan_and_enqueue` recebe só o `engine`. A API de
+# status (`GET /watcher/status`) lê via `get_last_scan_at()`. `None` = nunca
+# varreu (quick 260624-far).
+LAST_SCAN_AT: datetime | None = None
+
+
+def get_last_scan_at() -> datetime | None:
+    """Retorna o timestamp (UTC) da última varredura concluída, ou None se nenhuma.
+
+    Acessor público do estado de módulo `LAST_SCAN_AT` — consumido pela API de
+    status do watcher sem acoplar o watcher ao app FastAPI.
+    """
+    return LAST_SCAN_AT
 
 
 def active_folder_paths(session: Session) -> dict[Path, WatchedFolder]:
@@ -196,6 +214,11 @@ async def scan_and_enqueue(engine: Engine, paths: list[Path]) -> int:
                 folder.split_to_files,
             ):
                 enqueued += 1
+
+    # Marca a última varredura concluída (mesmo quando 0 candidatos) — alimenta o
+    # GET /watcher/status / Sidebar (quick 260624-far).
+    global LAST_SCAN_AT  # noqa: PLW0603 — estado de módulo deliberado (ver topo)
+    LAST_SCAN_AT = datetime.now(UTC)
     return enqueued
 
 

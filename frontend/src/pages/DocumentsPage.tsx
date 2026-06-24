@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { DocState, StatusFilter } from '../types'
 import { Icon } from '../components/Icon'
 import { StatusPill } from '../components/StatusPill'
-import { useDocuments, useDuplicatesCount, useRescan } from '../hooks/useDocuments'
+import { useDeleteDocuments, useDocuments, useDuplicatesCount, useRescan } from '../hooks/useDocuments'
 import { getDocumentDetail } from '../lib/api'
 
 interface DocumentsPageProps {
@@ -13,6 +13,8 @@ interface DocumentsPageProps {
   selected: number[]
   onToggleSel: (id: number) => void
   onToggleAll: (ids: number[]) => void
+  // Limpa a seleção no App (vive lá) — chamado no sucesso da remoção.
+  onClearSel: () => void
 }
 
 // Stat-cards: estados de domínio reais (UI-SPEC). Cada card lê um count da API e
@@ -54,14 +56,26 @@ function formatDate(iso: string): string {
   })
 }
 
-export function DocumentsPage({ search, status, onStatus, selected, onToggleSel, onToggleAll }: DocumentsPageProps) {
+export function DocumentsPage({ search, status, onStatus, selected, onToggleSel, onToggleAll, onClearSel }: DocumentsPageProps) {
   const docsQuery = useDocuments()
   const dupQuery = useDuplicatesCount()
   const rescan = useRescan()
+  const deleteDocs = useDeleteDocuments()
 
   // S4 — detalhe de classificação somente leitura (TPL-03/04). Abre num modal ao
   // clicar no nome do arquivo; busca GET /documents/{id} sob demanda.
   const [openDocId, setOpenDocId] = useState<number | null>(null)
+  // Confirmação destrutiva da remoção em lote (só registro — nunca o arquivo).
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const confirmRemove = () => {
+    deleteDocs.mutate(selected, {
+      onSuccess: () => {
+        onClearSel()
+        setConfirmDelete(false)
+      },
+    })
+  }
 
   const data = docsQuery.data
   const items = data?.items ?? []
@@ -131,6 +145,20 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
             ))}
           </div>
           <div className="spacer" />
+          {selected.length > 0 && (
+            <button
+              className="btn-primary"
+              style={{ background: 'var(--st-erro)' }}
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleteDocs.isPending}
+              title="Remover os documentos selecionados da lista (não apaga arquivos)"
+            >
+              <Icon name="trash" size={15} />
+              {deleteDocs.isPending
+                ? 'Removendo…'
+                : `Remover (${selected.length})`}
+            </button>
+          )}
           <button
             className="btn-primary"
             onClick={() => rescan.mutate()}
@@ -286,6 +314,51 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
       {/* S4 — Detalhe de classificação somente leitura (TPL-03/04) */}
       {openDocId != null && (
         <DocumentDetailModal docId={openDocId} onClose={() => setOpenDocId(null)} />
+      )}
+
+      {/* Confirmação destrutiva da remoção em lote — reforça que NENHUM arquivo é
+          apagado/movido (constraint forte do projeto). Reusa o padrão do modal de
+          remoção da PastasTab (overlay fixed + card). */}
+      {confirmDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+        >
+          <div className="card" style={{ padding: 22, maxWidth: 460, width: '90%' }}>
+            <h3 className="sec-title" style={{ fontSize: 15, marginBottom: 10 }}>
+              Remover {selected.length} {selected.length === 1 ? 'documento' : 'documentos'} da lista?
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 18px' }}>
+              Isto remove apenas o registro no aplicativo — os arquivos originais{' '}
+              <b>NÃO são apagados nem movidos</b>. Se um arquivo ainda estiver numa pasta
+              monitorada, ele pode ser reprocessado numa próxima varredura.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                className="btn-ghost"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleteDocs.isPending}
+              >
+                Manter
+              </button>
+              <button
+                className="btn-primary"
+                style={{ background: 'var(--st-erro)' }}
+                onClick={confirmRemove}
+                disabled={deleteDocs.isPending}
+              >
+                {deleteDocs.isPending ? 'Removendo…' : 'Remover'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

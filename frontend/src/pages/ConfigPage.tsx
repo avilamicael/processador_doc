@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { useEffect, useState } from 'react'
 import { INTEGRATIONS, RULES } from '../data/mock'
 import type { ConfigTab, Folder } from '../types'
@@ -24,12 +25,36 @@ interface ConfigPageProps {
   onToggleDenoise: () => void
 }
 
-const TABS: { key: ConfigTab; label: string }[] = [
+// `soon` = aba ainda não funcional (v2): mostra uma badge "em breve" discreta.
+// A aba continua clicável — abre o conteúdo desabilitado com o aviso.
+const TABS: { key: ConfigTab; label: string; soon?: boolean }[] = [
   { key: 'pastas', label: 'Pastas monitoradas' },
-  { key: 'regras', label: 'Regras de separação' },
+  { key: 'regras', label: 'Regras de separação', soon: true },
   { key: 'leitura', label: 'Leitura de dados' },
-  { key: 'integracoes', label: 'Integrações' },
+  { key: 'integracoes', label: 'Integrações', soon: true },
 ]
+
+// Aviso destacado de funcionalidade adiada para a versão 2.
+function SoonBanner() {
+  return (
+    <div
+      className="card"
+      style={{
+        padding: '12px 16px',
+        marginBottom: 16,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        borderLeft: '3px solid var(--st-leitura)',
+      }}
+    >
+      <Icon name="alert" size={16} stroke="var(--st-leitura)" />
+      <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
+        Em breve — disponível na versão 2.
+      </span>
+    </div>
+  )
+}
 
 export function ConfigPage(props: ConfigPageProps) {
   const { tab, onTab } = props
@@ -39,6 +64,11 @@ export function ConfigPage(props: ConfigPageProps) {
         {TABS.map((t) => (
           <button key={t.key} className={tab === t.key ? 'tab active' : 'tab'} onClick={() => onTab(t.key)}>
             {t.label}
+            {t.soon && (
+              <span className="badge badge-off" style={{ marginLeft: 8, fontSize: 10 }}>
+                em breve
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -346,9 +376,10 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
   )
 }
 
-function RegrasTab({ ruleState, onToggleRule }: ConfigPageProps) {
+function RegrasTab({ ruleState }: ConfigPageProps) {
   return (
     <div>
+      <SoonBanner />
       <div className="sec-head">
         <div className="sec-head-col">
           <h2 className="sec-title">Regras de separação</h2>
@@ -356,9 +387,13 @@ function RegrasTab({ ruleState, onToggleRule }: ConfigPageProps) {
             Definem como um PDF de várias páginas é dividido em documentos individuais antes da leitura. Aplicadas em ordem de prioridade.
           </p>
         </div>
-        <button className="btn-primary"><Icon name="plus" size={15} />Nova regra</button>
+        <button className="btn-primary" disabled title="em breve">
+          <Icon name="plus" size={15} />Nova regra
+        </button>
       </div>
-      <div className="stack">
+      {/* Conteúdo esmaecido e não-interativo (Switch não aceita disabled, então
+          envolvemos num container com pointer-events:none + opacity). */}
+      <div className="stack" style={{ opacity: 0.5, pointerEvents: 'none' }}>
         {RULES.map((r) => {
           const on = !!ruleState[r.id]
           return (
@@ -370,7 +405,7 @@ function RegrasTab({ ruleState, onToggleRule }: ConfigPageProps) {
                 </div>
                 <p className="rule-desc">{r.desc}</p>
               </div>
-              <Switch on={on} onToggle={() => onToggleRule(r.id)} title="Ativar/desativar regra" />
+              <Switch on={on} onToggle={() => {}} title="em breve" />
             </div>
           )
         })}
@@ -379,39 +414,61 @@ function RegrasTab({ ruleState, onToggleRule }: ConfigPageProps) {
   )
 }
 
-function LeituraTab({ deskew, onToggleDeskew, denoise, onToggleDenoise }: ConfigPageProps) {
+// Tag discreta "em breve" ao lado de um controle mock desabilitado.
+function SoonTag() {
+  return (
+    <span className="badge badge-off" style={{ marginLeft: 8, fontSize: 10 }}>
+      em breve
+    </span>
+  )
+}
+
+function LeituraTab({ deskew, denoise }: ConfigPageProps) {
+  // Controles mock desabilitados (OCR/idioma/slider/deskew/denoise) — esmaecidos
+  // e não-interativos. O Limiar de confiança (ReviewThresholdField) permanece
+  // 100% FUNCIONAL (salva na API) e NÃO é tocado aqui.
+  const mutedRow: CSSProperties = { opacity: 0.5 }
   return (
     <div className="read-card">
       <h2 className="sec-title">Leitura e extração de dados</h2>
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div className="read-row">
+        <div className="read-row" style={mutedRow}>
           <div>
-            <div className="read-label">Motor de OCR</div>
+            <div className="read-label">
+              Motor de OCR
+              <SoonTag />
+            </div>
             <div className="read-hint">Engine usado quando o PDF não possui texto nativo</div>
           </div>
-          <select className="select" defaultValue="Tesseract 5">
+          <select className="select" defaultValue="Tesseract 5" disabled title="em breve">
             <option>Tesseract 5</option>
             <option>Google Cloud Vision</option>
             <option>AWS Textract</option>
           </select>
         </div>
-        <div className="read-row">
+        <div className="read-row" style={mutedRow}>
           <div>
-            <div className="read-label">Idioma principal</div>
+            <div className="read-label">
+              Idioma principal
+              <SoonTag />
+            </div>
             <div className="read-hint">Dicionário usado na correção de leitura</div>
           </div>
-          <select className="select" defaultValue="Português (BR)">
+          <select className="select" defaultValue="Português (BR)" disabled title="em breve">
             <option>Português (BR)</option>
             <option>Inglês</option>
             <option>Espanhol</option>
           </select>
         </div>
-        <div className="read-row">
+        <div className="read-row" style={mutedRow}>
           <div>
-            <div className="read-label">Confiança mínima</div>
+            <div className="read-label">
+              Confiança mínima
+              <SoonTag />
+            </div>
             <div className="read-hint">Abaixo deste valor o campo é marcado para revisão manual</div>
           </div>
-          <div className="slider-wrap">
+          <div className="slider-wrap" style={{ pointerEvents: 'none' }}>
             <div className="slider-track">
               <div className="slider-fill" style={{ width: '85%' }} />
               <div className="slider-knob" style={{ left: '85%' }} />
@@ -419,23 +476,34 @@ function LeituraTab({ deskew, onToggleDeskew, denoise, onToggleDenoise }: Config
             <span className="slider-val">85%</span>
           </div>
         </div>
-        <div className="read-row">
+        <div className="read-row" style={mutedRow}>
           <div>
-            <div className="read-label">Corrigir inclinação (deskew)</div>
+            <div className="read-label">
+              Corrigir inclinação (deskew)
+              <SoonTag />
+            </div>
             <div className="read-hint">Endireita páginas digitalizadas antes do OCR</div>
           </div>
-          <Switch on={deskew} onToggle={onToggleDeskew} />
+          <span style={{ pointerEvents: 'none' }}>
+            <Switch on={deskew} onToggle={() => {}} title="em breve" />
+          </span>
         </div>
-        <div className="read-row">
+        <div className="read-row" style={mutedRow}>
           <div>
-            <div className="read-label">Remoção de ruído</div>
+            <div className="read-label">
+              Remoção de ruído
+              <SoonTag />
+            </div>
             <div className="read-hint">Limpa manchas e pontos de digitalizações antigas</div>
           </div>
-          <Switch on={denoise} onToggle={onToggleDenoise} />
+          <span style={{ pointerEvents: 'none' }}>
+            <Switch on={denoise} onToggle={() => {}} title="em breve" />
+          </span>
         </div>
       </div>
 
-      {/* S6 — Limiar de confiança (D-03): lê/salva /config/review-threshold */}
+      {/* S6 — Limiar de confiança (D-03): lê/salva /config/review-threshold.
+          PERMANECE FUNCIONAL — não é mock. */}
       <ReviewThresholdField />
     </div>
   )
@@ -530,11 +598,12 @@ function ReviewThresholdField() {
 function IntegracoesTab() {
   return (
     <div>
+      <SoonBanner />
       <div style={{ marginBottom: 18 }}>
         <h2 className="sec-title">Integrações</h2>
         <p className="sec-desc">Destinos e serviços conectados para onde os documentos tratados são enviados.</p>
       </div>
-      <div className="integ-grid">
+      <div className="integ-grid" style={{ opacity: 0.5, pointerEvents: 'none' }}>
         {INTEGRATIONS.map((i) => (
           <div key={i.id} className="card integ-card">
             <div className="integ-mono">{i.mono}</div>

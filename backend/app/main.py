@@ -30,6 +30,7 @@ from app.api import config as config_api
 from app.api import documents as documents_api
 from app.api import templates as templates_api
 from app.api import watched_folders as watched_folders_api
+from app.api import watcher_status as watcher_status_api
 from app.config import ensure_data_dir, get_settings
 from app.ingest.watcher import run_watcher
 from app.queue.worker import run_worker
@@ -94,6 +95,7 @@ app.include_router(documents_api.router)
 app.include_router(templates_api.router)
 app.include_router(config_api.router)
 app.include_router(automations_api.router)
+app.include_router(watcher_status_api.router)
 
 
 @app.get("/health")
