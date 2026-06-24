@@ -26,6 +26,11 @@ Garantias materializadas:
 - **Bloqueio → revisão (D-07):** token referenciando campo faltante/inválido (ou
   destino que escaparia da raiz-base, V4) → `resolve_*` devolve None →
   `transition(EM_REVISAO)` SEM tocar o disco e SEM AuditLog de operação.
+- **Raiz/anchor inexistente (D-05, Fase 9):** quando o destino resolvido (ABSOLUTO,
+  ex.: `Z:\\...`) tem um anchor (drive/UNC) que NÃO existe, o documento é bloqueado
+  (rebaixado para revisão no apply; `blocked=True` no dry-run) ANTES de qualquer
+  `mkdir`/materialize — NUNCA se tenta criar a unidade. As SUBPASTAS sob um anchor
+  existente continuam sendo criadas pelo fileops (`mkdir(parents=True)`).
 - **No-match (D-25):** nenhuma automação casou → NO-OP explícito (doc mantido na
   origem, SEM transição, SEM disco).
 - **Duplicata idêntica (D-10):** destino já contém o mesmo conteúdo → conclui sem mover.
@@ -38,7 +43,7 @@ Interface pública: `apply_stage`, `dry_run`, `reconcile_orphans`, `ApplyStageRe
 import json
 import logging
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -361,6 +366,44 @@ def _copy_dest(source: Path, copy) -> Path:
     return copy.folder / name
 
 
+def _anchor_missing(dest: Path) -> bool:
+    """True se o destino tem um anchor (drive/UNC raiz) que NÃO existe no disco (D-05).
+
+    Extrai o anchor com semântica Windows (`PureWindowsPath().anchor` cobre `C:\\` e
+    `\\\\srv\\share\\`) e cai no `Path().anchor` (POSIX). Se houver anchor e ele não
+    existir → o destino é inalcançável (não tentar criar a unidade). Sem anchor
+    (caminho relativo) → False (as subpastas serão criadas normalmente). NÃO loga o
+    caminho (só metadados — V7/V9).
+    """
+    text = str(dest)
+    win = PureWindowsPath(text)
+    # Só usar o anchor Windows quando o destino é DE FATO Windows-absoluto (tem
+    # drive/UNC) — senão um caminho POSIX como "/tmp/x" daria anchor '\\' espúrio
+    # (PureWindowsPath lê o leading "/" como raiz vazia). Para POSIX, usar Path().
+    if win.drive:
+        anchor = win.anchor
+    else:
+        anchor = Path(text).anchor
+    if not anchor:
+        return False
+    return not Path(anchor).exists()
+
+
+def _plan_anchor_missing(source: Path, plan: AutomationPlan) -> bool:
+    """True se QUALQUER saída do plano (move OU cópia) tem anchor inexistente (D-05).
+
+    Verifica o destino do move e o de cada `PlannedCopy`. Se um único anchor não
+    existir → tudo é bloqueado (consistente: nada materializa). Só faz sentido quando
+    o plano casou e não está bloqueado.
+    """
+    if _anchor_missing(_plan_dest(source, plan)):
+        return True
+    for planned_copy in plan.copies:
+        if _anchor_missing(_copy_dest(source, planned_copy)):
+            return True
+    return False
+
+
 def _has_done(session: Session, document_id: int) -> bool:
     """True se já existe um AuditLog(status="done") para o doc (idempotência)."""
     existing = session.scalar(
@@ -410,6 +453,21 @@ def dry_run(session: Session, *, content_hash: str) -> ApplyStageResult | None:
             collision=False,
             skipped_identical=False,
             no_match=True,
+        )
+
+    # Raiz/anchor inexistente (D-05): destino absoluto cujo drive/UNC não existe →
+    # bloqueio. NÃO cria a unidade. Avisado no preview (sem tocar o disco).
+    if _plan_anchor_missing(source, plan):
+        logger.info("Documento %s: anchor inexistente no destino (D-05) — bloqueado", doc.id)
+        return ApplyStageResult(
+            document_id=doc.id,
+            source_path=str(source),
+            dest_path=None,
+            materialized=False,
+            blocked=True,
+            collision=False,
+            skipped_identical=False,
+            automation_id=plan.automation_id,
         )
 
     def _preview_collision(dst: Path) -> tuple[Path, bool, bool]:
@@ -565,6 +623,29 @@ async def apply_stage(
             collision=False,
             skipped_identical=False,
             no_match=True,
+        )
+
+    # (3c) Raiz/anchor inexistente (D-05): destino absoluto cujo drive/UNC não existe
+    # → revisão SEM tocar o disco e SEM AuditLog (mesma postura do blocked D-07).
+    # Checado ANTES do write-ahead/mkdir — NUNCA se tenta criar a unidade.
+    if _plan_anchor_missing(source, plan):
+        if doc.state == DocState.PROCESSANDO:
+            transition(
+                session, doc, DocState.EM_REVISAO, completed_step=CLASSIFIED_STEP
+            )
+        logger.info(
+            "Documento %s rebaixado para EM_REVISAO (anchor inexistente no destino, D-05)",
+            doc.id,
+        )
+        return ApplyStageResult(
+            document_id=doc.id,
+            source_path=str(source),
+            dest_path=None,
+            materialized=False,
+            blocked=True,
+            collision=False,
+            skipped_identical=False,
+            automation_id=plan.automation_id,
         )
 
     dest = _plan_dest(source, plan)
