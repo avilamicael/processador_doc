@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
+status: executing
 stopped_at: Phase 9 context gathered
-last_updated: "2026-06-24T18:31:35.548Z"
-last_activity: "2026-06-24 - Rodada de teste de usuário final → 11 achados em .planning/notes/2026-06-24-melhorias-teste-usuario-final.md. Milestone "Ajustes pós-teste" criada: Phases 9 (automação destino+transform), 10 (robustez ingestão/classificação), 11 (UX/visibilidade). Começando pela Phase 9 (discuss-phase)."
+last_updated: "2026-06-24T20:09:13.072Z"
+last_activity: 2026-06-24
 progress:
   total_phases: 13
   completed_phases: 8
-  total_plans: 38
-  completed_plans: 42
+  total_plans: 41
+  completed_plans: 43
   percent: 62
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-15)
 
 **Core value:** Transformar uma pilha de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados corretamente de forma automática e confiável — sem o usuário perder arquivos nem confiar cegamente na IA.
-**Current focus:** Phase 06.2 — a-es-de-automa-o-copiar-e-cortar-split-por-template
+**Current focus:** Phase 09 — automacao-destino-de-arquivo-configuravel-e-transformacao-de
 
 ## Current Position
 
-Phase: 06.2 — COMPLETE
-Plan: 3 of 3
-Status: Phase 06.2 complete
-Last activity: 2026-06-24 - Phase 9 PLANEJADA e verificada (plan-checker PASSED, iter 2): 3 planos (09-01 destino absoluto/relativo, 09-02 filtros inline, 09-03 prévia frontend), D-01..D-09 cobertos. Pronta para /gsd:execute-phase 9.
+Phase: 09 (automacao-destino-de-arquivo-configuravel-e-transformacao-de) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-06-24
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -87,6 +87,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 06.1 P04 | 3 | 3 tasks | 5 files |
 | Phase 06.2 P02 | 18 | 3 tasks | 6 files |
 | Phase 06.2 P03 | 25 | 3 tasks | 3 files |
+| Phase 09 P01 | 22 | 4 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [06.1-03]: Frontend de Templates redesenhado 1:1 com o mockup — Passo 1 'Como reconhecer' (sem IA, grupos OU de condições E texto|regex, D-T0/D-T3/D-T4) + Passo 2 'O que extrair' (com IA, linhas densas com ⚙ Avançado revelando regex+dica, D-T7); tooltips ⓘ via CSS :hover puro zero-lib (D-T8); doc_type removido do form (D-T5); field.name preservado (D-T6/D-T9); types.ts espelha signals=list[list[{mode,value}]] do Plano 02; npm run build verde fecha o gate de drift T-06.1-13.
 - [Phase ?]: [06.2-02]: apply_stage MULTI-SAÍDA — materializa N cópias (write-ahead action='copy' por cópia) SEM remove_original (D-01); move por ÚLTIMO e só então remove a origem (D-03); copy-only conclui o doc sem mover. undo discrimina action='copy' (apaga a cópia, nunca toca o original/CAS, D-06); undo por-run reverte copy+move juntos. API valida copy (exige dest_folder, V5) e dry-run emite 1 linha por saída (action_kind/removes_original). Sem migração; suíte inteira verde (399), zero regressão (D-04).
 - [Phase ?]: [06.2-03]: Ação Copiar exposta na UI de forma estritamente aditiva — reusa o caminho do move (input/validação/mapeamento, pattern=dest_folder genérico) com toCreateBody preservando a.action_type; diferenciação mínima (dot --st-encontrado + nota D-05 'o original permanece'); dry-run dispara badge 'Copiado — original mantido' por action_kind/removes_original do backend (Plano 02). Fluxo criar→dry-run→aplicar→desfazer verificado ao vivo (cópia no destino, original intacto, undo apaga só a cópia, nada se perde — D-01/D-06). Phase 06.2 (Copiar) encerrada; Cortar adiada p/ v2.
+- [Phase ?]: [09-01] resolve_dest_folder com 3 ramos (Windows drive/UNC, POSIX /..., relativo+base): absoluto literal sem .resolve() e sem is_relative_to (D-03), anchor nunca sanitizado, segmentos sim (D-08); _is_abs_windows exige DRIVE real para nao confundir /tmp POSIX com Windows. D-05 via _anchor_missing/_plan_anchor_missing checa exists() do anchor ANTES do mkdir no dry-run e apply. D-04 provado por teste de integracao de API. Sem schema.
 
 ### Pending Todos
 
@@ -179,6 +181,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-24T18:31:35.540Z
+Last session: 2026-06-24T20:08:47.643Z
 Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-automacao-destino-de-arquivo-configuravel-e-transformacao-de/09-CONTEXT.md
+Resume file: None

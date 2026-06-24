@@ -24,6 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 8: Distribuição, Atualização e Documentação** - Releases versionadas, update com migração segura e guias de instalação/atualização/uso/operação
 
 <!-- Milestone: Ajustes pós-teste (feedback do piloto) — backlog em .planning/notes/2026-06-24-melhorias-teste-usuario-final.md -->
+
 - [ ] **Phase 9: Automação — destino configurável e transformação de valores** - Renomear/mover utilizável: destino real escolhido pelo usuário (não confinado/mutilado) + transformação de valores no padrão. Backlog itens 10–11
 - [ ] **Phase 10: Robustez de ingestão e classificação** - Varredura de pasta nova, matcher tolerante + testar sinais, reprocessar/reclassificar automático, re-ingerir split. Backlog itens 2,5,6,7
 - [ ] **Phase 11: UX e visibilidade** - Reverter movidos, dedup visível, seletor de campo na condição, rótulo "pronto", fuso de data. Backlog itens 1,3,4,8,9
@@ -355,14 +356,14 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 6.2
 **Goal:** Tornar o renomear/mover utilizável de verdade. (1) Destino de arquivo escolhido pelo usuário: hoje o destino é confinado sob uma base (`data_dir\organizados`) e caminho absoluto digitado é sanitizado/mutilado (`C:`→`C_`) e aninhado — gerar destino correto (absoluto com validação e/ou base configurável na UI), parando de mutilar silenciosamente. (2) Regras de transformação de valor no padrão de renomear/mover (truncar, primeiras N palavras/letras, caixa, remover acentos, substituir/regex, valor-padrão, mapa de valores, formatação de data/número) além do `{campo}` cru + sanitize; tratamento configurável de chars inválidos do Windows.
 **Requirements**: Backlog itens 10–11 (`.planning/notes/2026-06-24-melhorias-teste-usuario-final.md`)
 **Depends on:** Phase 6.2 (automações atuais: renomear/mover/copiar, dry-run, undo)
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 **Sucesso:** usuário configura uma automação que move/renomeia para um destino correto da escolha dele, com o nome transformado como deseja, e o dry-run mostra o caminho final correto.
 
 Plans:
 **Wave 1**
 
-- [ ] 09-01-PLAN.md — Backend: política de destino absoluto/relativo (ntpath), remove confinamento V4 do absoluto, validação de raiz/drive existente (D-01..D-05)
+- [x] 09-01-PLAN.md — Backend: política de destino absoluto/relativo (ntpath), remove confinamento V4 do absoluto, validação de raiz/drive existente (D-01..D-05)
 
 **Wave 2** *(blocked on 09-01)*
 
