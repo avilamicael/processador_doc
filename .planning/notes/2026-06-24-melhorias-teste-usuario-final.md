@@ -198,4 +198,61 @@ classificação (discutir antes). Provável fase pequena, não um quick só.
 
 ---
 
+## Item 6 — Falta "reprocessar/reclassificar automático" após editar um template 🔴
+
+**Sintoma (teste real):** usuário ajustou o template (sinais agora corretos — verificado:
+o template "Notas Fiscais" com `DANFE` + `CHAVE DE ACESSO` + regex 44 díg. CASA com o
+texto da nota), mas os documentos **continuam em `quarentena`**. Quarentena é terminal e
+**editar o template não dispara reprocessamento**.
+
+**Estado atual:** as únicas saídas da quarentena são (`backend/app/api/documents.py`):
+- `POST /documents/{id}/reclassify` → **exige apontar um template na mão** (D-09); e
+- `POST /documents/{id}/retry` → só para estado `FALHA`, não `QUARENTENA`.
+Não existe ação "re-rodar a detecção automática" (matcher) num doc já classificado/
+quarentenado. Para quem está AJUSTANDO templates, isso obriga a re-ingerir o arquivo só
+pra testar — fluxo ruim.
+
+**Melhoria proposta:** ação "Reprocessar/Reclassificar automaticamente" (por doc e em
+lote) que re-roda matcher→(IA)→filler com os templates ATUAIS, sem forçar template.
+Aplicável a `QUARENTENA` (e talvez `CONCLUIDO`/`EM_REVISAO` sob confirmação). Reaproveita
+o `classify_stage` (já recarrega templates do DB). Botão na aba Documentos / "Precisam de
+atenção".
+
+**Escopo estimado:** `/gsd:quick` (backend: endpoint reprocess sem template + transição
+QUARENTENA→PROCESSANDO + requeue classify; frontend: botão). Relacionado ao [[#item-5]]
+(tuning de templates) e à tela de "testar sinais".
+
+---
+
+## Item 7 — "Remover + forçar varredura" NÃO re-ingere arquivos vindos de split 🔴
+
+**Sintoma (confirmado ao vivo):** removi 2 docs em quarentena (`POST /documents/delete` →
+`deleted:2`) e cliquei em forçar varredura → `enqueued: 0`. O `duplicates-count` subiu
+(46 → 53): os arquivos foram **vistos e pulados como duplicata**, não re-ingeridos.
+
+**Causa (split anti-loop):** os arquivos eram blocos de split (`<chave>_p1.pdf`, pasta com
+`split_to_files=true`). A materialização do split registra o **hash do BLOCO** no gate de
+dedup (anti-loop, `watcher.py`) — uma entrada separada da do original. A remoção
+(`POST /documents/delete`, quick 260624-far) limpa o `IngestedOriginal` que o Document
+aponta (o do original), **mas não a entrada de dedup do bloco** → a re-varredura dedupa o
+bloco e não re-ingere. Resultado: para documentos com split, "remover + re-varrer" **não
+faz nada, silenciosamente**.
+
+**Melhorias propostas (a discutir qual):**
+1. A limpeza de dedup da remoção deve cobrir também o(s) **hash(es) de bloco** associados
+   ao documento removido (não só o `original_hash`), liberando a re-ingestão.
+2. E/ou uma ação **"Reprocessar este arquivo"** que ignora o gate de dedup para um
+   caminho específico (re-ingere mesmo sendo "conhecido").
+3. Tornar visível que o arquivo foi pulado por dedup (liga com [[#item-3]]).
+
+**Nota:** combina com o [[#item-6]] — se existisse "reprocessar automático" no doc, o
+usuário nem precisaria deletar+re-ingerir pra testar template novo (evitaria cair neste
+gap). Item 6 provavelmente resolve o caso de uso; Item 7 é a correção da mecânica de
+dedup/remoção em si.
+
+**Escopo estimado:** `/gsd:quick` (backend: ajuste na limpeza de dedup da remoção +/ou
+flag de "force re-ingest"; testes cobrindo cenário split).
+
+---
+
 <!-- PRÓXIMOS ACHADOS: adicionar como "## Item N — <título> <status>" abaixo, mesmo formato. -->
