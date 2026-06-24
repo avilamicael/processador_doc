@@ -51,4 +51,37 @@ sobretudo expor na UI.
 
 ---
 
+## Item 2 — Pasta cadastrada antes de existir: arquivos pré-existentes não são varridos 🔴
+
+**Sintoma (relato do usuário):** criou um apontamento (pasta monitorada) no sistema,
+mas a pasta ainda não existia; depois criou a pasta manualmente e colocou documentos
+dentro — e **não foi processado** (nada apareceu).
+
+**Causa raiz (confirmada no código):**
+1. O cadastro **aceita** uma pasta inexistente por design — `backend/app/api/watched_folders.py:60`
+   (`_normalize_path`: "Um path AINDA inexistente é aceito").
+2. Enquanto não existe, o watcher a ignora — `watcher.py:94` (`active_folder_paths` pula
+   o que não é diretório).
+3. Quando a pasta passa a existir, o supervisor detecta a mudança do conjunto (a cada 5s)
+   e **reinicia o `awatch`** incluindo a nova pasta — `watcher.py:299`. **Mas o `awatch`
+   só capta eventos FUTUROS:** os arquivos já presentes quando o watch ataca **não geram
+   evento** → ficam de fora.
+4. A varredura de arquivos JÁ EXISTENTES (`scan_and_enqueue` via `rglob`) só roda no
+   **startup** (`watcher.py:234`) e no **`POST /rescan`** (`documents.py:759`). **NÃO** roda
+   quando uma pasta nova aparece em runtime.
+
+**Workaround atual:** aba Documentos → **"Forçar varredura"** (`/rescan`) recalcula as
+pastas ativas e varre os arquivos já presentes. Reiniciar o servidor também resolve.
+
+**Correção proposta:** no supervisor de reconfiguração (`_watch_for_reconfig` /
+`run_watcher`), quando o conjunto de pastas ativas mudar, disparar `scan_and_enqueue`
+sobre as pastas **recém-adicionadas** (diff `current - observed`) antes/depois de reatar
+o `awatch` — fechando a lacuna e ficando consistente com o scan de startup. Idempotente
+por dedup, então é seguro. (Considerar também: varrer ao (re)ativar uma pasta via PATCH.)
+
+**Escopo estimado:** `/gsd:quick` (backend só; ~1 mudança no `watcher.py` + teste cobrindo
+"pasta criada depois com arquivos pré-existentes é varrida sem /rescan manual").
+
+---
+
 <!-- PRÓXIMOS ACHADOS: adicionar como "## Item N — <título> <status>" abaixo, mesmo formato. -->
