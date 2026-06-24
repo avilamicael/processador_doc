@@ -196,3 +196,141 @@ def test_abs_no_confinement(tmp_path) -> None:
     out = str(dest)
     assert out.startswith("D:\\fora\\da\\base\\")
     assert str(tmp_path) not in out
+
+
+# ---- Fase 9 Plano 02 (BL-11 / D-06..D-08): filtros inline encadeáveis ------- #
+# Engine de transformação de valores: pipeline de filtros no token
+# `{campo:filtro=arg:filtro}`, com dispatch explícito (nunca eval) e sanitização
+# DEPOIS dos filtros (D-08). Funções puras de naming — sem disco.
+
+
+def test_filter_palavras() -> None:
+    """D-07: `palavras=N` mantém as N primeiras palavras do valor."""
+    out = naming.resolve_pattern(
+        "{fornecedor:palavras=1}", {"fornecedor": "IGUACU DIST. DE PROD."}
+    )
+    assert out is not None
+    assert "IGUACU" in out
+    assert "DIST" not in out
+
+
+def test_filter_letras() -> None:
+    """D-07: `letras=N` trunca aos N primeiros caracteres."""
+    out = naming.resolve_pattern("{x:letras=8}", {"x": "ABCDEFGHIJ"})
+    assert out == "ABCDEFGH"
+
+
+def test_filter_truncar() -> None:
+    """D-07: `truncar=N` é alias de `letras=N` (trunca aos N primeiros chars)."""
+    out = naming.resolve_pattern("{x:truncar=8}", {"x": "ABCDEFGHIJ"})
+    assert out == "ABCDEFGH"
+
+
+def test_filter_maiusc() -> None:
+    """D-07: `maiusc` coloca o valor em caixa alta."""
+    out = naming.resolve_pattern("{x:maiusc}", {"x": "iguacu"})
+    assert out == "IGUACU"
+
+
+def test_filter_minusc() -> None:
+    """D-07: `minusc` coloca o valor em caixa baixa."""
+    out = naming.resolve_pattern("{x:minusc}", {"x": "IGUACU"})
+    assert out == "iguacu"
+
+
+def test_filter_sem_acento() -> None:
+    """D-07: `sem_acento` remove diacríticos (NFKD)."""
+    out = naming.resolve_pattern("{x:sem_acento}", {"x": "IGUAÇU AÇÃO"})
+    assert out == "IGUACU ACAO"
+
+
+def test_filter_substituir() -> None:
+    """D-07: `substituir=de>para` faz substituição literal simples."""
+    out = naming.resolve_pattern("{x:substituir=LTDA>}", {"x": "ACME LTDA"})
+    assert out is not None
+    assert "LTDA" not in out
+    assert "ACME" in out
+    # substituição de char por char
+    out2 = naming.resolve_pattern("{x:substituir=a>e}", {"x": "banana"})
+    assert out2 == "benene"
+
+
+def test_filter_padrao_default_when_missing() -> None:
+    """D-07/A3: campo AUSENTE + `padrao=Geral` → "Geral" (NÃO bloqueia, não None)."""
+    out = naming.resolve_pattern("{tipo:padrao=Geral}", {"cliente": "ACME"})
+    assert out == "Geral"
+
+
+def test_filter_padrao_keeps_value_when_present() -> None:
+    """D-07: `padrao=X` NÃO sobrepõe um valor presente."""
+    out = naming.resolve_pattern("{tipo:padrao=Geral}", {"tipo": "NotaFiscal"})
+    assert out == "NotaFiscal"
+
+
+def test_filter_formato_explicit() -> None:
+    """D-07: `formato=aaaa-mm-dd`/`formato=aaaa-mm` expõe _fmt_date como filtro."""
+    out = naming.resolve_pattern("{data:formato=aaaa-mm-dd}", {"data": "2026-06-17"})
+    assert out == "2026-06-17"
+    out2 = naming.resolve_pattern("{data:formato=aaaa-mm}", {"data": "2026-06-17"})
+    assert out2 == "2026-06"
+
+
+def test_legacy_date_shortcut_still_works() -> None:
+    """A1: atalho legado `{data:aaaa-mm}` (sem `formato=`) continua formatando."""
+    out = naming.resolve_pattern("{data:aaaa-mm}", {"data": "2026-06-17"})
+    assert out == "2026-06"
+
+
+def test_filter_chain() -> None:
+    """D-06: filtros encadeáveis — `{x:maiusc:palavras=2}` aplica em pipeline."""
+    out = naming.resolve_pattern("{x:maiusc:palavras=2}", {"x": "iguacu dist prod"})
+    assert out == "IGUACU DIST"
+
+
+def test_sanitize_after_filter() -> None:
+    """D-08: sanitização roda DEPOIS dos filtros — um `/` introduzido vira `_`."""
+    out = naming.resolve_pattern("{x:substituir=a>/}", {"x": "banana"})
+    assert out is not None
+    # O `/` produzido pelo filtro foi sanitizado para `_` (não permanece).
+    assert "/" not in out
+    assert out == "b_n_n_"
+
+
+def test_unknown_filter_is_inert() -> None:
+    """T-09-05: filtro desconhecido é INERTE — não quebra o token (nunca eval)."""
+    out = naming.resolve_pattern("{x:filtroinexistente}", {"x": "IGUACU"})
+    assert out == "IGUACU"
+
+
+def test_plain_token_unchanged() -> None:
+    """Não-regressão: `{campo}` simples (sem filtro) segue idêntico ao atual."""
+    out = naming.resolve_pattern("{cliente}_{numero}", _fields())
+    assert out is not None
+    assert "ACME" in out and "1234" in out
+
+
+def test_filter_chain_invalid_int_is_inert() -> None:
+    """T-09-05: `int()` inválido no arg (`palavras=abc`) é inerte (não quebra)."""
+    out = naming.resolve_pattern("{x:palavras=abc}", {"x": "um dois tres"})
+    # Filtro inválido inerte → valor cru passa (sanitizado).
+    assert out is not None
+    assert "um dois tres" in out
+
+
+def test_filter_in_dest_folder_segment(tmp_path) -> None:
+    """D-06/D-08: filtros valem por SEGMENTO de pasta também (não só no nome)."""
+    dest = naming.resolve_dest_folder(
+        "NF/{fornecedor:palavras=1}", {"fornecedor": "IGUACU DIST DE PROD"},
+        base_root=tmp_path,
+    )
+    assert dest is not None
+    assert str(dest).endswith("IGUACU")
+
+
+def test_no_eval_in_naming_module() -> None:
+    """T-09-05: nenhum eval/exec no módulo (dispatch explícito, falha-fechada)."""
+    import inspect
+
+    src = inspect.getsource(naming)
+    assert "eval(" not in src
+    assert "exec(" not in src
