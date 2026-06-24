@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, func, select
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
@@ -25,10 +25,12 @@ from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
 from app.models.enums import DocState
 from app.models.ingested_original import IngestedOriginal
+from app.models.job import Job
 from app.models.template import Template
 from app.models.watched_folder import WatchedFolder
 from app.pipeline.ingest_stage import AWAITING_EXTRACTION_STEP
 from app.pipeline.state_machine import transition
+from app.queue import repo
 from app.storage.db import get_session
 
 
@@ -281,3 +283,206 @@ def test_list_does_not_include_classification(
     body = client.get("/documents").json()
     assert body["items"]
     assert all("classification" not in item for item in body["items"])
+
+
+# --- POST /documents/delete — remoção em LOTE (só registro, nunca o arquivo) ---
+#
+# Constraint forte do projeto: remover um documento NUNCA pode tocar no arquivo
+# físico do cliente. Os testes verificam o efeito no banco (Document + cascata +
+# Jobs órfãos + IngestedOriginal sem blocos restantes) e que nenhum arquivo é
+# tocado (o endpoint não importa os/shutil/Path.unlink — verificado por grep no
+# bloco de verificação do plano; aqui garantimos que o arquivo seed permanece).
+
+
+def test_delete_removes_only_record_not_file(
+    client: TestClient, schema_engine: Engine, tmp_path: Path
+) -> None:
+    """Remover um id existente → 200 {deleted:1}; some do banco; arquivo intacto."""
+    # Arquivo físico que NUNCA pode ser tocado pela remoção.
+    physical = tmp_path / "cliente.pdf"
+    physical.write_bytes(b"%PDF-1.4 conteudo do cliente")
+
+    with get_session(schema_engine) as session:
+        doc = Document(content_hash="d" * 64, original_filename="cliente.pdf")
+        session.add(doc)
+        session.commit()
+        doc_id = doc.id
+
+    resp = client.post("/documents/delete", json={"ids": [doc_id]})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["deleted"] == 1
+
+    with get_session(schema_engine) as session:
+        assert session.get(Document, doc_id) is None
+
+    # O arquivo do cliente permanece intocado (constraint forte).
+    assert physical.exists()
+    assert physical.read_bytes() == b"%PDF-1.4 conteudo do cliente"
+
+
+def test_delete_batch_multiple_ids(client: TestClient, schema_engine: Engine) -> None:
+    """Remover vários ids → todos somem; deleted = quantidade real."""
+    with get_session(schema_engine) as session:
+        ids = []
+        for i in range(3):
+            d = Document(content_hash=str(i) * 64, original_filename=f"d{i}.pdf")
+            session.add(d)
+            session.flush()
+            ids.append(d.id)
+        session.commit()
+
+    resp = client.post("/documents/delete", json={"ids": ids})
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == 3
+    with get_session(schema_engine) as session:
+        assert all(session.get(Document, i) is None for i in ids)
+
+
+def test_delete_ignores_nonexistent_ids(client: TestClient, schema_engine: Engine) -> None:
+    """ids inexistentes são ignorados silenciosamente; não derruba o lote."""
+    with get_session(schema_engine) as session:
+        d = Document(content_hash="e" * 64, original_filename="existe.pdf")
+        session.add(d)
+        session.commit()
+        doc_id = d.id
+
+    resp = client.post("/documents/delete", json={"ids": [doc_id, 999999, 888888]})
+    assert resp.status_code == 200
+    # Só 1 Document realmente existia.
+    assert resp.json()["deleted"] == 1
+    with get_session(schema_engine) as session:
+        assert session.get(Document, doc_id) is None
+
+
+def test_delete_empty_list_returns_zero(client: TestClient) -> None:
+    resp = client.post("/documents/delete", json={"ids": []})
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == 0
+
+
+def test_delete_cascade_removes_classification(client: TestClient, schema_engine: Engine) -> None:
+    """Cascade apaga ClassificationResult + FilledFields do Document (sem órfãos)."""
+    with get_session(schema_engine) as session:
+        template = Template(name="NF", doc_type="Fiscal", signals_json="[]")
+        session.add(template)
+        doc = Document(content_hash="c" * 64, original_filename="nf.pdf")
+        session.add(doc)
+        session.flush()
+        cr = ClassificationResult(document_id=doc.id, template_id=template.id, confidence=0.9)
+        session.add(cr)
+        session.flush()
+        session.add(
+            FilledField(
+                classification_result_id=cr.id,
+                field_name="CNPJ",
+                raw_value="x",
+                normalized_value="x",
+                valid=True,
+            )
+        )
+        session.commit()
+        doc_id = doc.id
+        cr_id = cr.id
+
+    resp = client.post("/documents/delete", json={"ids": [doc_id]})
+    assert resp.status_code == 200
+
+    with get_session(schema_engine) as session:
+        assert session.get(Document, doc_id) is None
+        assert session.get(ClassificationResult, cr_id) is None
+        assert (
+            session.scalar(
+                select(func.count(FilledField.id)).where(
+                    FilledField.classification_result_id == cr_id
+                )
+            )
+            == 0
+        )
+
+
+def test_delete_removes_orphan_jobs(client: TestClient, schema_engine: Engine) -> None:
+    """Jobs com original_hash == content_hash do bloco são removidos junto."""
+    chash = "b" * 64
+    with get_session(schema_engine) as session:
+        doc = Document(content_hash=chash, original_filename="b.pdf")
+        session.add(doc)
+        session.commit()
+        doc_id = doc.id
+    with get_session(schema_engine) as session:
+        repo.enqueue(session, original_hash=chash, step="extract", payload="{}")
+
+    resp = client.post("/documents/delete", json={"ids": [doc_id]})
+    assert resp.status_code == 200
+    with get_session(schema_engine) as session:
+        assert (
+            session.scalar(select(func.count(Job.id)).where(Job.original_hash == chash)) == 0
+        )
+
+
+def test_delete_last_block_removes_ingested_original(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """Remover o ÚLTIMO bloco de um IngestedOriginal apaga o original + seus jobs."""
+    ohash = "a" * 64
+    with get_session(schema_engine) as session:
+        original = IngestedOriginal(
+            original_hash=ohash,
+            original_filename="orig.pdf",
+            source_folder_id=None,
+            block_count=1,
+        )
+        session.add(original)
+        session.flush()
+        doc = Document(
+            content_hash="9" * 64,
+            original_filename="orig.pdf",
+            origin_original_id=original.id,
+        )
+        session.add(doc)
+        session.commit()
+        doc_id = doc.id
+        original_id = original.id
+    # Job do original (gate) — deve ser limpo junto para liberar re-ingestão.
+    with get_session(schema_engine) as session:
+        repo.enqueue(session, original_hash=ohash, step="ingest", payload="{}")
+
+    resp = client.post("/documents/delete", json={"ids": [doc_id]})
+    assert resp.status_code == 200
+    with get_session(schema_engine) as session:
+        assert session.get(IngestedOriginal, original_id) is None
+        assert (
+            session.scalar(select(func.count(Job.id)).where(Job.original_hash == ohash)) == 0
+        )
+
+
+def test_delete_preserves_ingested_original_with_remaining_blocks(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """Se OUTRO bloco ainda aponta para o original (split), o original é PRESERVADO."""
+    ohash = "7" * 64
+    with get_session(schema_engine) as session:
+        original = IngestedOriginal(
+            original_hash=ohash,
+            original_filename="multi.pdf",
+            source_folder_id=None,
+            block_count=2,
+        )
+        session.add(original)
+        session.flush()
+        d1 = Document(
+            content_hash="5" * 64, original_filename="multi.pdf", origin_original_id=original.id
+        )
+        d2 = Document(
+            content_hash="6" * 64, original_filename="multi.pdf", origin_original_id=original.id
+        )
+        session.add_all([d1, d2])
+        session.commit()
+        d1_id = d1.id
+        original_id = original.id
+
+    # Remove só um dos dois blocos.
+    resp = client.post("/documents/delete", json={"ids": [d1_id]})
+    assert resp.status_code == 200
+    with get_session(schema_engine) as session:
+        # O original é preservado porque d2 ainda o referencia.
+        assert session.get(IngestedOriginal, original_id) is not None
