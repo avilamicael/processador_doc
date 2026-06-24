@@ -352,4 +352,28 @@ parsing do padrão; frontend: ajuda/preview no construtor). Combina com [[#item-
 
 ---
 
+## Item 12 — Pré-visualização (dry-run) só tem "Aplicar": falta "Negar/Pular" e "Remover" 🔴
+
+**Sintoma (relato do usuário, rodada de discuss Phase 10):** na tela de
+Pré-visualização (dry-run), cada linha/campo só oferece **Aplicar** — não há como
+**negar/pular** uma linha (decidir não aplicar aquela automação àquele doc) nem
+**remover** o documento dali.
+
+**Estado atual:** o dry-run lista as operações propostas (origem→destino) e o fluxo é
+aplicar o lote. Não há ação por-linha de rejeitar/pular nem de remover o documento da
+prévia.
+
+**Melhoria proposta:** ações por-linha na pré-visualização — "Pular/Não aplicar" (não
+materializa aquela operação) e "Remover" (tira o documento da fila/prévia). Decidir a
+semântica de "remover" (só da prévia? envia a revisão? exclui?).
+
+**Escopo estimado:** `/gsd:quick` ou fase pequena (frontend DryRunPage + backend para
+respeitar a seleção/exclusão por-doc no apply). UX de triagem do dry-run.
+
+**Relacionado:** [[#item-1]] (visibilidade/reversão pós-ação) e [[#item-8]] (rótulo
+"pronto"). Capturado durante a discussão da Phase 10 (classificação/reprocessar);
+fora do escopo daquela fase.
+
+---
+
 <!-- PRÓXIMOS ACHADOS: adicionar como "## Item N — <título> <status>" abaixo, mesmo formato. -->

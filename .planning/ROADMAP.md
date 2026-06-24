@@ -26,7 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 <!-- Milestone: Ajustes pós-teste (feedback do piloto) — backlog em .planning/notes/2026-06-24-melhorias-teste-usuario-final.md -->
 
 - [ ] **Phase 9: Automação — destino configurável e transformação de valores** - Renomear/mover utilizável: destino real escolhido pelo usuário (não confinado/mutilado) + transformação de valores no padrão. Backlog itens 10–11
-- [ ] **Phase 10: Robustez de ingestão e classificação** - Varredura de pasta nova, matcher tolerante + testar sinais, reprocessar/reclassificar automático, re-ingerir split. Backlog itens 2,5,6,7
+- [ ] **Phase 10: Classificação robusta e reprocessamento** - Matcher tolerante (N-de-M + normalização) + testar sinais no construtor, reprocessar/reclassificar automático após editar template. Backlog itens 5,6 (itens 2,7 deferidos)
 - [ ] **Phase 11: UX e visibilidade** - Reverter movidos, dedup visível, seletor de campo na condição, rótulo "pronto", fuso de data. Backlog itens 1,3,4,8,9
 
 ## Phase Details
@@ -373,11 +373,11 @@ Plans:
 
 - [ ] 09-03-PLAN.md — Frontend: prévia do construtor com filtros + caminho absoluto + DryRunPage mostrando caminho real (D-04/D-09) + verificação visual
 
-### Phase 10: Robustez de ingestão e classificação
+### Phase 10: Classificação robusta e reprocessamento
 
-**Goal:** (Item 2) Pasta cadastrada antes de existir deve varrer os arquivos pré-existentes quando passa a existir, sem rescan manual (hoje o awatch só capta eventos futuros; scan só no startup/rescan). (Item 5) Classificação por sinais menos frágil: testar sinais contra um documento de exemplo no construtor; casamento mais tolerante (N-de-M, normalização de pontuação/quebra/acento opcional); avaliar IA classificar quando o matcher local não casa nenhum (em vez de quarentena direta). (Item 6) Ação "reprocessar/reclassificar automático" após editar template (sem forçar template). (Item 7) "Remover + forçar varredura" deve re-ingerir arquivos vindos de split (hoje a entrada de dedup do bloco sobrevive à remoção).
-**Requirements**: Backlog itens 2, 5, 6, 7 (`.planning/notes/2026-06-24-melhorias-teste-usuario-final.md`)
-**Depends on:** Phase 5 (classificação/revisão/quarentena) e Phase 2 (ingestão/watcher/dedup)
+**Goal:** (Item 5) Classificação por sinais menos frágil: ferramenta de "testar sinais contra um documento de exemplo" no construtor de templates (mostra quais sinais casam/falham contra o texto extraído); casamento mais tolerante — limiar N-de-M em vez de E-exato de todos + normalização opcional (pontuação/quebra de linha/acento); avaliar (decisão de produto) deixar a IA classificar quando o matcher local não casa nenhum template, antes da quarentena direta. (Item 6) Ação "reprocessar/reclassificar automático" (por doc e em lote) que re-roda matcher→(IA)→filler com os templates ATUAIS sem forçar template, para sair da quarentena após editar um template.
+**Requirements**: Backlog itens 5, 6 (`.planning/notes/2026-06-24-melhorias-teste-usuario-final.md`). Itens 2 (varredura de pasta nova) e 7 (re-ingerir split) deferidos para futura fase de robustez de ingestão.
+**Depends on:** Phase 5 (classificação/revisão/quarentena)
 **Plans:** 0 plans
 
 Plans:
