@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-24 - Completed quick task 260624-far: ajustes UI/UX (remover documentos, status real do watcher, desabilitar mock em Config/Header) + backend (POST /documents/delete, GET /watcher/status). 431 testes verdes.
+Last activity: 2026-06-24 - Rodada de teste de usuário final → 11 achados em .planning/notes/2026-06-24-melhorias-teste-usuario-final.md. Milestone "Ajustes pós-teste" criada: Phases 9 (automação destino+transform), 10 (robustez ingestão/classificação), 11 (UX/visibilidade). Começando pela Phase 9 (discuss-phase).
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%

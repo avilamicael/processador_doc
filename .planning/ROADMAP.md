@@ -23,6 +23,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 7: Módulo Determinístico Opcional e Roteamento de Custo** - Parsing plugável de tipos conhecidos (boleto/NF-e) e cascata determinístico→nativo→IA — **ADIADA** (otimização opcional; revisitar após medir custo real de tokens em uso)
 - [ ] **Phase 8: Distribuição, Atualização e Documentação** - Releases versionadas, update com migração segura e guias de instalação/atualização/uso/operação
 
+<!-- Milestone: Ajustes pós-teste (feedback do piloto) — backlog em .planning/notes/2026-06-24-melhorias-teste-usuario-final.md -->
+- [ ] **Phase 9: Automação — destino configurável e transformação de valores** - Renomear/mover utilizável: destino real escolhido pelo usuário (não confinado/mutilado) + transformação de valores no padrão. Backlog itens 10–11
+- [ ] **Phase 10: Robustez de ingestão e classificação** - Varredura de pasta nova, matcher tolerante + testar sinais, reprocessar/reclassificar automático, re-ingerir split. Backlog itens 2,5,6,7
+- [ ] **Phase 11: UX e visibilidade** - Reverter movidos, dedup visível, seletor de campo na condição, rótulo "pronto", fuso de data. Backlog itens 1,3,4,8,9
+
 ## Phase Details
 
 ### Phase 1: Fundação de Estado e Storage
@@ -344,3 +349,38 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 6.2
 | 6.2. Ação de Automação Copiar | 3/3 | Complete   | 2026-06-18 |
 | 7. Módulo Determinístico Opcional e Roteamento de Custo | 0/TBD | Deferred (2026-06-18) | - |
 | 8. Distribuição, Atualização e Documentação | 0/TBD | Not started | - |
+
+### Phase 9: Automação — destino configurável e transformação de valores
+
+**Goal:** Tornar o renomear/mover utilizável de verdade. (1) Destino de arquivo escolhido pelo usuário: hoje o destino é confinado sob uma base (`data_dir\organizados`) e caminho absoluto digitado é sanitizado/mutilado (`C:`→`C_`) e aninhado — gerar destino correto (absoluto com validação e/ou base configurável na UI), parando de mutilar silenciosamente. (2) Regras de transformação de valor no padrão de renomear/mover (truncar, primeiras N palavras/letras, caixa, remover acentos, substituir/regex, valor-padrão, mapa de valores, formatação de data/número) além do `{campo}` cru + sanitize; tratamento configurável de chars inválidos do Windows.
+**Requirements**: Backlog itens 10–11 (`.planning/notes/2026-06-24-melhorias-teste-usuario-final.md`)
+**Depends on:** Phase 6.2 (automações atuais: renomear/mover/copiar, dry-run, undo)
+**Plans:** 0 plans
+
+**Sucesso:** usuário configura uma automação que move/renomeia para um destino correto da escolha dele, com o nome transformado como deseja, e o dry-run mostra o caminho final correto.
+
+Plans:
+
+- [ ] TBD (run /gsd:plan-phase 9 to break down)
+
+### Phase 10: Robustez de ingestão e classificação
+
+**Goal:** (Item 2) Pasta cadastrada antes de existir deve varrer os arquivos pré-existentes quando passa a existir, sem rescan manual (hoje o awatch só capta eventos futuros; scan só no startup/rescan). (Item 5) Classificação por sinais menos frágil: testar sinais contra um documento de exemplo no construtor; casamento mais tolerante (N-de-M, normalização de pontuação/quebra/acento opcional); avaliar IA classificar quando o matcher local não casa nenhum (em vez de quarentena direta). (Item 6) Ação "reprocessar/reclassificar automático" após editar template (sem forçar template). (Item 7) "Remover + forçar varredura" deve re-ingerir arquivos vindos de split (hoje a entrada de dedup do bloco sobrevive à remoção).
+**Requirements**: Backlog itens 2, 5, 6, 7 (`.planning/notes/2026-06-24-melhorias-teste-usuario-final.md`)
+**Depends on:** Phase 5 (classificação/revisão/quarentena) e Phase 2 (ingestão/watcher/dedup)
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd:plan-phase 10 to break down)
+
+### Phase 11: UX e visibilidade
+
+**Goal:** (Item 1) Reverter documentos já movidos pela tela — undo persistente por documento/lote (backend já tem CAS+audit+`POST /automations/undo`; falta UI persistente, hoje só o lote recém-aplicado na DryRunPage). (Item 3) Tornar o dedup (duplicata ignorada) explícito/rastreável na UI. (Item 4) Condição "Valor de campo" usar seletor dos campos do template em vez de texto livre. (Item 8) Rótulo: doc classificado/pronto deve mostrar "Classificado — pronto para aplicar/aprovar" em vez de "processando". (Item 9) Timestamps com fuso correto (serializar UTC tz-aware; hoje vêm naive e o frontend exibe 3h adiantado).
+**Requirements**: Backlog itens 1, 3, 4, 8, 9 (`.planning/notes/2026-06-24-melhorias-teste-usuario-final.md`)
+**Depends on:** Phase 6.2 (automações/undo) e Phase 5 (estados/revisão)
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd:plan-phase 11 to break down)
