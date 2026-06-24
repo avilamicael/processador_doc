@@ -5,7 +5,7 @@ export type IconName =
   | 'logo' | 'doc' | 'docMini' | 'grid' | 'bolt' | 'sliders' | 'search'
   | 'sun' | 'moon' | 'bell' | 'eye' | 'download' | 'dots' | 'plus'
   | 'filter' | 'refresh' | 'folder' | 'arrowRight' | 'check' | 'checkSmall'
-  | 'tableMini' | 'alert' | 'undo' | 'arrowUp' | 'arrowDown'
+  | 'tableMini' | 'alert' | 'undo' | 'arrowUp' | 'arrowDown' | 'trash'
 
 interface IconDef { body: ReactNode; sw?: number; fill?: boolean }
 
@@ -35,6 +35,7 @@ const ICONS: Record<IconName, IconDef> = {
   undo: { sw: 1.8, body: <><path d="M9 14 4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 0 10h-3" /></> },
   arrowUp: { sw: 2, body: <path d="M12 19V5M6 11l6-6 6 6" /> },
   arrowDown: { sw: 2, body: <path d="M12 5v14M6 13l6 6 6-6" /> },
+  trash: { sw: 1.8, body: <><path d="M3 6h18" /><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /></> },
 }
 
 interface IconProps {

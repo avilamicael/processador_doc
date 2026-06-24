@@ -27,6 +27,7 @@ import type {
   TemplateCreate,
   TemplatePatch,
   UndoResult,
+  WatcherStatus,
 } from '../types'
 
 class ApiError extends Error {
@@ -75,6 +76,20 @@ export function getDocumentDetail(id: number): Promise<DocumentDetail> {
 
 export function postRescan(): Promise<{ enqueued: number }> {
   return request<{ enqueued: number }>('/rescan', { method: 'POST' })
+}
+
+// Remoção em LOTE — remove SÓ o registro do app (Document + cascata + órfãos);
+// NUNCA toca no arquivo físico do cliente (constraint forte; ver documents.py).
+export function postDeleteDocuments(ids: number[]): Promise<{ deleted: number }> {
+  return request<{ deleted: number }>('/documents/delete', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  })
+}
+
+// Status real do watcher (Sidebar — quick 260624-far).
+export function getWatcherStatus(): Promise<WatcherStatus> {
+  return request<WatcherStatus>('/watcher/status')
 }
 
 // --- Triagem "Precisam de atenção" (Fase 5 — REV-03/04/05) ---

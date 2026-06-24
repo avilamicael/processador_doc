@@ -1,6 +1,21 @@
 import type { Page } from '../types'
 import { Icon } from './Icon'
 import type { IconName } from './Icon'
+import { useWatcherStatus } from '../hooks/useWatcherStatus'
+
+// Tempo relativo em pt-BR a partir do ISO da última varredura ("há Xs / X min /
+// X h"; "—" se null/inválido). Sem libs — cálculo direto.
+function relativeScan(iso: string | null): string {
+  if (!iso) return '—'
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return '—'
+  const secs = Math.max(0, Math.round((Date.now() - t) / 1000))
+  if (secs < 60) return `há ${secs}s`
+  const mins = Math.round(secs / 60)
+  if (mins < 60) return `há ${mins} min`
+  const hours = Math.round(mins / 60)
+  return `há ${hours} h`
+}
 
 interface NavItem { page: Page; label: string; icon: IconName }
 
@@ -29,6 +44,22 @@ interface SidebarProps {
 }
 
 export function Sidebar({ page, onNavigate }: SidebarProps) {
+  const statusQuery = useWatcherStatus()
+  const status = statusQuery.data
+  const active = status?.active ?? false
+  // Sub-texto: enquanto carrega sem dados → "verificando…"; erro → "—".
+  let sub: string
+  if (statusQuery.isLoading && !status) {
+    sub = 'verificando…'
+  } else if (statusQuery.isError && !status) {
+    sub = '—'
+  } else if (status) {
+    const n = status.active_folder_count
+    sub = `${n} ${n === 1 ? 'pasta' : 'pastas'} · varredura ${relativeScan(status.last_scan_at)}`
+  } else {
+    sub = '—'
+  }
+
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
@@ -62,10 +93,13 @@ export function Sidebar({ page, onNavigate }: SidebarProps) {
 
       <div className="sidebar-foot">
         <div className="watcher-box">
-          <span className="watcher-dot" />
+          <span
+            className="watcher-dot"
+            style={{ background: active ? 'var(--st-tratado)' : 'var(--text-3)' }}
+          />
           <div style={{ lineHeight: 1.25 }}>
-            <div className="watcher-title">Watcher ativo</div>
-            <div className="watcher-sub">4 pastas · varredura há 2 min</div>
+            <div className="watcher-title">{active ? 'Watcher ativo' : 'Watcher inativo'}</div>
+            <div className="watcher-sub">{sub}</div>
           </div>
         </div>
       </div>

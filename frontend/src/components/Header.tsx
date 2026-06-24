@@ -18,13 +18,17 @@ export function Header({ title, desc, search, onSearch, isDark, onToggleTheme }:
       </div>
       <div className="spacer" />
 
-      <div className="search-wrap">
+      {/* Busca e notificações desabilitadas ("em breve") — esmaecidas, sem o
+          ponto vermelho. A filtragem local em DocumentsPage fica inativa por hora. */}
+      <div className="search-wrap" style={{ opacity: 0.5 }}>
         <Icon name="search" size={15} stroke="var(--text-3)" className="search-icon" />
         <input
           className="search-input"
           value={search}
           onChange={(e) => onSearch(e.target.value)}
           placeholder="Buscar documento, pasta…"
+          disabled
+          title="em breve"
         />
       </div>
 
@@ -32,9 +36,8 @@ export function Header({ title, desc, search, onSearch, isDark, onToggleTheme }:
         <Icon name={isDark ? 'sun' : 'moon'} size={17} />
       </button>
 
-      <button className="icon-btn" title="Notificações">
+      <button className="icon-btn" title="em breve" disabled style={{ opacity: 0.5 }}>
         <Icon name="bell" size={17} />
-        <span className="notif-dot" />
       </button>
     </header>
   )

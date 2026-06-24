@@ -51,6 +51,7 @@ export default function App() {
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
   const toggleAll = (ids: number[]) =>
     setSelected((s) => (s.length === ids.length ? [] : ids.slice()))
+  const clearSel = () => setSelected([])
   const toggleIn = (
     set: Dispatch<SetStateAction<Record<number, boolean>>>,
     id: number,
@@ -79,6 +80,7 @@ export default function App() {
               selected={selected}
               onToggleSel={toggleSel}
               onToggleAll={toggleAll}
+              onClearSel={clearSel}
             />
           )}
           {page === 'atencao' && <AttentionPage />}
