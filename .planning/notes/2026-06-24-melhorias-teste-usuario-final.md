@@ -84,4 +84,41 @@ por dedup, então é seguro. (Considerar também: varrer ao (re)ativar uma pasta
 
 ---
 
+## Item 3 — Tornar o dedup (duplicata ignorada) explícito e rastreável na UI 🔴
+
+**Sintoma (observado no teste):** colocar um arquivo de conteúdo IDÊNTICO a um já
+ingerido numa pasta (ex.: o mesmo `exames_duda.pdf` numa pasta nova) e clicar em
+"Forçar varredura" aparenta "não fazer nada" — o arquivo é corretamente pulado pelo
+dedup (D-10), mas o usuário não tem feedback claro disso e acha que está quebrado.
+(No teste: `duplicates-count` em 46; o `/rescan` viu o arquivo e o descartou por hash.)
+
+**Comportamento correto, mas pouco visível.** O dedup por `content_hash` é intencional
+(`watcher.py:155` — incrementa `IngestedOriginal.duplicate_hits` e NÃO enfileira; D-10).
+O problema é só de VISIBILIDADE/UX.
+
+**Estado atual (o que já existe):**
+- Apenas um contador AGREGADO global: `GET /documents/duplicates-count` → chip
+  "{N} duplicados ignorados" em `frontend/src/pages/DocumentsPage.tsx:302-308`.
+- `DryRunPage.tsx:203` mostra "Duplicatas puladas" (também agregado, no contexto do dry-run).
+- **Não há registro por-ocorrência:** não se sabe QUAL arquivo foi pulado, de QUAL pasta,
+  QUANDO, nem com QUAL documento/original ele colide. O skip não gera linha/evento exposto.
+- `POST /rescan` retorna só `enqueued` — não informa quantos foram pulados por duplicata.
+
+**Melhoria proposta:**
+1. **Win barato:** `/rescan` retornar também `skipped_duplicates` (e o frontend mostrar um
+   toast pós-varredura: "X novos enfileirados, Y pulados por já existirem").
+2. **Rastreável:** persistir/expor eventos de skip por duplicata (caminho, pasta, timestamp,
+   hash e o documento/original correspondente) — hoje só existe o contador em
+   `IngestedOriginal.duplicate_hits`, sem evento por-ocorrência (precisa de backend novo).
+3. **UI:** uma visão/filtro "Duplicatas" listando os arquivos pulados com o motivo e link
+   para o documento que já existe.
+
+**Escopo estimado:** `/gsd:quick` (backend: enriquecer retorno do /rescan + opcional log
+por-evento de dedup; frontend: toast + opcional lista/filtro de duplicatas).
+
+**Relacionado:** Item 2 (varredura de pasta nova) — são coisas distintas: Item 2 é não
+varrer; Item 3 é varrer, pular por duplicata e não deixar isso claro.
+
+---
+
 <!-- PRÓXIMOS ACHADOS: adicionar como "## Item N — <título> <status>" abaixo, mesmo formato. -->
