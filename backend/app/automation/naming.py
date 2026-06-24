@@ -37,6 +37,7 @@ NUNCA loga valores de campo (V7/V9 — dados sensíveis LGPD).
 
 import ntpath
 import re
+import unicodedata
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from app.config import get_settings
@@ -142,6 +143,90 @@ def sanitize_component(value: str, max_len: int | None = None) -> str:
     return cleaned
 
 
+def _strip_accents(s: str) -> str:
+    """Remove diacríticos via NFKD + drop dos combining (`IGUAÇU AÇÃO`→`IGUACU ACAO`).
+
+    Stdlib pura (`unicodedata`), sem tabela própria — cobre Latin-1/Unicode. Filtro
+    `sem_acento` (D-07). NÃO loga o valor.
+    """
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
+    )
+
+
+# Detecta o atalho LEGADO de data `{data:aaaa-mm}` (spec sem `=` contendo
+# aaaa/mm/dd) — mantido por retrocompat (A1 RESOLVED). `formato=` é a forma canônica.
+_DATE_SHORTCUT_RE = re.compile(r"aaaa|mm|dd")
+
+
+def _has_padrao(filters: list[str]) -> str | None:
+    """Se a cadeia de filtros contém `padrao=X`, devolve `X` (senão None).
+
+    A3 (RESOLVED): `padrao=` deve SUPRIMIR o bloqueio D-07 quando o campo está
+    ausente/vazio — por isso é detectado ANTES de levantar `_MissingField`.
+    """
+    for f in filters:
+        f = f.strip()
+        if f.startswith("padrao="):
+            return f[len("padrao=") :]
+    return None
+
+
+def _apply_filter(value: str, f: str) -> str:
+    """Aplica UM filtro `f` ao `value` via DISPATCH EXPLÍCITO (T-09-05, nunca eval).
+
+    Conjunto v1 (D-07): palavras / letras / truncar / maiusc / minusc / sem_acento /
+    substituir / formato / padrao. Filtro desconhecido OU arg inválido (`int()`) →
+    INERTE (devolve o value cru) — falha-fechada amigável que não quebra o token.
+    `formato=` que não casa data levanta `_MissingField` (pediu formato e o valor não
+    é ISO → bloqueio D-07). NÃO loga valores.
+    """
+    f = f.strip()
+    if f.startswith("palavras="):
+        arg = f[len("palavras=") :]
+        try:
+            n = int(arg)
+        except ValueError:
+            return value  # inerte
+        return " ".join(value.split()[:n])
+    if f.startswith("letras=") or f.startswith("truncar="):
+        arg = f.split("=", 1)[1]
+        try:
+            n = int(arg)
+        except ValueError:
+            return value  # inerte
+        return value[:n]
+    if f == "maiusc":
+        return value.upper()
+    if f == "minusc":
+        return value.lower()
+    if f == "sem_acento":
+        return _strip_accents(value)
+    if f.startswith("substituir="):
+        arg = f[len("substituir=") :]
+        de, _, para = arg.partition(">")
+        return value.replace(de, para)
+    if f.startswith("formato="):
+        spec = f[len("formato=") :]
+        formatted = _fmt_date(value, spec)
+        if formatted is None:
+            # Pediu formato de data e o valor não é ISO → bloqueio (não chuta).
+            raise _MissingField(f)
+        return formatted
+    if f.startswith("padrao="):
+        # padrao= já foi resolvido em _has_padrao (campo presente → no-op aqui).
+        return value
+    # Filtro desconhecido → inerte (nunca eval; espelha rules._OPERATORS / V5).
+    return value
+
+
+def _apply_filter_pipeline(value: str, filters: list[str]) -> str:
+    """Aplica os filtros em ORDEM (pipeline, D-06). Cada um via dispatch explícito."""
+    for f in filters:
+        value = _apply_filter(value, f)
+    return value
+
+
 def _fmt_date(iso: str, spec: str) -> str | None:
     """Aplica um formato `{data:...}` sobre um valor ISO `YYYY-MM-DD`.
 
@@ -170,16 +255,35 @@ def _substitute(pattern: str, fields: dict[str, str], *, sanitize: bool) -> str:
     def repl(match: re.Match[str]) -> str:
         name = match.group(1).strip()
         spec = match.group(2)
+
+        # spec é tudo após o 1º ':' (group(2)); a cadeia de filtros é o split por ':'.
+        filters = [f.strip() for f in spec.split(":")] if spec is not None else []
+
         raw = fields.get(name)
-        if raw is None or not str(raw).strip():
-            raise _MissingField(name)
-        value = str(raw)
-        if spec is not None:
-            formatted = _fmt_date(value, spec.strip())
-            if formatted is None:
-                # Formato pedido mas valor não é ISO → bloqueio (não chuta).
+        missing = raw is None or not str(raw).strip()
+
+        if missing:
+            # A3 (D-07): `padrao=X` na cadeia SUPRIME o bloqueio e injeta o default.
+            default = _has_padrao(filters)
+            if default is None:
                 raise _MissingField(name)
-            value = formatted
+            value = default
+        else:
+            value = str(raw)
+
+        if spec is not None:
+            spec_str = spec.strip()
+            if not missing and "=" not in spec_str and _DATE_SHORTCUT_RE.search(spec_str):
+                # Atalho LEGADO `{data:aaaa-mm}` (sem `=`): trata o spec inteiro como
+                # formato de data (A1 RESOLVED, retrocompat). None → bloqueio.
+                formatted = _fmt_date(value, spec_str)
+                if formatted is None:
+                    raise _MissingField(name)
+                value = formatted
+            else:
+                # PIPELINE de filtros inline (D-06/D-07), dispatch explícito sem eval.
+                value = _apply_filter_pipeline(value, filters)
+
         return sanitize_component(value) if sanitize else value
 
     return _TOKEN_RE.sub(repl, pattern)
