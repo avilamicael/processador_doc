@@ -356,7 +356,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 6.1 → 6.2
 **Goal:** Tornar o renomear/mover utilizável de verdade. (1) Destino de arquivo escolhido pelo usuário: hoje o destino é confinado sob uma base (`data_dir\organizados`) e caminho absoluto digitado é sanitizado/mutilado (`C:`→`C_`) e aninhado — gerar destino correto (absoluto com validação e/ou base configurável na UI), parando de mutilar silenciosamente. (2) Regras de transformação de valor no padrão de renomear/mover (truncar, primeiras N palavras/letras, caixa, remover acentos, substituir/regex, valor-padrão, mapa de valores, formatação de data/número) além do `{campo}` cru + sanitize; tratamento configurável de chars inválidos do Windows.
 **Requirements**: Backlog itens 10–11 (`.planning/notes/2026-06-24-melhorias-teste-usuario-final.md`)
 **Depends on:** Phase 6.2 (automações atuais: renomear/mover/copiar, dry-run, undo)
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 **Sucesso:** usuário configura uma automação que move/renomeia para um destino correto da escolha dele, com o nome transformado como deseja, e o dry-run mostra o caminho final correto.
 
@@ -367,7 +367,7 @@ Plans:
 
 **Wave 2** *(blocked on 09-01)*
 
-- [ ] 09-02-PLAN.md — Backend (TDD): engine de filtros inline encadeáveis no token (palavras/letras/truncar/maiusc/minusc/sem_acento/padrao/substituir/formato) + sanitize pós-filtro (D-06..D-08)
+- [x] 09-02-PLAN.md — Backend (TDD): engine de filtros inline encadeáveis no token (palavras/letras/truncar/maiusc/minusc/sem_acento/padrao/substituir/formato) + sanitize pós-filtro (D-06..D-08)
 
 **Wave 3** *(blocked on 09-01, 09-02)*
 

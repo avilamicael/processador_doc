@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 9 context gathered
-last_updated: "2026-06-24T20:09:13.072Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-06-24T20:15:44.165Z"
 last_activity: 2026-06-24
 progress:
   total_phases: 13
   completed_phases: 8
   total_plans: 41
-  completed_plans: 43
+  completed_plans: 44
   percent: 62
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 ## Current Position
 
 Phase: 09 (automacao-destino-de-arquivo-configuravel-e-transformacao-de) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-06-24
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
@@ -88,6 +88,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 06.2 P02 | 18 | 3 tasks | 6 files |
 | Phase 06.2 P03 | 25 | 3 tasks | 3 files |
 | Phase 09 P01 | 22 | 4 tasks | 6 files |
+| Phase 09 P02 | ~8 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [06.2-02]: apply_stage MULTI-SAÍDA — materializa N cópias (write-ahead action='copy' por cópia) SEM remove_original (D-01); move por ÚLTIMO e só então remove a origem (D-03); copy-only conclui o doc sem mover. undo discrimina action='copy' (apaga a cópia, nunca toca o original/CAS, D-06); undo por-run reverte copy+move juntos. API valida copy (exige dest_folder, V5) e dry-run emite 1 linha por saída (action_kind/removes_original). Sem migração; suíte inteira verde (399), zero regressão (D-04).
 - [Phase ?]: [06.2-03]: Ação Copiar exposta na UI de forma estritamente aditiva — reusa o caminho do move (input/validação/mapeamento, pattern=dest_folder genérico) com toCreateBody preservando a.action_type; diferenciação mínima (dot --st-encontrado + nota D-05 'o original permanece'); dry-run dispara badge 'Copiado — original mantido' por action_kind/removes_original do backend (Plano 02). Fluxo criar→dry-run→aplicar→desfazer verificado ao vivo (cópia no destino, original intacto, undo apaga só a cópia, nada se perde — D-01/D-06). Phase 06.2 (Copiar) encerrada; Cortar adiada p/ v2.
 - [Phase ?]: [09-01] resolve_dest_folder com 3 ramos (Windows drive/UNC, POSIX /..., relativo+base): absoluto literal sem .resolve() e sem is_relative_to (D-03), anchor nunca sanitizado, segmentos sim (D-08); _is_abs_windows exige DRIVE real para nao confundir /tmp POSIX com Windows. D-05 via _anchor_missing/_plan_anchor_missing checa exists() do anchor ANTES do mkdir no dry-run e apply. D-04 provado por teste de integracao de API. Sem schema.
+- [Phase ?]: [09-02] Engine de filtros inline em _substitute via pipeline split-por-':' + dispatch EXPLICITO (_apply_filter), nunca eval (T-09-05); filtro desconhecido e int() invalido = inerte. padrao= resolvido ANTES de _MissingField (A3): campo ausente + padrao=X usa X. Atalho legado {data:aaaa-mm} preservado (A1). Sanitize DEPOIS dos filtros por segmento (D-08). Sem schema, sem dep nova (so unicodedata stdlib).
 
 ### Pending Todos
 
@@ -181,6 +183,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-24T20:08:47.643Z
-Stopped at: Phase 9 context gathered
+Last session: 2026-06-24T20:15:44.155Z
+Stopped at: Completed 09-02-PLAN.md
 Resume file: None
