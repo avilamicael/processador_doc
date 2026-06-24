@@ -121,4 +121,38 @@ varrer; Item 3 é varrer, pular por duplicata e não deixar isso claro.
 
 ---
 
+## Item 4 — Condição "Valor de campo": trocar o nome do campo (texto livre) por seletor 🔴
+
+**Sintoma (relato do usuário):** na automação, bloco "Quando rodar" → condição
+**"Valor de campo"**, não fica claro como funciona — em parte porque o **nome do campo
+é digitado à mão**.
+
+**Como funciona hoje (correto, mas confuso):** a condição "Valor de campo" (`field`)
+compara um **campo extraído do documento** (template + IA) com um valor, via operador
+(`é`/`contém`/`>`/`<`). Avaliação em `backend/app/automation/rules.py:72` contra os
+campos VÁLIDOS do doc (`automation/stage.py:204`); `é`/`contém` case-insensitive;
+`>`/`<` numérico quando ambos os lados são número, senão texto.
+
+**A aspereza de UX:** o nome do campo é um **`<input>` de texto livre** com placeholder
+"nome do campo" — `frontend/src/pages/AutomationsPage.tsx:657-662`. O usuário precisa
+**digitar o nome EXATO** do campo do template, de memória. Se errar (typo, nome que não
+existe), a condição **nunca casa e não há aviso** (campo ausente → falso silencioso,
+`rules.py:86-88`). Existe um painel "Campos do template" como referência na página
+(`AutomationsPage.tsx:547`), mas o input não está ligado a ele.
+
+**Melhoria proposta:**
+1. Trocar o texto livre por um **`<select>`/autocomplete dos campos do template**
+   referenciado (já dá pra saber o template via condição "Tipo de documento" ou o
+   template selecionado; os campos já são buscados — ver painel "Campos do template").
+2. Se nenhum template estiver fixado na automação, oferecer autocomplete com os campos
+   conhecidos dos templates + permitir digitar (fallback), mas **validar/avisar** quando
+   o nome não casar com nenhum campo conhecido.
+3. (Opcional) no dry-run, sinalizar quando uma condição "Valor de campo" referencia um
+   campo inexistente/ não extraído (hoje falha silenciosa).
+
+**Escopo estimado:** `/gsd:quick` (frontend principalmente: select/autocomplete +
+validação no form; reaproveita a busca de campos do template que já existe).
+
+---
+
 <!-- PRÓXIMOS ACHADOS: adicionar como "## Item N — <título> <status>" abaixo, mesmo formato. -->
