@@ -299,3 +299,46 @@ def test_dry_run_copy_move_emits_row_per_output(
     move_row = next(r for r in same_doc if r["action_kind"] == "move")
     assert copy_row["removes_original"] is False
     assert move_row["removes_original"] is True
+
+
+# --------------------------------------------------------------------------- #
+# Fase 9 (D-04): dry-run via API expõe o CAMINHO ABSOLUTO REAL no dest_path —   #
+# sem mutilar (C_) e sem aninhar sob "organizados".                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_dry_run_absolute_dest_shows_real_path(
+    client: TestClient, schema_engine: Engine, tmp_path
+) -> None:
+    """D-04: dry-run de uma automação 'mover' com dest_folder ABSOLUTO (anchor que
+    EXISTE no runner — `tmp_path` real, sem cair no bloqueio D-05) → a linha carrega
+    em `dest_path` o caminho absoluto REAL resolvido: começa no anchor de `tmp_path`,
+    contém o segmento "NOTAS" e o valor do `{cliente}` sanitizado, e NÃO contém "C_"
+    nem o prefixo "organizados" (prova que o caminho não é mutilado nem aninhado)."""
+    doc_id = _seed_ready_doc(schema_engine)
+    # dest absoluto ancorado em tmp_path (anchor existe → não bloqueia por D-05).
+    abs_dest = f"{tmp_path}/NOTAS/{{cliente}}"
+    client.post(
+        "/automations",
+        json={
+            "name": "Mover p/ destino absoluto",
+            "conditions": [{"field": "extension", "operator": "eq", "value": ".pdf"}],
+            "actions": [{"action_type": "move", "params": {"dest_folder": abs_dest}}],
+        },
+    )
+    resp = client.post("/automations/dry-run", json={"document_ids": [doc_id]})
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()["rows"]
+    same_doc = [r for r in rows if r["document_id"] == doc_id]
+    assert same_doc, "esperava ao menos uma linha para o documento"
+    move_row = next((r for r in same_doc if r["action_kind"] == "move"), same_doc[0])
+    dest_path = move_row["dest_path"]
+    assert dest_path is not None
+    assert move_row["blocked"] is False
+    # Caminho absoluto REAL: ancorado em tmp_path, com o segmento "NOTAS" e o valor.
+    assert dest_path.startswith(str(tmp_path))
+    assert "NOTAS" in dest_path
+    assert "ACME" in dest_path
+    # NÃO mutilado e NÃO aninhado sob a base padrão.
+    assert "C_" not in dest_path
+    assert "organizados" not in dest_path

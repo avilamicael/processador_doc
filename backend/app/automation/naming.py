@@ -37,7 +37,7 @@ NUNCA loga valores de campo (V7/V9 — dados sensíveis LGPD).
 
 import ntpath
 import re
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from app.config import get_settings
 
@@ -206,15 +206,27 @@ def resolve_pattern(pattern: str, fields: dict[str, str]) -> str | None:
 
 
 def _is_abs_windows(p: str) -> bool:
-    """True se `p` é um caminho ABSOLUTO na semântica Windows (drive ou UNC), D-02.
+    """True se `p` é um caminho ABSOLUTO Windows com DRIVE (`C:\\`) ou UNC, D-02.
 
-    Usa `PureWindowsPath().drive` (cobre `C:` e `\\\\srv\\share`) e `ntpath.isabs`
-    (cobre também o leading `\\`), NUNCA `os.path.isabs`/`Path.is_absolute()` — estes
-    dependem do OS do runner e dariam `False` para `C:\\...` em Linux/WSL (Pitfall 1).
-    POSIX-absoluto (`/...`) NÃO é tratado como absoluto aqui: o alvo é Windows (D-02);
-    um caminho POSIX é juntado à base como relativo.
+    Usa `PureWindowsPath().drive` (não-vazio só com drive `C:` ou UNC `\\\\srv\\share`),
+    NUNCA `os.path.isabs`/`Path.is_absolute()` — estes dependem do OS do runner e
+    dariam `False` para `C:\\...` em Linux/WSL (Pitfall 1). Um leading-slash puro
+    (`/...` ou `\\algo` SEM drive/UNC) NÃO conta aqui (PureWindowsPath o lê como anchor
+    `'\\'` mas sem drive) — é tratado pelo ramo POSIX-absoluto (`_is_abs_posix`),
+    evitando converter um caminho POSIX em Windows e quebrar os separadores.
     """
-    return bool(PureWindowsPath(p).drive) or ntpath.isabs(p)
+    return bool(PureWindowsPath(p).drive)
+
+
+def _is_abs_posix(p: str) -> bool:
+    """True se `p` é um caminho POSIX-absoluto (`/...`) — conveniência do dev Linux/WSL.
+
+    A2 (RESEARCH, RESOLVED): suportar POSIX-absoluto é opcional/discrição; habilitado
+    para que o dev/CI em Linux use destinos absolutos reais (`/tmp/...`) e o dry-run
+    mostre o caminho literal (D-04). Em Windows, o alvo de produção, o ramo Windows
+    cobre `C:\\`/UNC. Excludente: só conta quando NÃO há drive/UNC Windows.
+    """
+    return not PureWindowsPath(p).drive and PurePosixPath(p).is_absolute()
 
 
 def _resolve_segments(
@@ -271,6 +283,15 @@ def resolve_dest_folder(
         # Monta o caminho Windows literal; SEM .resolve() (não canonizar contra o CWD)
         # e SEM is_relative_to (D-03 — absoluto escreve onde houver permissão).
         dest = PureWindowsPath(anchor, *safe_parts)
+        return Path(str(dest))
+
+    # ----- RAMO POSIX-ABSOLUTO (`/...`): literal, anchor "/" preservado (A2) -----
+    if _is_abs_posix(pattern):
+        posix = PurePosixPath(pattern)
+        safe_parts = _resolve_segments(list(posix.parts[1:]), fields)
+        if safe_parts is None:
+            return None  # D-07
+        dest = PurePosixPath(posix.anchor, *safe_parts)
         return Path(str(dest))
 
     # ----- RAMO RELATIVO (D-02): junta à base padrão, cada segmento sanitizado -----
