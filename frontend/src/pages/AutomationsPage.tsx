@@ -163,25 +163,184 @@ function stripQuotes(value: string): string {
 }
 
 // Sanitiza caracteres inválidos no Windows (D-08), só para a pré-visualização.
-const WINDOWS_INVALID = /[<>:"|?*]/g
+// Espelha sanitize_component do backend: < > : " / \ | ? * → "_" POR SEGMENTO,
+// DEPOIS dos filtros. O anchor (drive/UNC) nunca passa por aqui (ver resolveFolderSegments).
+const WINDOWS_INVALID = /[<>:"/\\|?*]/g
+
+function sanitizeSegment(seg: string): string {
+  return seg.replace(WINDOWS_INVALID, '_')
+}
+
+// Detecta o ANCHOR absoluto Windows (espelha 09-01 _is_abs_windows): drive `C:\`/`C:/`
+// ou UNC `\\srv\share`. Devolve o anchor e o RESTO do caminho, ou null se relativo.
+// (Para a prévia client-side basta a forma Windows — o caso real do piloto é `C:\…`.)
+function splitWindowsAbsolute(pattern: string): { anchor: string; rest: string } | null {
+  // Drive: uma letra + ':' + separador. Ex.: C:\Users\…  ou  C:/Users/…
+  const drive = pattern.match(/^([A-Za-z]:[\\/])/)
+  if (drive) {
+    return { anchor: drive[1], rest: pattern.slice(drive[1].length) }
+  }
+  // UNC: \\servidor\share\…  (anchor = \\servidor\share)
+  const unc = pattern.match(/^(\\\\[^\\/]+[\\/][^\\/]+)([\\/]?)/)
+  if (unc) {
+    const anchor = unc[1] + (unc[2] || '')
+    return { anchor, rest: pattern.slice(anchor.length) }
+  }
+  return null
+}
 
 function sampleValue(field: { name: string; hint: string | null }): string {
   if (field.hint && field.hint.trim()) return field.hint.trim()
   return field.name
 }
 
-// Resolve {campo} com valores de exemplo dos campos do template (D-26).
+// Detecta o atalho LEGADO de data `{data:aaaa-mm}` (spec SEM '=' contendo aaaa/mm/dd) —
+// espelha _DATE_SHORTCUT_RE do backend (A1). `formato=` é a forma canônica nova.
+const DATE_SHORTCUT_RE = /aaaa|mm|dd/
+
+// Formata um valor ISO `YYYY-MM-DD` segundo `spec` (aaaa/mm/dd) — espelha _fmt_date.
+// Valor não-ISO → null (sinal de "não dá pra formatar"; na prévia mostramos o token cru).
+function fmtDate(iso: string, spec: string): string | null {
+  const parts = iso.split('-')
+  if (parts.length !== 3) return null
+  const [y, m, d] = parts
+  if (!(y.length === 4 && /^\d+$/.test(y) && /^\d+$/.test(m) && /^\d+$/.test(d))) return null
+  return spec.replace(/aaaa/g, y).replace(/mm/g, m).replace(/dd/g, d)
+}
+
+// Remove acentos — equivalente client-side de _strip_accents (NFKD + drop combining).
+function stripAccents(s: string): string {
+  return s.normalize('NFD').replace(/\p{Diacritic}/gu, '')
+}
+
+// Aplica UM filtro via DISPATCH EXPLÍCITO (espelha _apply_filter; NUNCA eval, T-09-08).
+// Filtro desconhecido OU arg inválido → INERTE (devolve o value cru). `formato=` que
+// não casa data → null (a prévia mostra o token cru, sem chutar). `padrao=` é no-op aqui.
+function applyFilter(value: string, f: string): string | null {
+  f = f.trim()
+  if (f.startsWith('palavras=')) {
+    const n = Number(f.slice('palavras='.length))
+    if (!Number.isInteger(n)) return value // inerte
+    return value.split(/\s+/).filter(Boolean).slice(0, n).join(' ')
+  }
+  if (f.startsWith('letras=') || f.startsWith('truncar=')) {
+    const n = Number(f.split('=', 2)[1])
+    if (!Number.isInteger(n)) return value // inerte
+    return value.slice(0, n)
+  }
+  if (f === 'maiusc') return value.toUpperCase()
+  if (f === 'minusc') return value.toLowerCase()
+  if (f === 'sem_acento') return stripAccents(value)
+  if (f.startsWith('substituir=')) {
+    const arg = f.slice('substituir='.length)
+    const i = arg.indexOf('>')
+    const de = i < 0 ? arg : arg.slice(0, i)
+    const para = i < 0 ? '' : arg.slice(i + 1)
+    return de === '' ? value : value.split(de).join(para)
+  }
+  if (f.startsWith('formato=')) {
+    const spec = f.slice('formato='.length)
+    return fmtDate(value, spec) // null → caller mostra o token cru
+  }
+  if (f.startsWith('padrao=')) return value // resolvido antes (no-op aqui)
+  return value // desconhecido → inerte
+}
+
+// Extrai `padrao=X` da cadeia (espelha _has_padrao). Usado quando o campo não tem
+// exemplo: na prévia, vira o valor de exemplo.
+function hasPadrao(filters: string[]): string | null {
+  for (const f of filters) {
+    const t = f.trim()
+    if (t.startsWith('padrao=')) return t.slice('padrao='.length)
+  }
+  return null
+}
+
+// Resolve UM token `{campo:filtro=arg:filtro}` para texto (sem sanitizar — a
+// sanitização por segmento é responsabilidade do caller, D-08). Espelha _substitute.repl.
+function resolveToken(token: string, byName: Map<string, string>): string {
+  const colon = token.indexOf(':')
+  const name = (colon < 0 ? token : token.slice(0, colon)).trim()
+  const spec = colon < 0 ? null : token.slice(colon + 1)
+  const filters = spec !== null ? spec.split(':').map((s) => s.trim()) : []
+
+  const sample = byName.get(name)
+  const missing = sample === undefined || !sample.trim()
+
+  let value: string
+  if (missing) {
+    const def = hasPadrao(filters)
+    if (def === null) return `⟨${name}?⟩` // campo ausente sem padrao= → marcador
+    value = def
+  } else {
+    value = sample
+  }
+
+  if (spec !== null) {
+    const specStr = spec.trim()
+    if (!missing && !specStr.includes('=') && DATE_SHORTCUT_RE.test(specStr)) {
+      // Atalho LEGADO `{data:aaaa-mm}` (sem '='): trata o spec como formato de data.
+      const formatted = fmtDate(value, specStr)
+      value = formatted ?? `{${token}}` // não-ISO → token cru (prévia)
+    } else {
+      // PIPELINE de filtros inline (D-06/D-07), dispatch explícito sem eval.
+      for (const filt of filters) {
+        const out = applyFilter(value, filt)
+        if (out === null) return `{${token}}` // formato= sobre não-data → token cru
+        value = out
+      }
+    }
+  }
+  return value
+}
+
+// Resolve um padrão de NOME (rename): aplica os filtros e sanitiza o COMPONENTE inteiro
+// como hoje (espelha resolve_pattern → _substitute + sanitize_component).
 function resolvePattern(
   pattern: string,
   fields: { name: string; hint: string | null }[],
 ): string {
   const byName = new Map(fields.map((f) => [f.name, sampleValue(f)]))
-  return pattern.replace(/\{([^}]+)\}/g, (_m, token: string) => {
-    const name = String(token).split(':')[0].trim()
-    const value = byName.get(name)
-    if (value === undefined) return `⟨${name}?⟩`
-    return value.replace(WINDOWS_INVALID, '')
-  })
+  const resolved = pattern.replace(/\{([^}]+)\}/g, (_m, token: string) =>
+    resolveToken(String(token), byName),
+  )
+  return sanitizeSegment(resolved)
+}
+
+// Resolve um padrão de PASTA (move/copy) preservando o ANCHOR absoluto e sanitizando
+// só os segmentos APÓS o anchor (D-08, espelha resolve_dest_folder). Devolve o caminho
+// montado: anchor + segmentos resolvidos juntados por '\'. Para padrão relativo, devolve
+// os segmentos juntados por '/' (mantém a prévia atual de pasta relativa).
+function resolveFolderPreview(
+  pattern: string,
+  fields: { name: string; hint: string | null }[],
+): { text: string; absolute: boolean } {
+  const byName = new Map(fields.map((f) => [f.name, sampleValue(f)]))
+  const resolveSeg = (seg: string) =>
+    sanitizeSegment(
+      seg.replace(/\{([^}]+)\}/g, (_m, token: string) => resolveToken(String(token), byName)),
+    )
+
+  const abs = splitWindowsAbsolute(pattern)
+  if (abs) {
+    // Segmentos APÓS o anchor: fatia por '/' e '\', resolve+sanitiza cada um.
+    const segs = abs.rest
+      .split(/[\\/]+/)
+      .filter((s) => s.length > 0)
+      .map(resolveSeg)
+    // anchor já termina em separador (drive) — junta os segmentos por '\' (Windows).
+    const tail = segs.join('\\')
+    const anchor = abs.anchor
+    const joined = tail ? (/[\\/]$/.test(anchor) ? anchor + tail : anchor + '\\' + tail) : anchor
+    return { text: joined, absolute: true }
+  }
+
+  // Relativo: mantém a prévia por segmento (juntada por '/'), como antes.
+  const segs = pattern
+    .split(/[\\/]+/)
+    .filter((s) => s.length > 0)
+    .map(resolveSeg)
+  return { text: segs.join('/'), absolute: false }
 }
 
 // Resumo das condições para o card da lista (espelha o condTxt do mockup).
@@ -571,11 +730,18 @@ export function AutomationsPage() {
     )
   }
 
-  // Pré-visualização ao vivo (D-26).
+  // Pré-visualização ao vivo (D-09/D-26). Para rename: nome sanitizado + .pdf.
+  // Para move/copy: caminho de pasta — ABSOLUTO (anchor preservado) quando o destino
+  // é absoluto; senão segmentos relativos. Filtros inline aplicados nos dois casos.
   const renderPreview = (a: ActDraft) => {
     if (!a.pattern.trim() || !activeTemplate) return null
     const isRn = a.action_type === 'rename'
-    const out = resolvePattern(a.pattern, activeTemplate.fields) + (isRn ? '.pdf' : '')
+    let out: string
+    if (isRn) {
+      out = resolvePattern(a.pattern, activeTemplate.fields) + '.pdf'
+    } else {
+      out = resolveFolderPreview(a.pattern, activeTemplate.fields).text
+    }
     const color = isRn ? 'var(--st-tratado)' : 'var(--st-encontrado)'
     const bg = isRn ? 'var(--st-tratado-bg)' : 'var(--st-encontrado-bg)'
     return (
@@ -843,12 +1009,17 @@ export function AutomationsPage() {
         {isRn ? (
           <div style={hintStyle}>
             <code>{'{campo}'}</code> é trocado pelo <b>valor lido do documento</b>. Os campos
-            vêm do template da condição "Tipo de documento".
+            vêm do template da condição "Tipo de documento". Você pode transformar o valor com{' '}
+            <b>filtros</b>: <code>{'{fornecedor:maiusc:palavras=2}'}</code>,{' '}
+            <code>{'{cliente:sem_acento}'}</code>, <code>{'{data:formato=aaaa-mm-dd}'}</code>.
           </div>
         ) : (
           <div style={hintStyle}>
             Cole o caminho como vier do Windows — <code>"C:\Users\…\Análise"</code> ou{' '}
-            <code>C:\Users\…\Análise</code>: as aspas são removidas ao sair do campo.
+            <code>C:\Users\…\Análise</code>: as aspas são removidas ao sair do campo. Caminhos
+            absolutos (<code>C:\…</code>, <code>\\servidor\…</code>) vão exatamente para onde
+            você indicar. Use <b>filtros</b> nos campos, ex.:{' '}
+            <code>{'C:\\NOTAS\\{fornecedor:maiusc:palavras=1}'}</code>.
           </div>
         )}
         {a.action_type === 'copy' && (
