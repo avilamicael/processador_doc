@@ -12,7 +12,7 @@ Prova:
 
 import warnings
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import Engine
@@ -71,7 +71,7 @@ def test_active_folder_count_counts_only_active(
 
 
 def test_last_scan_at_reflects_module_timestamp(client: TestClient) -> None:
-    ts = datetime(2026, 6, 24, 12, 0, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 24, 12, 0, 0, tzinfo=UTC)
     watcher.LAST_SCAN_AT = ts
     body = client.get("/watcher/status").json()
     assert body["last_scan_at"] is not None
@@ -81,6 +81,6 @@ def test_last_scan_at_reflects_module_timestamp(client: TestClient) -> None:
 
 def test_get_last_scan_at_helper() -> None:
     assert watcher.get_last_scan_at() is None
-    ts = datetime(2026, 6, 24, 9, 30, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 24, 9, 30, 0, tzinfo=UTC)
     watcher.LAST_SCAN_AT = ts
     assert watcher.get_last_scan_at() == ts

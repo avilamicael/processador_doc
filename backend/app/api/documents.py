@@ -32,7 +32,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.classification.confidence import compute_confidence
@@ -177,6 +177,18 @@ class RescanOut(BaseModel):
     """Resultado de uma varredura forçada: quantos candidatos enfileirados."""
 
     enqueued: int
+
+
+class DeleteDocumentsIn(BaseModel):
+    """Body do delete em lote — a lista de ids de Document a remover (só registro)."""
+
+    ids: list[int]
+
+
+class DeleteDocumentsOut(BaseModel):
+    """Resultado do delete em lote: quantos Documents foram realmente removidos."""
+
+    deleted: int
 
 
 def _field_out(f: FilledField) -> ClassificationFieldOut:
@@ -424,6 +436,80 @@ def get_attention(request: Request) -> AttentionOut:
         "em_revisao": len(em_revisao),
     }
     return AttentionOut(falha=falha, quarentena=quarentena, em_revisao=em_revisao, counts=counts)
+
+
+@router.post("/documents/delete", response_model=DeleteDocumentsOut)
+def delete_documents(request: Request, body: DeleteDocumentsIn) -> DeleteDocumentsOut:
+    """Remove em LOTE SÓ o registro de cada documento — NUNCA o arquivo físico.
+
+    Constraint forte do projeto (CLAUDE.md): operações sobre documentos do cliente
+    nunca podem causar perda de arquivos. Este endpoint apaga PURAMENTE do banco;
+    não importa/chama `os`/`shutil`/`Path.unlink` — o arquivo de origem na pasta
+    monitorada e o blob no CAS permanecem intactos. Se o arquivo ainda estiver na
+    pasta monitorada e o original ficar sem nenhum bloco, o watcher pode
+    re-ingeri-lo numa próxima varredura — comportamento ESPERADO (o gate de dedup é
+    liberado junto, ver passo de anti-órfão).
+
+    REGISTRADO ANTES de `GET /documents/{document_id}` (mesma razão de
+    `/documents/attention`): o conversor de path `{document_id}: int` rejeitaria
+    "delete" com 422 se esta rota viesse depois.
+
+    Algoritmo numa única sessão:
+    (1) Para cada id: `session.get(Document, id)`; ausente → ignora silenciosamente.
+    (2) Captura `content_hash` e `origin_original_id` ANTES de deletar.
+    (3) `session.delete(doc)` — o cascade all,delete-orphan já remove
+        extraction/classification/filled_fields/usages/audit_logs/pages.
+    (4) Limpa Jobs órfãos do bloco (`original_hash == content_hash`) — senão um Job
+        'done' (UNIQUE hash,step) bloquearia uma futura re-ingestão.
+    (5) Anti-órfão de dedup: após o flush, para cada `origin_original_id` tocado,
+        se NÃO sobrar nenhum Document apontando, apaga o IngestedOriginal e os Jobs
+        do `original_hash` dele (libera o gate). Se ainda houver outro bloco (split),
+        preserva o original.
+    (6) commit; retorna {deleted: nº de Documents efetivamente apagados}.
+    """
+    engine = request.app.state.engine
+    deleted = 0
+    block_hashes: list[str] = []
+    touched_origin_ids: set[int] = set()
+
+    with get_session(engine) as session:
+        for doc_id in body.ids:
+            doc = session.get(Document, doc_id)
+            if doc is None:
+                continue  # id inexistente → ignora silenciosamente (não derruba o lote).
+            block_hashes.append(doc.content_hash)
+            if doc.origin_original_id is not None:
+                touched_origin_ids.add(doc.origin_original_id)
+            # Cascade (all, delete-orphan) limpa extraction/classification/
+            # filled_fields/usages/audit_logs/pages do bloco.
+            session.delete(doc)
+            deleted += 1
+
+        # Flush para que os Documents apagados não contem na checagem de blocos
+        # restantes (anti-órfão de dedup) — sem commit ainda.
+        session.flush()
+
+        # (4) Jobs órfãos do(s) bloco(s) removido(s).
+        for content_hash in block_hashes:
+            session.execute(delete(Job).where(Job.original_hash == content_hash))
+
+        # (5) Anti-órfão de dedup: IngestedOriginal sem blocos restantes.
+        for origin_id in touched_origin_ids:
+            remaining = session.scalar(
+                select(func.count(Document.id)).where(Document.origin_original_id == origin_id)
+            )
+            if remaining:
+                continue  # Outro bloco ainda aponta (split) → preserva o original.
+            original = session.get(IngestedOriginal, origin_id)
+            if original is None:
+                continue
+            original_hash = original.original_hash
+            session.delete(original)
+            session.execute(delete(Job).where(Job.original_hash == original_hash))
+
+        session.commit()
+
+    return DeleteDocumentsOut(deleted=deleted)
 
 
 @router.get("/documents/{document_id}", response_model=DocumentDetailOut)
