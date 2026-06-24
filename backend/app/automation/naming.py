@@ -1,4 +1,4 @@
-"""Resolução de padrões `{campo}` → nome/pasta sanitizado e confinado (Fase 6).
+"""Resolução de padrões `{campo}` → nome/pasta sanitizado (Fase 6 + Fase 9).
 
 Função PURA — sem IA, sem disco, sem banco (espelha `validation/dates.py` e
 `validation/money.py`: parse→normalizado-ou-`None`, nunca chuta).
@@ -11,20 +11,33 @@ D-07 (bloqueio → revisão): se um token referencia um campo FALTANTE/vazio, a
 resolução devolve `None`. O caller (apply_stage, Plan 04) rebaixa o documento para
 EM_REVISAO em vez de aplicar um nome quebrado — NUNCA inventa um valor.
 
-Segurança (V4, path traversal): o valor de um campo vem da IA/documento — é
-NÃO-CONFIÁVEL ao virar caminho. Duas defesas em camadas:
-1. `sanitize_component` remove os 9 chars proibidos do Windows (incluindo `\\ / :`),
-   neutraliza `..`, nomes reservados e trailing dot/space, e trunca ao teto MAX_PATH;
-2. `resolve_dest_folder` confina o destino resolvido sob a raiz-base via
-   `resolved.is_relative_to(base.resolve())` — campo com `..` ou caminho absoluto NÃO
-   escapa (devolve `None`).
+Política de destino (Fase 9 — D-01..D-03): `resolve_dest_folder` tem DOIS ramos.
+- **Absoluto** (`C:\\...` ou UNC `\\\\srv\\share\\...`): o caminho é LITERAL — o
+  anchor (drive/UNC) é preservado SEM sanitizar, os SEGMENTOS após o anchor são
+  resolvidos+sanitizados, e o resultado NÃO recebe a base padrão. NÃO se chama
+  `.resolve()` (canonizaria contra o CWD do backend, reintroduzindo o lixo
+  `backend\\C:\\...` — lição de `watched_folders`) e NÃO se chama `is_relative_to`
+  (o confinamento V4 foi REMOVIDO para o ramo absoluto — D-03).
+- **Relativo** (sem drive/UNC): juntado à `base_root` (a `AUTOMATION_DEST_ROOT` se
+  setada, senão `data_dir/organizados`), com cada segmento sanitizado.
+
+A detecção absoluto-vs-relativo usa semântica **Windows** (`ntpath`/`PureWindowsPath`),
+NUNCA `os.path.isabs`/`Path.is_absolute()` — estes dependem do OS do runner e
+retornariam `False` para `C:\\...` rodando em Linux/WSL (dev/CI), jogando o destino do
+cliente sob a base por engano (Pitfall 1).
+
+**Mudança consciente de postura (D-03):** single-tenant, na máquina do cliente — a
+automação pode escrever em QUALQUER caminho absoluto com permissão do processo. A
+sanitização por SEGMENTO (chars proibidos do Windows, `..`, reservados) continua como
+única defesa V4 residual; o anchor (drive/`\\`) NÃO vem de campo, então não é vetor.
 
 NÃO cria pasta no disco (criar diretório é responsabilidade do fileops, Plan 03) — módulo PURO.
 NUNCA loga valores de campo (V7/V9 — dados sensíveis LGPD).
 """
 
+import ntpath
 import re
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from app.config import get_settings
 
@@ -192,58 +205,87 @@ def resolve_pattern(pattern: str, fields: dict[str, str]) -> str | None:
     return sanitize_component(substituted)
 
 
-def resolve_dest_folder(
-    pattern: str, fields: dict[str, str], *, base_root: Path
-) -> Path | None:
-    """Resolve um padrão de PASTA-destino e confina o resultado sob `base_root` (V4).
+def _is_abs_windows(p: str) -> bool:
+    """True se `p` é um caminho ABSOLUTO na semântica Windows (drive ou UNC), D-02.
 
-    `pattern` é uma pasta relativa com tokens, ex.: `"NotasFiscais/{cliente}/{data:aaaa-mm}"`.
-    Cada SEGMENTO é resolvido e sanitizado individualmente (um valor de campo NÃO
-    pode introduzir um separador de caminho nem `..`). O destino é então confinado:
-
-        resolved = (base_root / *segmentos).resolve()
-        resolved.is_relative_to(base_root.resolve())  # V4 — não escapa
-
-    Campo faltante/inválido (D-07) OU destino que escaparia da raiz-base → `None`.
-    NÃO cria a pasta no disco (PURO — sem efeito de filesystem). NÃO loga valores.
+    Usa `PureWindowsPath().drive` (cobre `C:` e `\\\\srv\\share`) e `ntpath.isabs`
+    (cobre também o leading `\\`), NUNCA `os.path.isabs`/`Path.is_absolute()` — estes
+    dependem do OS do runner e dariam `False` para `C:\\...` em Linux/WSL (Pitfall 1).
+    POSIX-absoluto (`/...`) NÃO é tratado como absoluto aqui: o alvo é Windows (D-02);
+    um caminho POSIX é juntado à base como relativo.
     """
-    # D-21: normaliza aspas nas pontas do padrão recebido (usuário cola caminho do
-    # Windows entre aspas) ANTES de fatiar/confinar. O confinamento V4 roda depois.
-    pattern = strip_quotes(pattern)
-    # Aceita separadores `/` e `\\` no padrão literal; cada segmento vira componente.
-    raw_segments: list[str] = []
-    for chunk in re.split(r"[/\\]", pattern):
-        if chunk == "" or chunk == ".":
-            continue
-        raw_segments.append(chunk)
+    return bool(PureWindowsPath(p).drive) or ntpath.isabs(p)
 
-    safe_segments: list[str] = []
-    for seg in raw_segments:
+
+def _resolve_segments(
+    segments: list[str], fields: dict[str, str]
+) -> list[str] | None:
+    """Resolve tokens + sanitiza CADA segmento. Campo faltante → None (D-07).
+
+    Um único campo pode ter trazido `..` ou um separador; `sanitize_component`
+    neutraliza por segmento (vira "_"), garantindo que NENHUM segmento navegue para
+    cima (defesa V4 residual — D-03/D-08). NÃO loga valores.
+    """
+    safe: list[str] = []
+    for seg in segments:
         try:
             substituted = _substitute(seg, fields, sanitize=False)
         except _MissingField:
             return None  # D-07
-        # Um único campo pode ter trazido `..` ou `/`; sanitizar o segmento inteiro
-        # neutraliza (vira "_"), garantindo que NENHUM segmento navegue para cima.
-        safe = sanitize_component(substituted)
-        safe_segments.append(safe)
+        safe.append(sanitize_component(substituted))
+    return safe
 
+
+def resolve_dest_folder(
+    pattern: str, fields: dict[str, str], *, base_root: Path
+) -> Path | None:
+    """Resolve um padrão de PASTA-destino: ABSOLUTO literal OU relativo+`base_root`.
+
+    `pattern` pode ser:
+    - ABSOLUTO (D-01/D-02): `"C:\\Users\\x\\NF\\{cliente}"` ou UNC
+      `"\\\\srv\\share\\{cliente}"` — o anchor (drive/UNC) é preservado LITERAL (NÃO
+      sanitizado), os SEGMENTOS após o anchor são resolvidos+sanitizados, e o
+      resultado NÃO recebe `base_root`. SEM `.resolve()` (Pitfall 2) e SEM
+      `is_relative_to` (confinamento V4 REMOVIDO no ramo absoluto — D-03).
+    - RELATIVO: `"NotasFiscais/{cliente}/{data:aaaa-mm}"` — juntado a `base_root`,
+      cada segmento sanitizado.
+
+    A detecção usa `_is_abs_windows` (semântica Windows OS-independente, Pitfall 1).
+    Campo faltante/inválido (D-07) → `None` em AMBOS os ramos. NÃO cria a pasta no
+    disco (PURO). NÃO loga valores (V7/V9).
+    """
+    # D-21: normaliza aspas nas pontas do padrão recebido (usuário cola caminho do
+    # Windows entre aspas) ANTES de fatiar/decidir absoluto-vs-relativo.
+    pattern = strip_quotes(pattern)
+    if not pattern:
+        return None
+
+    # ----- RAMO ABSOLUTO (D-01/D-03): caminho literal, anchor preservado -----
+    if _is_abs_windows(pattern):
+        win = PureWindowsPath(pattern)
+        anchor = win.anchor  # 'C:\\' ou '\\srv\share\\' — NUNCA sanitizado
+        # parts[0] é o anchor; os demais são os segmentos a resolver+sanitizar.
+        safe_parts = _resolve_segments(list(win.parts[1:]), fields)
+        if safe_parts is None:
+            return None  # D-07 preservado também no ramo absoluto
+        # Monta o caminho Windows literal; SEM .resolve() (não canonizar contra o CWD)
+        # e SEM is_relative_to (D-03 — absoluto escreve onde houver permissão).
+        dest = PureWindowsPath(anchor, *safe_parts)
+        return Path(str(dest))
+
+    # ----- RAMO RELATIVO (D-02): junta à base padrão, cada segmento sanitizado -----
+    raw_segments = [
+        chunk for chunk in re.split(r"[/\\]", pattern) if chunk not in ("", ".")
+    ]
+    safe_segments = _resolve_segments(raw_segments, fields)
+    if safe_segments is None:
+        return None  # D-07
     if not safe_segments:
         return None
 
-    base_resolved = base_root.resolve()
-    candidate = base_resolved
+    candidate = base_root
     for seg in safe_segments:
         candidate = candidate / seg
-    resolved = candidate.resolve()
-
-    # Confinamento V4: o destino DEVE permanecer sob a raiz-base. A sanitização já
-    # neutralizou separadores/`..`, mas confirmamos por prefixo resolvido (defesa
-    # em profundidade — symlinks/edge cases de plataforma).
-    try:
-        if not resolved.is_relative_to(base_resolved):
-            return None
-    except ValueError:
-        return None
-
-    return resolved
+    # A sanitização por segmento já neutralizou separadores/`..`; mantemos o ramo
+    # relativo simples (sem is_relative_to — discrição D-03: traversal não escapa).
+    return candidate
