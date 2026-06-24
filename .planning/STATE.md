@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-24 - Rodada de teste de usuário final → 11 achados em .planning/notes/2026-06-24-melhorias-teste-usuario-final.md. Milestone "Ajustes pós-teste" criada: Phases 9 (automação destino+transform), 10 (robustez ingestão/classificação), 11 (UX/visibilidade). Começando pela Phase 9 (discuss-phase).
+Last activity: 2026-06-24 - Phase 9 PLANEJADA e verificada (plan-checker PASSED, iter 2): 3 planos (09-01 destino absoluto/relativo, 09-02 filtros inline, 09-03 prévia frontend), D-01..D-09 cobertos. Pronta para /gsd:execute-phase 9.
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
