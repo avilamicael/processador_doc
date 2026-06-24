@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 06.2 — COMPLETE
 Plan: 3 of 3
 Status: Phase 06.2 complete
-Last activity: 2026-06-23 - Recurso split_to_files (separar PDF em arquivos na pasta, opt-in) implementado (419 testes). Validar ao vivo + publicar.
+Last activity: 2026-06-24 - Completed quick task 260624-far: ajustes UI/UX (remover documentos, status real do watcher, desabilitar mock em Config/Header) + backend (POST /documents/delete, GET /watcher/status). 431 testes verdes.
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -166,6 +166,7 @@ None yet.
 | 260623-mod | Logs de execução nos scripts Windows: Start-Transcript fail-soft em instalar/atualizar/servico.ps1 (logs timestampados em %ProgramData%\...\logs\, caminho impresso no fim); subcomando servico.ps1 diagnostico (relatório único sem segredos); fix Resolve-ModoInstalado; guia. Para depurar instalações remotas | 2026-06-23 | 3b15bae | [260623-mod-logs-de-execucao-nos-scripts-windows-sta](./quick/260623-mod-logs-de-execucao-nos-scripts-windows-sta/) |
 | 260623-no9 | Modo startup (pasta Inicializar, pythonw invisível, sem janela/admin) vira PADRÃO do servico.ps1; guarda de instância única no launcher; controles+diagnóstico cobrem startup. VALIDADO ao vivo (instalar do WSL → .vbs + servidor invisível + health 200) | 2026-06-23 | 8221d72 | [260623-no9-servico-ps1-modo-startup-pasta-inicializ](./quick/260623-no9-servico-ps1-modo-startup-pasta-inicializ/) |
 | 260623-pzy | Separar PDF em arquivos na pasta monitorada (opt-in split_to_files, default OFF): materializa os blocos na pasta substituindo o original ANTES da IA; reversível (CAS+audit), anti-loop (hash no dedup antes de gravar), migração 0009; API+UI toggle; 419 testes verdes | 2026-06-23 | 0b90b8c | [260623-pzy-separar-pdf-em-arquivos-na-pasta-monitor](./quick/260623-pzy-separar-pdf-em-arquivos-na-pasta-monitor/) |
+| 260624-far | Ajustes UI/UX + backend: remover documento(s) na aba Documentos (POST /documents/delete em lote, só registro — NUNCA toca no arquivo; anti-órfão de dedup remove IngestedOriginal/Jobs quando sobra sem blocos); status real do watcher na Sidebar (GET /watcher/status: ativo, nº pastas, última varredura); desabilitar busca+sino no Header; desabilitar abas Regras/Integrações e controles mock da Leitura (mantendo Limiar funcional). 431 testes verdes, build frontend verde | 2026-06-24 | 7081b0c | [260624-far-ajustes-ui-remover-documentos-desabilita](./quick/260624-far-ajustes-ui-remover-documentos-desabilita/) |
 
 ## Deferred Items
 
