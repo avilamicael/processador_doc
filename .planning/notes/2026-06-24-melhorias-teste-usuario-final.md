@@ -155,4 +155,47 @@ validação no form; reaproveita a busca de campos do template que já existe).
 
 ---
 
+## Item 5 — Classificação por sinais é frágil (E exato) + faltam ferramentas no construtor 🔴
+
+**Sintoma (teste real):** notas fiscais (DANFE) cadastradas foram TODAS para
+**quarentena** — o template "Notas Fiscais" não casou, mesmo sendo claramente uma NF-e.
+
+**Diagnóstico (confirmado extraindo o texto real do PDF e testando os 8 sinais):**
+o matcher (`backend/app/classification/matcher.py:118-149`) faz **substring
+case-insensitive** e exige que **TODAS as condições do grupo casem (E lógico)**. O
+template tinha 8 sinais num único grupo; 5 casaram, mas **3 não existem literalmente**
+no texto extraído (`extraction.full_text`), derrubando o grupo inteiro → quarentena:
+- `DOCUMENTO AUXILIAR DE NOTA FISCAL ELETRÔNICA` → texto real é `DOCUMENTO AUXILIAR DA`
+  + quebra de linha + `NOTA FISCAL ELETRÔNICA` ("DA" ≠ "DE" **e** quebra de linha no meio).
+- `NATUREZA DA OPERAÇÃO` → texto real é `NATUREZA DE OPERAÇÃO` ("DE" ≠ "DA").
+- `DATA EMISSÃO` → não existe; a nota traz `EMISSÃO:` (e "DATA DE RECEBIMENTO").
+(Acento NÃO foi o problema — o matcher é case-insensitive e os acentos do template estão
+corretos; o que falha é a literalidade exata + o E-de-tudo.)
+
+**Observação de design:** o matcher é cheio-fechado por escolha (sinal local de custo 0;
+IA só desempata "ambiguous", não classifica quando nenhum casa → vai pra quarentena).
+Isso é intencional, mas combinado com "E exato de N sinais" vira uma armadilha de UX: o
+usuário escreve sinais plausíveis e um único off-by-uma-palavra manda tudo pra quarentena.
+
+**Melhorias propostas:**
+1. **Testar sinais contra um documento de exemplo** no construtor de Templates: mostrar
+   quais sinais casam/falham contra o texto extraído de um PDF de amostra (exatamente o
+   diagnóstico feito à mão aqui). Mata 90% desse problema na origem.
+2. **Casamento mais tolerante (opção):** permitir "casar N de M sinais" (limiar) em vez de
+   exigir todos; e/ou modo de normalização (ignorar pontuação/quebras de linha, colapsar
+   espaços; opcional ignorar acentos). Hoje é tudo-ou-nada por grupo.
+3. (Avaliar) deixar a IA **classificar** quando o matcher local não casa nenhum template
+   (antes de quarentena), não só desempatar ambíguos — alinhado à expectativa do usuário
+   de "a IA lê e identifica". Decisão de custo/produto a discutir.
+
+**Escopo estimado:** misto. (1) frontend + 1 endpoint backend de "preview de sinais";
+(2) backend no matcher (limiar N-de-M + normalização) + UI; (3) mudança de política de
+classificação (discutir antes). Provável fase pequena, não um quick só.
+
+**Workaround imediato (não aplicado — usuário vai corrigir depois):** enxugar o template
+"Notas Fiscais" para os sinais robustos que JÁ casaram e identificam DANFE com segurança:
+`DANFE` + `CHAVE DE ACESSO` + regex 44 dígitos.
+
+---
+
 <!-- PRÓXIMOS ACHADOS: adicionar como "## Item N — <título> <status>" abaixo, mesmo formato. -->
