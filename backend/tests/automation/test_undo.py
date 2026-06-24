@@ -133,6 +133,37 @@ def test_undo_reopens_concluded_document(
 
 
 # --------------------------------------------------------------------------- #
+# Fase 9 (D-01/D-03): undo de um MOVE com destino ABSOLUTO (fora de             #
+# "organizados") devolve o arquivo à origem — o undo opera sobre caminhos       #
+# absolutos arbitrários (já confirmado no RESEARCH).                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_undo_absolute_dest_restores_source(
+    schema_engine: Engine, classified_doc: ClassifiedDoc, src_dir: Path, tmp_path: Path
+) -> None:
+    """D-01/D-03: undo de um move cujo dest_path é ABSOLUTO (fora de "organizados")
+    devolve o arquivo à origem (estende test_undo_per_doc_restores_source)."""
+    src = src_dir / "in.pdf"
+    # Destino ABSOLUTO fora de qualquer pasta "organizados" — simula um caminho
+    # absoluto por automação (D-01) resolvido literalmente.
+    abs_dest_dir = tmp_path / "Users" / "Usuario" / "NOTAS"
+    abs_dest_dir.mkdir(parents=True)
+    dst = abs_dest_dir / "saida.pdf"
+    dst.write_bytes(b"aplicado")
+    assert "organizados" not in str(dst)
+    with get_session(schema_engine) as session:
+        _seed_done(
+            session, classified_doc.document_id, classified_doc.content_hash, src, dst, "run-abs"
+        )
+        session.commit()
+    with get_session(schema_engine) as session:
+        undo.undo_document(session, document_id=classified_doc.document_id)
+    assert src.exists()
+    assert not dst.exists()
+
+
+# --------------------------------------------------------------------------- #
 # Fase 06.2 — undo de COPIAR (D-06): apaga a cópia, NUNCA toca o original.      #
 # --------------------------------------------------------------------------- #
 

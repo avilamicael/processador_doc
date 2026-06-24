@@ -720,6 +720,69 @@ def test_copy_idempotent_no_rematerialize(
     assert second.materialized is False
 
 
+# --------------------------------------------------------------------------- #
+# Fase 9 (D-05): destino cuja RAIZ/anchor NÃO existe bloqueia no dry-run E no   #
+# apply — nunca tenta criar a unidade nem chamar mkdir.                          #
+# --------------------------------------------------------------------------- #
+
+
+def _missing_root_automation(automation_factory) -> int:
+    """Automação move para um drive Windows fictício cujo anchor não existe (Z:\\)."""
+    return automation_factory(
+        name="A-missing-root",
+        conditions=[{"field": "extension", "operator": "eq", "value": ".pdf"}],
+        actions=[
+            {
+                "action_type": "move",
+                "params_json": '{"dest_folder": "Z:\\\\inexistente\\\\{cliente}"}',
+            }
+        ],
+    )
+
+
+def test_missing_root_blocks_dry_run(
+    schema_engine: Engine, classified_doc: ClassifiedDoc, automation_factory
+) -> None:
+    """D-05: destino cujo anchor (drive Z:\\) não existe → dry_run.blocked=True,
+    sem exceção e sem tocar o disco."""
+    _missing_root_automation(automation_factory)
+    with get_session(schema_engine) as session:
+        plan = stage.dry_run(session, content_hash=classified_doc.content_hash)
+        assert plan is not None
+        assert plan.blocked is True
+        assert plan.materialized is False
+
+
+def test_missing_root_blocks_apply(
+    schema_engine: Engine, classified_doc: ClassifiedDoc, automation_factory, monkeypatch
+) -> None:
+    """D-05: o mesmo no apply_stage → blocked=True, doc → EM_REVISAO, SEM AuditLog de
+    operação e SEM mkdir/materialize."""
+    import app.automation.fileops as fileops
+
+    def fail_materialize(*args, **kwargs):  # pragma: no cover
+        raise AssertionError("anchor inexistente NÃO deve materializar/mkdir")
+
+    monkeypatch.setattr(fileops, "materialize_to_dest", fail_materialize)
+
+    _missing_root_automation(automation_factory)
+
+    with get_session(schema_engine) as session:
+        result = asyncio.run(
+            stage.apply_stage(
+                session, content_hash=classified_doc.content_hash, run_id="run-mr"
+            )
+        )
+        assert result.blocked is True
+        assert result.materialized is False
+        done = session.scalar(
+            select(func.count()).select_from(AuditLog).where(AuditLog.status == "done")
+        )
+        assert done == 0
+        doc = session.get(Document, classified_doc.document_id)
+        assert doc.state == DocState.EM_REVISAO
+
+
 def test_dry_run_copy_move_multi_output(
     schema_engine: Engine,
     classified_doc: ClassifiedDoc,

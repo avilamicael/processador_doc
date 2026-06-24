@@ -107,3 +107,92 @@ def test_folder_pattern_with_quotes_normalized(tmp_path) -> None:
     assert dest.is_relative_to(tmp_path)
     # A pasta resultante não contém aspas em nenhum segmento.
     assert '"' not in str(dest)
+
+
+# ---- Fase 9 (D-01..D-05): política de destino absoluto/relativo ------------ #
+# A detecção absoluto-vs-relativo usa semântica Windows (ntpath/PureWindowsPath)
+# e roda no CI Linux/WSL — NUNCA os.path.isabs (que falha para "C:\\..." no Linux).
+
+
+def test_dest_absolute_kept_literal(tmp_path) -> None:
+    """D-01/D-03: destino com drive Windows é LITERAL — começa em "C:\\Users\\x\\NF\\",
+    sem prefixo do base_root (CWD) e sem mutilar o anchor (C: → C_)."""
+    dest = naming.resolve_dest_folder(
+        "C:\\Users\\x\\NF\\{cliente}", _fields(), base_root=tmp_path
+    )
+    assert dest is not None
+    out = str(dest)
+    assert out.startswith("C:\\Users\\x\\NF\\")
+    # O base_root (CWD do backend) NÃO é prefixado no ramo absoluto.
+    assert str(tmp_path) not in out
+    # O anchor NUNCA é sanitizado (sem "C_").
+    assert "C_" not in out
+
+
+def test_dest_unc_absolute(tmp_path) -> None:
+    """D-01: destino UNC preserva o anchor "\\\\srv\\share\\" literal (não mutilado)."""
+    dest = naming.resolve_dest_folder(
+        "\\\\srv\\share\\{cliente}", _fields(), base_root=tmp_path
+    )
+    assert dest is not None
+    out = str(dest)
+    # O anchor UNC é preservado (não vira segmento sanitizado nem ganha base_root).
+    assert "srv" in out and "share" in out
+    assert str(tmp_path) not in out
+    assert "ACME" in out
+
+
+def test_dest_relative_uses_base(tmp_path) -> None:
+    """D-02: destino SEM drive/UNC continua relativo → juntado ao base_root."""
+    dest = naming.resolve_dest_folder(
+        "NotasFiscais/{cliente}", _fields(), base_root=tmp_path
+    )
+    assert dest is not None
+    assert str(dest).startswith(str(tmp_path))
+
+
+def test_abs_detection_cross_os(tmp_path) -> None:
+    """Pitfall 1: a detecção de "C:\\x" como absoluto vale RODANDO EM LINUX/WSL —
+    não usa os.path.isabs (que retorna False para drive Windows no Linux)."""
+    # No Linux, os.path.isabs falharia; o resultado correto exige ntpath/PureWindowsPath.
+    dest = naming.resolve_dest_folder("C:\\dados\\{cliente}", _fields(), base_root=tmp_path)
+    assert dest is not None
+    out = str(dest)
+    assert out.startswith("C:\\dados\\")
+    assert str(tmp_path) not in out
+
+
+def test_segments_sanitized_anchor_kept(tmp_path) -> None:
+    """D-03/D-08: os SEGMENTOS após o anchor são sanitizados; o anchor "C:\\" intacto."""
+    dest = naming.resolve_dest_folder(
+        "C:\\NF\\{cliente}", {"cliente": "a:b/c"}, base_root=tmp_path
+    )
+    assert dest is not None
+    out = str(dest)
+    # anchor preservado.
+    assert out.startswith("C:\\NF\\")
+    # o segmento do campo foi sanitizado: nenhum char proibido remanesce no final.
+    last = out.split("\\")[-1]
+    for ch in ':/':
+        assert ch not in last
+    assert "a_b_c" == last
+
+
+def test_abs_missing_field_blocks(tmp_path) -> None:
+    """D-07: token de campo faltante no ramo ABSOLUTO → None (bloqueio preservado)."""
+    dest = naming.resolve_dest_folder(
+        "C:\\NF\\{inexistente}", _fields(), base_root=tmp_path
+    )
+    assert dest is None
+
+
+def test_abs_no_confinement(tmp_path) -> None:
+    """D-03/Pitfall 3: destino absoluto FORA da base NÃO vira None (sem is_relative_to
+    no ramo absoluto) — escreve onde o processo tiver permissão (single-tenant)."""
+    dest = naming.resolve_dest_folder(
+        "D:\\fora\\da\\base\\{cliente}", _fields(), base_root=tmp_path
+    )
+    assert dest is not None
+    out = str(dest)
+    assert out.startswith("D:\\fora\\da\\base\\")
+    assert str(tmp_path) not in out
