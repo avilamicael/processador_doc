@@ -255,4 +255,101 @@ flag de "force re-ingest"; testes cobrindo cenário split).
 
 ---
 
+## Item 8 — Rótulo "processando" engana: doc classificado e PRONTO aparece como processando 🔴
+
+**Sintoma:** documento classificado com sucesso "não sai do processando".
+
+**Não é bug — é design + rótulo ruim.** `classify_stage` (`backend/app/classification/stage.py:357-364`):
+um doc bem classificado, com obrigatórios válidos e score ≥ limiar, **fica de propósito em
+`PROCESSANDO` + `last_completed_step="classificado"`** — estado "pronto, aguardando ação".
+NÃO auto-conclui (Open Q1 resolvida): conclusão é via **aplicar automações** (Pré-visualização
+/Dry-run → Aplicar) ou **aprovação humana** (`POST /documents/{id}/approve`). Todos os jobs
+ficam `done`; nenhum job seguinte é enfileirado (automação é disparada pelo usuário).
+(Confirmado ao vivo: doc 4 = template "Notas Fiscais", score 1.0, EMITENTE e Numero_Nota válidos.)
+
+**Melhoria proposta:** na UI, quando `state=processando` E `last_completed_step=classificado`,
+mostrar um rótulo distinto tipo **"Classificado — pronto para aplicar/aprovar"** (não
+"processando"). Idealmente um chip/estado próprio e uma CTA ("Pré-visualizar"/"Aprovar").
+
+**Escopo estimado:** `/gsd:quick` (frontend, derivar rótulo do par state+last_completed_step;
+talvez expor isso no /documents). Relacionado ao [[#item-1]] (visibilidade pós-ação).
+
+---
+
+## Item 9 — Timestamps sem fuso (UTC naive) → horário exibido 3h adiantado 🔴
+
+**Sintoma:** UI mostra "24 de jun., 18:03" quando o horário local é 15:03 (UTC-3).
+
+**Causa (confirmada):** o backend serializa `created_at` como `2026-06-24T18:04:02` —
+**UTC porém SEM marcador de fuso** (`Z`/offset). O frontend faz `new Date(iso)`
+(`frontend/src/pages/DocumentsPage.tsx:48`) e, sem fuso na string, o JS interpreta como
+**horário LOCAL** → mostra 18:04 em vez de converter para 15:04. (Curiosamente o
+`/watcher/status` já emite com `Z` correto — só os timestamps de tabela, ex. `created_at`,
+vêm naive.)
+
+**Melhoria proposta:** backend serializar timestamps como **UTC tz-aware (`...Z`)** para o
+frontend converter ao fuso local. Alternativa paliativa: `formatDate` tratar string sem
+fuso como UTC. Padronizar em TODA a API (consistência com /watcher/status).
+
+**Escopo estimado:** `/gsd:quick` (backend: serialização tz-aware nos modelos/response; ou
+patch no formatter do frontend).
+
+---
+
+## Item 10 — Destino de mover/copiar: confinado em "organizados" e caminho absoluto é mutilado 🔴
+
+**Sintoma (teste real):** automação de mover apontava para um destino que saiu como
+`C:\ProgramData\ProcessadorDocumentos\organizados\C_\Users\Usuario\Downloads\NOTAS_FISCAIS\
+IGUACU DIST. DE PROD. OTICOS LTDA - F6\...` — impossível de usar.
+
+**Causa (por design V4, mas não bate com a expectativa):** `automation/naming.py` +
+`automation/stage.py:251-260`. Existe uma **raiz-base de confinamento**:
+`automation_dest_root` (env) ou padrão `data_dir\organizados`. O `dest_folder` da
+automação é tratado como **relativo à base**, quebrado em segmentos e **cada segmento
+sanitizado** (remove os 9 chars proibidos do Windows, inclusive `\ / :` → vira `_`).
+`resolve_dest_folder` confina via `is_relative_to` e **rejeita caminho absoluto / `..`**.
+Por isso o `C:\Users\...` absoluto que o usuário digitou virou `C_\Users\...` aninhado sob
+`organizados`. Além disso, a base só é configurável por **env**, NÃO pela UI.
+
+**Problemas concretos:** (a) usuário não consegue escolher um **destino absoluto real**
+(ex.: mover para `C:\...\NOTAS_FISCAIS\{fornecedor}\`); (b) caminho absoluto é **aceito
+silenciosamente e mutilado** em vez de avisar; (c) base não editável na UI.
+
+**Melhorias propostas (decidir a política):**
+1. Permitir destino **absoluto** escolhido pelo usuário (com validação: existe? é dir?
+   sem confinamento, OU confinamento opt-in/allowlist de raízes permitidas).
+2. E/ou expor a **pasta-base de saída** (`automation_dest_root`) na UI, deixando claro que
+   o caminho da automação é relativo a ela.
+3. Em qualquer caso: **parar de mutilar** caminho absoluto silenciosamente — detectar e
+   avisar no construtor/dry-run ("destino inválido / use caminho relativo à base X").
+
+**Escopo estimado:** fase pequena (backend: política de destino + validação; frontend:
+campo de base + avisos no dry-run). Decisão de produto/segurança a discutir primeiro.
+
+---
+
+## Item 11 — Regras de transformação de valor no renomear/mover (além de {campo} cru) 🔴
+
+**Sintoma/pedido:** o valor extraído às vezes (a) tem caracteres que o Windows não aceita,
+ou (b) o usuário quer **mudar** — ex.: não usar o nome COMPLETO do fornecedor no nome do
+arquivo/pasta.
+
+**Estado atual:** o padrão (`name_pattern`/`dest_folder`) só faz **substituição crua de
+`{campo}`** + `sanitize_component` (remove os 9 chars proibidos do Windows e corta no
+limite de tamanho). Sem transformações configuráveis.
+
+**Melhoria proposta:** mini-linguagem/opções de transformação por campo no padrão, ex.:
+- truncar / primeiras N palavras / primeiras N letras (`{fornecedor:palavras=2}`);
+- maiúsculas/minúsculas/capitalize; remover acentos;
+- substituir/regex-replace; valor-padrão se vazio;
+- mapa de valores (ex.: "IGUACU DIST. DE PROD. OTICOS LTDA" → "IGUACU");
+- formatação de número/data (já há `_fmt_date` para data — estender e expor).
+Também: deixar explícito/configurável o tratamento de chars inválidos do Windows.
+
+**Escopo estimado:** fase pequena/média (backend: engine de transformação no naming +
+parsing do padrão; frontend: ajuda/preview no construtor). Combina com [[#item-5]]
+(preview/testes no construtor de templates/automações).
+
+---
+
 <!-- PRÓXIMOS ACHADOS: adicionar como "## Item N — <título> <status>" abaixo, mesmo formato. -->
