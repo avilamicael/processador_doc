@@ -35,8 +35,10 @@ Interface pública: `run_watcher`, `scan_and_enqueue`, `active_folder_paths`.
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
@@ -63,6 +65,27 @@ _SUPERVISOR_INTERVAL_SECONDS = 5.0
 # status (`GET /watcher/status`) lê via `get_last_scan_at()`. `None` = nunca
 # varreu (quick 260624-far).
 LAST_SCAN_AT: datetime | None = None
+
+
+# Resultado de `_stabilize_hash_gate_enqueue` em 3 estados (D-04): distingue um
+# candidato realmente enfileirado de uma DUPLICATA (gate) e de um "pulado por outro
+# motivo" (não estabilizou / erro de hash / já enfileirado). `scan_and_enqueue`
+# agrega estes literais para informar `skipped_duplicates` ao /rescan.
+CandidateOutcome = Literal["enqueued", "duplicate", "skipped"]
+
+
+@dataclass(frozen=True)
+class ScanResult:
+    """Resultado agregado de uma varredura (D-04).
+
+    `enqueued`: jobs realmente enfileirados (candidatos novos).
+    `skipped_duplicates`: candidatos pulados por DUPLICATA (gate de dedup) — alimenta
+    o toast pós-varredura do frontend. NÃO inclui pulados por outros motivos
+    (não estabilizou / erro / já enfileirado), que não interessam ao usuário.
+    """
+
+    enqueued: int
+    skipped_duplicates: int
 
 
 def get_last_scan_at() -> datetime | None:
@@ -115,11 +138,14 @@ async def _stabilize_hash_gate_enqueue(
     folder_id: int | None,
     pages_per_block: int | None,
     split_to_files: bool = False,
-) -> bool:
+) -> CandidateOutcome:
     """Caminho de um candidato: estabiliza → hash → dedup gate → enqueue.
 
-    Retorna True se um job foi enfileirado (candidato novo); False se o arquivo
-    não estabilizou, é duplicata (gate) ou já estava enfileirado (idempotência).
+    Retorna o desfecho em 3 estados (D-04):
+    - "enqueued": um job foi enfileirado (candidato novo).
+    - "duplicate": o original já foi ingerido (gate de dedup) — pulado e contado.
+    - "skipped": pulado por outro motivo (ext não suportada / não estabilizou /
+      erro de hash / já enfileirado por idempotência).
 
     `split_to_files` (opt-in da pasta, quick 260623-pzy): viaja no payload do job
     ingest para o worker/stage materializarem os blocos na pasta. Como o gate de
@@ -127,13 +153,13 @@ async def _stabilize_hash_gate_enqueue(
     os arquivos de bloco como duplicata (gate) e NÃO os re-enfileira (anti-loop).
     """
     if not is_supported_ext(file_path):
-        return False
+        return "skipped"
 
     # (1) Estabiliza: só prossegue quando size/mtime pararam e o arquivo abre sem
     # lock. Parcial/removido → descarta (Pitfall 1 / T-02-03).
     if not await wait_stable(file_path):
         logger.debug("Candidato não estabilizou, descartando: %s", file_path)
-        return False
+        return "skipped"
 
     # (2) Hash do ORIGINAL pré-split (D-09) — em thread (IO-bound); o mesmo
     # algoritmo do CAS, então o hash do gate coincide com o do conteúdo.
@@ -141,7 +167,7 @@ async def _stabilize_hash_gate_enqueue(
         original_hash = await asyncio.to_thread(sha256_file, file_path)
     except (OSError, FileNotFoundError):
         logger.debug("Falha ao ler candidato para hash, descartando: %s", file_path)
-        return False
+        return "skipped"
 
     # (3) Gate de dedup + (4) enqueue, na MESMA sessão. Se o original já foi
     # ingerido, incrementa duplicate_hits (D-10) e NÃO enfileira. Senão enfileira
@@ -156,7 +182,7 @@ async def _stabilize_hash_gate_enqueue(
             existing.duplicate_hits += 1
             session.commit()
             logger.debug("Duplicata ignorada (gate): %s", file_path)
-            return False
+            return "duplicate"
 
         payload = json.dumps(
             {
@@ -171,18 +197,20 @@ async def _stabilize_hash_gate_enqueue(
     if job is None:
         # Já enfileirado para (hash, ingest) — idempotência PROC-03.
         logger.debug("Já enfileirado (idempotente): %s", file_path)
-        return False
+        return "skipped"
     logger.info("Candidato enfileirado: %s (job %s)", file_path, job.id)
-    return True
+    return "enqueued"
 
 
-async def scan_and_enqueue(engine: Engine, paths: list[Path]) -> int:
+async def scan_and_enqueue(engine: Engine, paths: list[Path]) -> ScanResult:
     """Varre `paths` recursivamente e enfileira cada candidato novo.
 
     Usado no startup e pelo endpoint `/rescan` (idempotente por dedup). Percorre
     os arquivos das pastas e passa cada um pelo caminho
-    estabiliza→hash→gate→enqueue. Retorna quantos jobs foram realmente
-    enfileirados (duplicatas/já-enfileirados não contam).
+    estabiliza→hash→gate→enqueue. Retorna um `ScanResult(enqueued,
+    skipped_duplicates)`: `enqueued` conta os jobs realmente enfileirados
+    (candidatos novos); `skipped_duplicates` conta os pulados pelo gate de dedup
+    (D-04) — pulados por outros motivos não entram em nenhum dos dois.
     """
     # Mapeia cada pasta de varredura à sua config (pages_per_block) — lido uma vez.
     folder_map: dict[Path, WatchedFolder] = {}
@@ -199,6 +227,7 @@ async def scan_and_enqueue(engine: Engine, paths: list[Path]) -> int:
                 folder_map[rp] = folder
 
     enqueued = 0
+    skipped_duplicates = 0
     for folder_path, folder in folder_map.items():
         if not folder_path.is_dir():
             logger.warning("Pasta de varredura inexistente, pulando: %s", folder_path)
@@ -206,20 +235,23 @@ async def scan_and_enqueue(engine: Engine, paths: list[Path]) -> int:
         for file_path in sorted(folder_path.rglob("*")):
             if not file_path.is_file() or not is_supported_ext(file_path):
                 continue
-            if await _stabilize_hash_gate_enqueue(
+            outcome = await _stabilize_hash_gate_enqueue(
                 engine,
                 file_path,
                 folder.id,
                 folder.pages_per_block,
                 folder.split_to_files,
-            ):
+            )
+            if outcome == "enqueued":
                 enqueued += 1
+            elif outcome == "duplicate":
+                skipped_duplicates += 1
 
     # Marca a última varredura concluída (mesmo quando 0 candidatos) — alimenta o
     # GET /watcher/status / Sidebar (quick 260624-far).
     global LAST_SCAN_AT  # noqa: PLW0603 — estado de módulo deliberado (ver topo)
     LAST_SCAN_AT = datetime.now(UTC)
-    return enqueued
+    return ScanResult(enqueued=enqueued, skipped_duplicates=skipped_duplicates)
 
 
 async def run_watcher(engine: Engine, stop: asyncio.Event) -> None:
@@ -236,9 +268,9 @@ async def run_watcher(engine: Engine, stop: asyncio.Event) -> None:
         initial_paths = list(active_folder_paths(session).keys())
     if initial_paths:
         try:
-            n = await scan_and_enqueue(engine, initial_paths)
-            if n:
-                logger.info("Scan inicial enfileirou %s candidato(s)", n)
+            result = await scan_and_enqueue(engine, initial_paths)
+            if result.enqueued:
+                logger.info("Scan inicial enfileirou %s candidato(s)", result.enqueued)
         except Exception:  # noqa: BLE001 — scan inicial nunca derruba o watcher
             logger.exception("Falha no scan inicial do watcher")
 

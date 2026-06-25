@@ -135,6 +135,7 @@ def test_rescan_empty_folder_returns_zero(
     resp = client.post("/rescan")
     assert resp.status_code == 200, resp.text
     assert resp.json()["enqueued"] == 0
+    assert resp.json()["skipped_duplicates"] == 0
 
 
 def test_rescan_enqueues_present_file(
@@ -165,6 +166,7 @@ def test_rescan_enqueues_present_file(
     resp = client.post("/rescan")
     assert resp.status_code == 200
     assert resp.json()["enqueued"] == 1
+    assert resp.json()["skipped_duplicates"] == 0
 
     config.get_settings.cache_clear()
 

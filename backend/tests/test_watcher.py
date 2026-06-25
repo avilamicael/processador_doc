@@ -65,9 +65,10 @@ def test_scan_enqueues_new_pdf(
         session.add(WatchedFolder(path=str(watched.resolve()), pages_per_block=None, active=True))
         session.commit()
 
-    enqueued = asyncio.run(scan_and_enqueue(schema_engine, [watched.resolve()]))
+    result = asyncio.run(scan_and_enqueue(schema_engine, [watched.resolve()]))
 
-    assert enqueued == 1
+    assert result.enqueued == 1
+    assert result.skipped_duplicates == 0
     assert _count_jobs(schema_engine) == 1
 
 
@@ -85,8 +86,11 @@ def test_scan_is_idempotent(
     first = asyncio.run(scan_and_enqueue(schema_engine, [watched.resolve()]))
     second = asyncio.run(scan_and_enqueue(schema_engine, [watched.resolve()]))
 
-    assert first == 1
-    assert second == 0  # mesmo arquivo não enfileira de novo (idempotência da fila)
+    assert first.enqueued == 1
+    assert second.enqueued == 0  # mesmo arquivo não enfileira de novo (idempotência da fila)
+    # Já-enfileirado (sem IngestedOriginal ainda) NÃO é duplicata de conteúdo: o
+    # gate de dedup só conta quando o original já foi ingerido (ver teste abaixo).
+    assert second.skipped_duplicates == 0
     assert _count_jobs(schema_engine) == 1
 
 
@@ -114,9 +118,10 @@ def test_scan_increments_duplicate_hits_when_already_ingested(
         )
         session.commit()
 
-    enqueued = asyncio.run(scan_and_enqueue(schema_engine, [watched.resolve()]))
+    result = asyncio.run(scan_and_enqueue(schema_engine, [watched.resolve()]))
 
-    assert enqueued == 0  # gate de dedup: não enfileira
+    assert result.enqueued == 0  # gate de dedup: não enfileira
+    assert result.skipped_duplicates == 1  # contado como duplicata (D-04)
     assert _count_jobs(schema_engine) == 0
     with get_session(schema_engine) as session:
         original = session.scalar(

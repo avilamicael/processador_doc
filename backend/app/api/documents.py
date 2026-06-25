@@ -191,9 +191,12 @@ class DuplicatesCountOut(BaseModel):
 
 
 class RescanOut(BaseModel):
-    """Resultado de uma varredura forçada: quantos candidatos enfileirados."""
+    """Resultado de uma varredura forçada: enfileirados + pulados por duplicata (D-04)."""
 
     enqueued: int
+    # Candidatos pulados pelo gate de dedup nesta varredura — alimenta o toast
+    # pós-varredura do frontend ("N enfileirados, M duplicatas ignoradas").
+    skipped_duplicates: int
 
 
 class DeleteDocumentsIn(BaseModel):
@@ -916,5 +919,8 @@ async def rescan(request: Request) -> RescanOut:
     engine = request.app.state.engine
     with get_session(engine) as session:
         paths = list(active_folder_paths(session).keys())
-    enqueued = await scan_and_enqueue(engine, paths)
-    return RescanOut(enqueued=enqueued)
+    result = await scan_and_enqueue(engine, paths)
+    return RescanOut(
+        enqueued=result.enqueued,
+        skipped_duplicates=result.skipped_duplicates,
+    )
