@@ -578,7 +578,7 @@ def reprocess_documents(request: Request, body: ReprocessBatchIn) -> ReprocessBa
     # XOR: exatamente um de bucket/ids (422 se ambos None ou ambos preenchidos).
     if (body.bucket is None) == (body.ids is None):
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "informe exatamente um de 'bucket' ou 'ids'",
         )
 
