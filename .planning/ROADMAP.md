@@ -421,10 +421,19 @@ Plans:
 **Goal:** (Item 2) Varredura de pasta nova: quando uma pasta monitorada passa a existir/é (re)ativada em runtime, varrer os arquivos JÁ presentes (hoje o `awatch` só capta eventos futuros; `scan_and_enqueue` só roda no startup e no `/rescan` manual). (Item 7) "Remover + forçar varredura" deve re-ingerir arquivos vindos de split: a limpeza de dedup da remoção precisa cobrir os hash(es) de bloco, não só o `original_hash`, liberando a re-ingestão. (Item 12) Modo de aprovação: toggle global "automações aguardam minha aprovação" — DESLIGADO (alvo) roda automático mantendo a trava de confiança (alta confiança auto-aplica, baixa/inválido/não-casou vão pra atenção); LIGADO (período de teste) as automações ficam pendentes e o usuário aprova/nega por linha na Pré-visualização repurposada como fila de aprovação (negar = não move, doc fica pronto).
 **Requirements**: Backlog itens 2, 7, 12 (`.planning/notes/2026-06-24-melhorias-teste-usuario-final.md`)
 **Depends on:** Phase 2 (watcher/dedup/ingestão), Phase 6.2 (apply/dry-run/undo), Phase 11 (rótulo "pronto"/CTA)
-**UI hint**: yes
 
 **Sucesso:** (2) pasta criada depois com arquivos pré-existentes é varrida sem `/rescan` manual; (7) remover+re-varrer re-ingere arquivos de split; (12) com o toggle ligado as automações esperam aprovação na fila e o usuário aprova/nega por linha; desligado, o sistema move/renomeia sozinho mantendo a rede de segurança por confiança.
 
-Plans:
+**Plans:** 4 plans
+**UI hint**: yes
 
-- [ ] TBD (run /gsd:plan-phase 12 to break down)
+Plans:
+**Wave 1**
+
+- [ ] 12-01-PLAN.md — Item 2: varrer pasta nova/reativada em runtime (diff de pastas no run_watcher, idempotente por dedup)
+- [ ] 12-02-PLAN.md — Item 7: limpeza de dedup do delete cobre o hash de bloco (re-ingere split), nunca toca arquivo
+- [ ] 12-03-PLAN.md — Item 12 backend: setting approval_mode (default OFF) + GET/PUT /config/approval-mode + gate em enqueue_pending_applications
+
+**Wave 2** *(blocked on 12-03)*
+
+- [ ] 12-04-PLAN.md — Item 12 frontend: toggle na ConfigPage + DryRunPage como fila de aprovação (aprovar/negar por linha) + verificação visual
