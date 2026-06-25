@@ -378,7 +378,7 @@ Plans:
 **Goal:** (Item 5) Classificação por sinais menos frágil: ferramenta de "testar sinais contra um documento de exemplo" no construtor de templates (mostra quais sinais casam/falham contra o texto extraído); casamento mais tolerante — limiar N-de-M em vez de E-exato de todos + normalização opcional (pontuação/quebra de linha/acento); avaliar (decisão de produto) deixar a IA classificar quando o matcher local não casa nenhum template, antes da quarentena direta. (Item 6) Ação "reprocessar/reclassificar automático" (por doc e em lote) que re-roda matcher→(IA)→filler com os templates ATUAIS sem forçar template, para sair da quarentena após editar um template.
 **Requirements**: Backlog itens 5, 6 (`.planning/notes/2026-06-24-melhorias-teste-usuario-final.md`). Itens 2 (varredura de pasta nova) e 7 (re-ingerir split) deferidos para futura fase de robustez de ingestão.
 **Depends on:** Phase 5 (classificação/revisão/quarentena)
-**Plans:** 1/5 plans executed
+**Plans:** 4/5 plans executed
 **UI hint**: yes
 
 Plans:
@@ -388,9 +388,9 @@ Plans:
 
 **Wave 2** *(blocked on 10-01)*
 
-- [ ] 10-02-PLAN.md — Endpoint `POST /templates/preview-signals` (base64 → texto nativo → `evaluate_groups`): relatório por-grupo/sinal, escaneado→flag, não-PDF→422 [BL-05]
-- [ ] 10-03-PLAN.md — Reprocess automático (single + batch por bucket) sem forçar template, QUARENTENA+EM_REVISAO, apaga CR antes, guards 409 [BL-06]
-- [ ] 10-04-PLAN.md — Toggle global IA-fallback (default OFF) + `GET/PUT /config/ai-fallback` + ramo no classify_stage (IA quando nada casa, Usage persistido, seam preservado) [BL-05]
+- [x] 10-02-PLAN.md — Endpoint `POST /templates/preview-signals` (base64 → texto nativo → `evaluate_groups`): relatório por-grupo/sinal, escaneado→flag, não-PDF→422 [BL-05]
+- [x] 10-03-PLAN.md — Reprocess automático (single + batch por bucket) sem forçar template, QUARENTENA+EM_REVISAO, apaga CR antes, guards 409 [BL-06]
+- [x] 10-04-PLAN.md — Toggle global IA-fallback (default OFF) + `GET/PUT /config/ai-fallback` + ramo no classify_stage (IA quando nada casa, Usage persistido, seam preservado) [BL-05]
 
 **Wave 3** *(blocked on 10-02/10-03/10-04)*
 
