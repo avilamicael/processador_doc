@@ -157,6 +157,21 @@ class Settings(BaseSettings):
         default=0.8,
         validation_alias=AliasChoices("REVIEW_CONFIDENCE_THRESHOLD", "review_confidence_threshold"),
     )
+    # `classify_ai_fallback_enabled` (Fase 10, D-05/D-06): toggle GLOBAL opt-in que
+    # liga a "IA classifica quando NENHUM template casa". Com OFF (default) o doc
+    # não-casado vai direto para QUARENTENA (comportamento atual — custo zero). Com
+    # ON, ANTES de quarentenar, o `classify_stage` chama a IA (uma chamada PAGA por
+    # doc não-casado) contra TODOS os templates; se a IA casar, o doc segue o caminho
+    # de casamento. CUSTO EXPLÍCITO: cada doc não-casado vira 1 chamada paga quando
+    # ON. Default FALSE preserva o comportamento atual e o custo zero. A decisão de
+    # chamar IA vive no stage, NUNCA no `matcher.decide` (seam D-06). Lido de env sem
+    # deploy (mesmo padrão dos tunables vizinhos); espelhado em GET/PUT /config/ai-fallback.
+    classify_ai_fallback_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "CLASSIFY_AI_FALLBACK_ENABLED", "classify_ai_fallback_enabled"
+        ),
+    )
     # `openai_classify_model`: modelo das chamadas PAGAS de desempate/classificação
     # (D-01/D-06). Modelos giram rápido (CLAUDE.md) → tunável por env; o default
     # reusa o modelo de extract para uma instância só precisar definir um modelo.
