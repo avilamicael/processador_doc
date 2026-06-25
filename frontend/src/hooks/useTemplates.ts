@@ -9,6 +9,7 @@ import {
   createTemplate,
   deleteTemplate,
   getTemplates,
+  previewSignals,
   updateTemplate,
 } from '../lib/api'
 import type { TemplateCreate, TemplatePatch } from '../types'
@@ -44,5 +45,13 @@ export function useDeleteTemplate() {
   return useMutation({
     mutationFn: (id: number) => deleteTemplate(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: TEMPLATES_KEY }),
+  })
+}
+
+// "Testar sinais" (D-07): leitura sob demanda, sem invalidação — não muta o servidor.
+export function usePreviewSignals() {
+  return useMutation({
+    mutationFn: ({ templateId, file }: { templateId: number; file: File }) =>
+      previewSignals(templateId, file),
   })
 }

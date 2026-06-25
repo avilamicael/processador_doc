@@ -8,18 +8,23 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  getAiFallback,
   getAttention,
   getReviewThreshold,
   patchField,
   postApprove,
   postReclassify,
+  postReprocess,
+  postReprocessBatch,
   postRetry,
+  putAiFallback,
   putReviewThreshold,
 } from '../lib/api'
 
 const ATTENTION_KEY = ['attention'] as const
 const DOCUMENTS_KEY = ['documents'] as const
 const REVIEW_THRESHOLD_KEY = ['review-threshold'] as const
+const AI_FALLBACK_KEY = ['ai-fallback'] as const
 const POLL_INTERVAL_MS = 4000
 
 // Lista os 3 baldes por polling (padrão useDocuments).
@@ -87,6 +92,24 @@ export function useApproveDocument() {
   })
 }
 
+// QUARENTENA/EM_REVISAO → "Reprocessar" (por-doc, sem template forçado — D-10).
+export function useReprocessDocument() {
+  const invalidate = useInvalidateAttention()
+  return useMutation({
+    mutationFn: (id: number) => postReprocess(id),
+    onSuccess: invalidate,
+  })
+}
+
+// QUARENTENA/EM_REVISAO → "Reprocessar todos" do balde (lote por bucket — D-12).
+export function useReprocessBucket() {
+  const invalidate = useInvalidateAttention()
+  return useMutation({
+    mutationFn: (bucket: 'quarentena' | 'em_revisao') => postReprocessBatch(bucket),
+    onSuccess: invalidate,
+  })
+}
+
 // --- Limiar global de confiança (S6 — Config; D-03) ---
 
 export function useReviewThreshold() {
@@ -102,6 +125,25 @@ export function useSaveReviewThreshold() {
     mutationFn: (value: number) => putReviewThreshold(value),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: REVIEW_THRESHOLD_KEY })
+    },
+  })
+}
+
+// --- IA-fallback opt-in (Config; D-05). Default OFF refletido pelo GET. ---
+
+export function useAiFallback() {
+  return useQuery({
+    queryKey: AI_FALLBACK_KEY,
+    queryFn: getAiFallback,
+  })
+}
+
+export function useSaveAiFallback() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) => putAiFallback(enabled),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: AI_FALLBACK_KEY })
     },
   })
 }

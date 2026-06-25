@@ -10,6 +10,7 @@
 // como texto puro pelo React (T-02-11): este módulo não interpreta HTML.
 
 import type {
+  AiFallback,
   ApplyResult,
   AttentionList,
   Automation,
@@ -22,6 +23,8 @@ import type {
   Folder,
   FolderCreate,
   FolderPatch,
+  PreviewSignalsResult,
+  ReprocessBatchResult,
   ReviewThreshold,
   Template,
   TemplateCreate,
@@ -129,6 +132,24 @@ export function postApprove(id: number): Promise<DocumentDetail> {
   return request<DocumentDetail>(`/documents/${id}/approve`, { method: 'POST' })
 }
 
+// QUARENTENA/EM_REVISAO → "Reprocessar" (sem template forçado — re-roda matcher→IA→filler
+// com os templates ATUAIS, D-10). Espelha postReclassify mas sem template_id. O backend
+// guarda o estado elegível (409 fora de QUARENTENA/EM_REVISAO, Plano 03).
+export function postReprocess(id: number): Promise<DocumentDetail> {
+  return request<DocumentDetail>(`/documents/${id}/reprocess`, { method: 'POST' })
+}
+
+// QUARENTENA/EM_REVISAO → "Reprocessar todos" do balde (lote por bucket, D-12).
+// Retorna quantos documentos foram re-enfileirados.
+export function postReprocessBatch(
+  bucket: 'quarentena' | 'em_revisao',
+): Promise<ReprocessBatchResult> {
+  return request<ReprocessBatchResult>('/documents/reprocess', {
+    method: 'POST',
+    body: JSON.stringify({ bucket }),
+  })
+}
+
 // --- Limiar global de confiança (S6 — Config; D-03) ---
 
 export function getReviewThreshold(): Promise<ReviewThreshold> {
@@ -139,6 +160,19 @@ export function putReviewThreshold(value: number): Promise<ReviewThreshold> {
   return request<ReviewThreshold>('/config/review-threshold', {
     method: 'PUT',
     body: JSON.stringify({ threshold: value }),
+  })
+}
+
+// --- IA-fallback opt-in (S — Config; D-05). Default OFF refletido pelo GET. ---
+
+export function getAiFallback(): Promise<AiFallback> {
+  return request<AiFallback>('/config/ai-fallback')
+}
+
+export function putAiFallback(enabled: boolean): Promise<AiFallback> {
+  return request<AiFallback>('/config/ai-fallback', {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
   })
 }
 
@@ -188,6 +222,34 @@ export function updateTemplate(id: number, body: TemplatePatch): Promise<Templat
 
 export function deleteTemplate(id: number): Promise<void> {
   return request<void>(`/templates/${id}`, { method: 'DELETE' })
+}
+
+// "Testar sinais" (D-07): envia um PDF de teste em base64 no body JSON (SEM multipart,
+// SEM alterar o Content-Type) e recebe o relatório por-grupo/condição. A leitura do
+// arquivo usa APIs nativas do browser (FileReader/btoa) — nenhum pacote npm novo.
+// O backend valida tudo (teto de bytes, magic bytes — Plano 02); a UI só envia.
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  // Constrói a string binária em blocos para não estourar o limite de argumentos
+  // de String.fromCharCode com arquivos grandes, depois codifica em base64.
+  let binary = ''
+  const CHUNK = 0x8000
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
+
+export async function previewSignals(
+  templateId: number,
+  file: File,
+): Promise<PreviewSignalsResult> {
+  const pdf_base64 = await fileToBase64(file)
+  return request<PreviewSignalsResult>('/templates/preview-signals', {
+    method: 'POST',
+    body: JSON.stringify({ template_id: templateId, pdf_base64 }),
+  })
 }
 
 // --- Automações: MODELO FINAL (CRUD de N automações nomeadas com conditions[]/  ---

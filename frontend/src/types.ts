@@ -351,6 +351,44 @@ export interface ReviewThreshold {
   threshold: number
 }
 
+// --- Preview de sinais "testar sinais" (Fase 10 Plano 02 — D-07/D-08/D-09) ---
+// Contrato de POST /templates/preview-signals: roda os sinais do template contra o
+// texto NATIVO de um PDF de teste pelo MESMO motor da classificação real e devolve
+// o detalhamento por-grupo/por-condição (casa/falha). `scanned=true` (PDF escaneado)
+// → groups=[], a IA não é chamada (custo zero).
+
+// Uma condição avaliada no preview: o modo, o valor e se casou.
+export interface PreviewCondition {
+  mode: string
+  value: string
+  matched: boolean
+}
+
+// Um grupo avaliado no preview: casa se TODAS as condições casarem (E).
+export interface PreviewGroup {
+  matched: boolean
+  conditions: PreviewCondition[]
+}
+
+// Resultado de POST /templates/preview-signals (PreviewSignalsOut do backend).
+export interface PreviewSignalsResult {
+  scanned: boolean
+  matched_any: boolean
+  groups: PreviewGroup[]
+}
+
+// --- Reprocess (Fase 10 Plano 03 — D-10/D-12) ---
+// Resultado de POST /documents/reprocess (batch por balde): quantos foram re-enfileirados.
+export interface ReprocessBatchResult {
+  reprocessed: number
+}
+
+// --- IA-fallback opt-in na classificação (Fase 10 Plano 04 — D-05) ---
+// GET/PUT /config/ai-fallback: liga/desliga a IA quando nenhum template casa.
+export interface AiFallback {
+  enabled: boolean
+}
+
 // --- Status do watcher (GET /watcher/status — quick 260624-far) ---
 // Estado REAL exibido na Sidebar (substitui o hardcode "4 pastas · varredura há 2 min").
 export interface WatcherStatus {
