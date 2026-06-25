@@ -6,7 +6,7 @@
 // a tabela NUNCA piscar/colapsar num spinner em refetch de background.
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getDocuments, getDuplicatesCount, postDeleteDocuments, postRescan } from '../lib/api'
+import { getDocuments, getDuplicatesCount, postApprove, postDeleteDocuments, postRescan } from '../lib/api'
 
 const POLL_INTERVAL_MS = 4000
 
@@ -37,6 +37,21 @@ export function useRescan() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['documents'] })
       qc.invalidateQueries({ queryKey: ['duplicates-count'] })
+    },
+  })
+}
+
+// D-11/D-12: aprovar um documento direto da lista (CTA na linha do doc "pronto").
+// Reusa POST /documents/{id}/approve (guard de pré-condição de estado vive no
+// backend — a UI só atalha, não burla autorização nem auto-conclui nada).
+// Molde: useRescan; invalida a lista e o detalhe do doc no sucesso.
+export function useApproveDocument() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => postApprove(id),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ['documents'] })
+      qc.invalidateQueries({ queryKey: ['document-detail', id] })
     },
   })
 }

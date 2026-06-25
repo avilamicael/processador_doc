@@ -81,6 +81,7 @@ export default function App() {
               onToggleSel={toggleSel}
               onToggleAll={toggleAll}
               onClearSel={clearSel}
+              onNavigate={setPage}
             />
           )}
           {page === 'atencao' && <AttentionPage />}

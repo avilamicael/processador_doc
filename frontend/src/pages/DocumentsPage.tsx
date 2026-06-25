@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { DocState, StatusFilter } from '../types'
+import type { DocState, Page, StatusFilter } from '../types'
 import { Icon } from '../components/Icon'
 import { StatusPill } from '../components/StatusPill'
-import { useDeleteDocuments, useDocuments, useDuplicatesCount, useRescan } from '../hooks/useDocuments'
+import { useApproveDocument, useDeleteDocuments, useDocuments, useDuplicatesCount, useRescan } from '../hooks/useDocuments'
 import { getDocumentDetail } from '../lib/api'
 
 interface DocumentsPageProps {
@@ -15,6 +15,16 @@ interface DocumentsPageProps {
   onToggleAll: (ids: number[]) => void
   // Limpa a seleção no App (vive lá) — chamado no sucesso da remoção.
   onClearSel: () => void
+  // D-11: navegar para outra página (ex.: 'dryrun') a partir da CTA da linha.
+  onNavigate?: (page: Page) => void
+}
+
+// D-10/D-11: condição derivada "pronto, aguardando ação" — doc fica DE PROPÓSITO em
+// processando + last_completed_step = "classificado" (casa com CLASSIFIED_STEP,
+// backend/app/classification/stage.py:69). Mesma condição do ramo do StatusPill;
+// usada aqui para decidir quando exibir a CTA. NÃO é estado persistido novo.
+function isClassifiedReady(state: DocState, lastCompletedStep?: string | null): boolean {
+  return state === 'processando' && lastCompletedStep === 'classificado'
 }
 
 // Stat-cards: estados de domínio reais (UI-SPEC). Cada card lê um count da API e
@@ -56,11 +66,12 @@ function formatDate(iso: string): string {
   })
 }
 
-export function DocumentsPage({ search, status, onStatus, selected, onToggleSel, onToggleAll, onClearSel }: DocumentsPageProps) {
+export function DocumentsPage({ search, status, onStatus, selected, onToggleSel, onToggleAll, onClearSel, onNavigate }: DocumentsPageProps) {
   const docsQuery = useDocuments()
   const dupQuery = useDuplicatesCount()
   const rescan = useRescan()
   const deleteDocs = useDeleteDocuments()
+  const approve = useApproveDocument()
 
   // S4 — detalhe de classificação somente leitura (TPL-03/04). Abre num modal ao
   // clicar no nome do arquivo; busca GET /documents/{id} sob demanda.
@@ -277,7 +288,33 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
                       </td>
                       <td className="cell-mono">{d.source_folder_path ?? '—'}</td>
                       <td>
-                        <StatusPill state={d.state} lastCompletedStep={d.last_completed_step} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <StatusPill state={d.state} lastCompletedStep={d.last_completed_step} />
+                          {/* D-11/D-12: CTA na própria linha quando o doc está "pronto".
+                              "Pré-visualizar" navega ao dry-run; "Aprovar" dispara o POST
+                              approve (backend decide a conclusão — sem auto-conclude aqui). */}
+                          {isClassifiedReady(d.state, d.last_completed_step) && (
+                            <span style={{ display: 'inline-flex', gap: 6 }}>
+                              <button
+                                className="btn-ghost"
+                                style={{ height: 26, padding: '0 10px', fontSize: 12 }}
+                                onClick={() => onNavigate?.('dryrun')}
+                                title="Conferir origem → destino antes de aplicar"
+                              >
+                                Pré-visualizar
+                              </button>
+                              <button
+                                className="btn-primary"
+                                style={{ height: 26, padding: '0 10px', fontSize: 12 }}
+                                onClick={() => approve.mutate(d.id)}
+                                disabled={approve.isPending}
+                                title="Aprovar este documento e executar as automações configuradas"
+                              >
+                                {approve.isPending && approve.variables === d.id ? 'Aprovando…' : 'Aprovar'}
+                              </button>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="right cell-mono">{formatSize(d.size)}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{formatDate(d.created_at)}</td>
