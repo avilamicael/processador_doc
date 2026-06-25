@@ -274,10 +274,20 @@ async def run_watcher(engine: Engine, stop: asyncio.Event) -> None:
         except Exception:  # noqa: BLE001 — scan inicial nunca derruba o watcher
             logger.exception("Falha no scan inicial do watcher")
 
+    # Retém o conjunto de pastas já observadas para varrer só as recém-adicionadas
+    # em runtime (D-01). As `initial_paths` já foram varridas acima → não re-varrer.
+    previous_paths: set[Path] = set(initial_paths)
+
     while not stop.is_set():
         with get_session(engine) as session:
             folders = active_folder_paths(session)
         current_paths = set(folders.keys())
+
+        # D-01: pastas que passaram a existir/ser ativadas DEPOIS do boot têm seus
+        # arquivos já presentes varridos (diff `current - previous`), sem /rescan.
+        # Atualiza `previous_paths` para ambos os ramos (com e sem pastas ativas).
+        await _scan_new_active_folders(engine, current_paths, previous_paths)
+        previous_paths = current_paths
 
         if not current_paths:
             # Sem pastas ativas: aguarda o supervisor e reavalia (acorda em stop).
@@ -304,6 +314,30 @@ async def run_watcher(engine: Engine, stop: asyncio.Event) -> None:
             local_stop.set()
             supervisor.cancel()
             await asyncio.gather(supervisor, return_exceptions=True)
+
+
+async def _scan_new_active_folders(
+    engine: Engine, current_paths: set[Path], previous_paths: set[Path]
+) -> None:
+    """Varre os arquivos JÁ presentes nas pastas recém-ativadas em runtime (D-01).
+
+    Espelha o scan de startup, mas restrito ao diff `current_paths - previous_paths`
+    (pastas que passaram a existir/ser ativadas depois do boot). Reusa
+    `scan_and_enqueue` → idempotente por dedup, então re-varrer é seguro. Como o
+    scan inicial, NUNCA propaga: uma falha no scan da pasta nova loga e segue, sem
+    derrubar o loop do watcher.
+    """
+    new_paths = current_paths - previous_paths
+    if not new_paths:
+        return
+    try:
+        result = await scan_and_enqueue(engine, sorted(new_paths))
+        if result.enqueued:
+            logger.info(
+                "Scan de pasta(s) nova(s) enfileirou %s candidato(s)", result.enqueued
+            )
+    except Exception:  # noqa: BLE001 — scan de pasta nova nunca derruba o watcher
+        logger.exception("Falha no scan de pasta(s) recém-ativada(s) em runtime")
 
 
 async def _watch_for_reconfig(
