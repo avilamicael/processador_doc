@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { DryRunRow } from '../types'
 import { Icon } from '../components/Icon'
 import { useApply, useDryRun, useUndo } from '../hooks/useAutomations'
+import { useApprovalMode } from '../hooks/useAttention'
 
 // S4 — Tela de Dry-run / Preview (origem→destino). Core surface da fase (AUT-03):
 // o usuário VÊ o que vai acontecer no disco ANTES de aplicar. "Aplicar" só habilita
@@ -85,6 +86,11 @@ export function DryRunPage() {
   const dryRun = useDryRun()
   const apply = useApply()
   const undo = useUndo()
+  // Modo de aprovação (D-03/D-06): quando LIGADO, esta página é a fila de aprovação.
+  // O auto-apply de alta confiança já é gateado no worker (12-03); aqui o usuário
+  // aprova (= aplicar) ou nega/pula por linha. DESLIGADO = comportamento atual.
+  const approvalMode = useApprovalMode()
+  const approvalEnabled = approvalMode.data?.enabled ?? false
 
   const [rows, setRows] = useState<DryRunRow[]>([])
   const [selected, setSelected] = useState<number[]>([])
@@ -149,6 +155,15 @@ export function DryRunPage() {
     })
   }
 
+  // "Negar / Pular" (modo de aprovação, D-06): filtro LOCAL apenas — remove TODAS as
+  // linhas daquele document_id de `rows` via setRows e tira o id de `selected`. NÃO
+  // chama o backend e NÃO move/apaga nenhum arquivo (o move só acontece no aprovar).
+  // O documento segue pronto para uma rodada futura. (T-12-11)
+  const denyDoc = (id: number) => {
+    setRows((rs) => rs.filter((r) => r.document_id !== id))
+    setSelected((s) => s.filter((x) => x !== id))
+  }
+
   const confirmUndo = () => {
     if (!undoRunId) return
     undo.mutate(
@@ -170,7 +185,8 @@ export function DryRunPage() {
   const isError = dryRun.isError && !previewLoaded
   const isEmpty = previewLoaded && rows.length === 0
 
-  const BODY_COLS = 4
+  // Coluna extra de ações (Aprovar / Negar) só aparece no modo de aprovação.
+  const BODY_COLS = approvalEnabled ? 5 : 4
 
   return (
     <div>
@@ -187,6 +203,28 @@ export function DryRunPage() {
           {dryRun.isPending ? 'Atualizando…' : 'Atualizar prévia'}
         </button>
       </div>
+
+      {/* Banner do modo de aprovação (apenas quando LIGADO). Texto puro. */}
+      {approvalEnabled && (
+        <div
+          className="card"
+          style={{
+            padding: '12px 16px',
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            borderLeft: '3px solid var(--st-leitura)',
+          }}
+        >
+          <Icon name="alert" size={16} style={{ color: 'var(--st-leitura)', flex: 'none', marginTop: 1 }} />
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
+            Modo de aprovação ligado — as automações aguardam você. <strong>Aprovar</strong>{' '}
+            aplica a automação (move/renomeia); <strong>Negar</strong> deixa o documento
+            pronto sem mover — o arquivo não é tocado.
+          </span>
+        </div>
+      )}
 
       {/* Contagem-resumo do topo (focal point S4) */}
       {previewLoaded && rows.length > 0 && (
@@ -271,6 +309,7 @@ export function DryRunPage() {
                 <th>Origem</th>
                 <th>Destino</th>
                 <th>Situação</th>
+                {approvalEnabled && <th>Ações</th>}
               </tr>
             </thead>
             <tbody>
@@ -349,6 +388,37 @@ export function DryRunPage() {
                       <td>
                         <SituationBadge row={r} />
                       </td>
+                      {approvalEnabled && (
+                        <td>
+                          {selectable ? (
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                className="row-action"
+                                aria-label={`Aprovar e aplicar ${r.original_filename}`}
+                                title="Aprovar: aplica a automação (move/renomeia este documento)"
+                                onClick={() => doApply([r.document_id])}
+                                disabled={!canApply}
+                                style={{ width: 'auto', padding: '6px 10px', gap: 6, color: 'var(--st-tratado)' }}
+                              >
+                                <Icon name="check" size={14} />
+                                Aprovar
+                              </button>
+                              <button
+                                className="row-action"
+                                aria-label={`Negar ou pular ${r.original_filename}`}
+                                title="Negar / Pular: tira o documento desta rodada sem mover o arquivo (nada é tocado)"
+                                onClick={() => denyDoc(r.document_id)}
+                                style={{ width: 'auto', padding: '6px 10px', gap: 6, color: 'var(--text-2)' }}
+                              >
+                                <Icon name="undo" size={14} />
+                                Negar / Pular
+                              </button>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>—</span>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
