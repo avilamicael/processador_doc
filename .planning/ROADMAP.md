@@ -424,15 +424,15 @@ Plans:
 
 **Sucesso:** (2) pasta criada depois com arquivos pré-existentes é varrida sem `/rescan` manual; (7) remover+re-varrer re-ingere arquivos de split; (12) com o toggle ligado as automações esperam aprovação na fila e o usuário aprova/nega por linha; desligado, o sistema move/renomeia sozinho mantendo a rede de segurança por confiança.
 
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 **UI hint**: yes
 
 Plans:
 **Wave 1**
 
-- [ ] 12-01-PLAN.md — Item 2: varrer pasta nova/reativada em runtime (diff de pastas no run_watcher, idempotente por dedup)
-- [ ] 12-02-PLAN.md — Item 7: limpeza de dedup do delete cobre o hash de bloco (re-ingere split), nunca toca arquivo
-- [ ] 12-03-PLAN.md — Item 12 backend: setting approval_mode (default OFF) + GET/PUT /config/approval-mode + gate em enqueue_pending_applications
+- [x] 12-01-PLAN.md — Item 2: varrer pasta nova/reativada em runtime (diff de pastas no run_watcher, idempotente por dedup)
+- [x] 12-02-PLAN.md — Item 7: limpeza de dedup do delete cobre o hash de bloco (re-ingere split), nunca toca arquivo
+- [x] 12-03-PLAN.md — Item 12 backend: setting approval_mode (default OFF) + GET/PUT /config/approval-mode + gate em enqueue_pending_applications
 
 **Wave 2** *(blocked on 12-03)*
 

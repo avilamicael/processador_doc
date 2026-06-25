@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 11 context gathered
-last_updated: "2026-06-25T15:19:50.636Z"
-last_activity: 2026-06-25
+last_updated: "2026-06-25T16:44:51.497Z"
+last_activity: 2026-06-25 -- Phase 12 execution started
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_phases: 14
+  completed_phases: 10
+  total_plans: 54
+  completed_plans: 53
+  percent: 71
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-15)
 
 **Core value:** Transformar uma pilha de documentos heterogêneos (PDFs e imagens, de tipos variados) em arquivos classificados, nomeados e organizados corretamente de forma automática e confiável — sem o usuário perder arquivos nem confiar cegamente na IA.
-**Current focus:** Phase 11 — ux-e-visibilidade-reverter-movidos-dedup-visivel-rotulos-e-f
+**Current focus:** Phase 12 — robustez-de-ingestao-e-modo-de-aprovacao
 
 ## Current Position
 
-Phase: 11 (ux-e-visibilidade-reverter-movidos-dedup-visivel-rotulos-e-f) — EXECUTING
-Plan: 2 of 4
-Status: Ready to execute
-Last activity: 2026-06-25
+Phase: 12 (robustez-de-ingestao-e-modo-de-aprovacao) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 12
+Last activity: 2026-06-25 -- Phase 12 execution started
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
