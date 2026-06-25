@@ -38,6 +38,7 @@ def env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     # apontamos o env_file do model_config para o tmp também.
     monkeypatch.setitem(config.Settings.model_config, "env_file", str(env))
     monkeypatch.delenv("REVIEW_CONFIDENCE_THRESHOLD", raising=False)
+    monkeypatch.delenv("APPROVAL_MODE_ENABLED", raising=False)
     config.get_settings.cache_clear()
     yield env
     config.get_settings.cache_clear()
@@ -94,3 +95,49 @@ def test_put_replaces_existing_key(client: TestClient, env_file: Path) -> None:
 
     get = client.get("/config/review-threshold")
     assert get.json()["threshold"] == 0.9
+
+
+# --- Modo de aprovação (Fase 12, D-05) — espelha o par ai-fallback/review-threshold ---
+
+
+def test_approval_mode_get_default_false(client: TestClient) -> None:
+    """GET reflete o default (False) quando nada foi persistido (D-04 OFF)."""
+    resp = client.get("/config/approval-mode")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["enabled"] is False
+
+
+def test_approval_mode_put_persists_and_get_reflects(
+    client: TestClient, env_file: Path
+) -> None:
+    """PUT True persiste no .env; GET seguinte reflete True (cache invalidado)."""
+    put = client.put("/config/approval-mode", json={"enabled": True})
+    assert put.status_code == 200, put.text
+    assert put.json()["enabled"] is True
+
+    assert "APPROVAL_MODE_ENABLED=True" in env_file.read_text(encoding="utf-8")
+
+    get = client.get("/config/approval-mode")
+    assert get.status_code == 200
+    assert get.json()["enabled"] is True
+
+
+def test_approval_mode_put_non_bool_returns_422(client: TestClient) -> None:
+    """PUT com enabled não-bool → 422 (validação Pydantic); nada persistido."""
+    resp = client.put("/config/approval-mode", json={"enabled": "talvez"})
+    assert resp.status_code == 422, resp.text
+
+
+def test_approval_mode_put_replaces_existing_key(
+    client: TestClient, env_file: Path
+) -> None:
+    """PUT sucessivos substituem a linha (não duplicam a chave no .env)."""
+    client.put("/config/approval-mode", json={"enabled": True})
+    client.put("/config/approval-mode", json={"enabled": False})
+
+    content = env_file.read_text(encoding="utf-8")
+    assert content.count("APPROVAL_MODE_ENABLED=") == 1
+    assert "APPROVAL_MODE_ENABLED=False" in content
+
+    get = client.get("/config/approval-mode")
+    assert get.json()["enabled"] is False

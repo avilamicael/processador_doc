@@ -35,6 +35,10 @@ _THRESHOLD_ENV_KEY = "REVIEW_CONFIDENCE_THRESHOLD"
 # (validation_alias "CLASSIFY_AI_FALLBACK_ENABLED"). Constante do código (Fase 10).
 _AI_FALLBACK_ENV_KEY = "CLASSIFY_AI_FALLBACK_ENABLED"
 
+# Chave do `.env` que mapeia para `Settings.approval_mode_enabled`
+# (validation_alias "APPROVAL_MODE_ENABLED"). Constante do código (Fase 12).
+_APPROVAL_MODE_ENV_KEY = "APPROVAL_MODE_ENABLED"
+
 
 class ReviewThresholdOut(BaseModel):
     """Valor efetivo atual do limiar global de confiança (0.0–1.0)."""
@@ -98,3 +102,38 @@ def put_ai_fallback(body: AiFallbackIn) -> AiFallbackOut:
     persist_env_setting(_AI_FALLBACK_ENV_KEY, str(body.enabled))
     get_settings.cache_clear()
     return AiFallbackOut(enabled=get_settings().classify_ai_fallback_enabled)
+
+
+class ApprovalModeOut(BaseModel):
+    """Estado efetivo atual do toggle global de modo de aprovação (Fase 12, D-05)."""
+
+    enabled: bool
+
+
+class ApprovalModeIn(BaseModel):
+    """Novo estado do toggle — bool puro (fora do tipo → 422 antes de escrever)."""
+
+    enabled: bool
+
+
+@router.get("/approval-mode", response_model=ApprovalModeOut)
+def get_approval_mode() -> ApprovalModeOut:
+    """Lê o estado efetivo do toggle de modo de aprovação de `get_settings()` (D-05)."""
+    return ApprovalModeOut(enabled=get_settings().approval_mode_enabled)
+
+
+@router.put("/approval-mode", response_model=ApprovalModeOut)
+def put_approval_mode(body: ApprovalModeIn) -> ApprovalModeOut:
+    """Persiste o toggle no `.env` e invalida o cache de settings (sem reiniciar).
+
+    Espelha exatamente o par ai-fallback: o Pydantic já garantiu o tipo bool (fora
+    dele → 422). Grava `APPROVAL_MODE_ENABLED=<True|False>` no `.env` atomicamente,
+    limpa o `lru_cache` de `get_settings` para o sweep `enqueue_pending_applications`
+    reler o novo estado, e retorna o valor efetivo relido. LIGAR este toggle faz as
+    automações de alta confiança AGUARDAREM aprovação humana (D-05) em vez de
+    auto-aplicar; DESLIGAR restaura o auto-apply atual (trava de confiança mantida,
+    D-04). O gate vive SÓ no enqueue do worker, nunca em `apply_stage` (D-06).
+    """
+    persist_env_setting(_APPROVAL_MODE_ENV_KEY, str(body.enabled))
+    get_settings.cache_clear()
+    return ApprovalModeOut(enabled=get_settings().approval_mode_enabled)
