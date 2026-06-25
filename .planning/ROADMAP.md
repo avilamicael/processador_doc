@@ -26,7 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 <!-- Milestone: Ajustes pós-teste (feedback do piloto) — backlog em .planning/notes/2026-06-24-melhorias-teste-usuario-final.md -->
 
 - [ ] **Phase 9: Automação — destino configurável e transformação de valores** - Renomear/mover utilizável: destino real escolhido pelo usuário (não confinado/mutilado) + transformação de valores no padrão. Backlog itens 10–11
-- [ ] **Phase 10: Classificação robusta e reprocessamento** - Matcher tolerante (N-de-M + normalização) + testar sinais no construtor, reprocessar/reclassificar automático após editar template. Backlog itens 5,6 (itens 2,7 deferidos)
+- [ ] **Phase 10: Classificação robusta e reprocessamento** - Matcher tolerante (normalização acento/quebra/pontuação — N-de-M deferido, D-01) + testar sinais no construtor, reprocessar/reclassificar automático após editar template. Backlog itens 5,6 (itens 2,7 deferidos)
 - [ ] **Phase 11: UX e visibilidade** - Reverter movidos, dedup visível, seletor de campo na condição, rótulo "pronto", fuso de data. Backlog itens 1,3,4,8,9
 
 ## Phase Details
