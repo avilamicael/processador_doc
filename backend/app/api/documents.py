@@ -29,6 +29,7 @@ da resposta (consumo legítimo da UI), NUNCA em log; o endpoint não loga valore
 
 import json
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel
@@ -189,6 +190,25 @@ class DeleteDocumentsOut(BaseModel):
     """Resultado do delete em lote: quantos Documents foram realmente removidos."""
 
     deleted: int
+
+
+class ReprocessBatchIn(BaseModel):
+    """Body do reprocess em lote (D-12).
+
+    Exatamente UM de `bucket` ou `ids` deve ser informado (XOR — 422 se ambos
+    None ou ambos preenchidos). `bucket` ("quarentena"|"em_revisao") faz o backend
+    resolver os ids elegíveis do balde (botão "reprocessar todos"); `ids` aceita uma
+    lista explícita (ids fora dos estados elegíveis são ignorados).
+    """
+
+    bucket: Literal["quarentena", "em_revisao"] | None = None
+    ids: list[int] | None = None
+
+
+class ReprocessBatchOut(BaseModel):
+    """Resultado do reprocess em lote: quantos Documents foram re-enfileirados."""
+
+    reprocessed: int
 
 
 def _field_out(f: FilledField) -> ClassificationFieldOut:
@@ -512,6 +532,90 @@ def delete_documents(request: Request, body: DeleteDocumentsIn) -> DeleteDocumen
     return DeleteDocumentsOut(deleted=deleted)
 
 
+_REPROCESS_STATES = (DocState.QUARENTENA, DocState.EM_REVISAO)
+
+
+def _reprocess_one(session: Session, doc: Document) -> None:
+    """Reprocessa UM doc (D-10/D-11): apaga o CR, transita PROCESSANDO, re-enfileira
+    `classify` SEM `forced_template_id`.
+
+    Pré-condição (chamadores garantem): `doc.state in _REPROCESS_STATES`. Apagar o
+    `ClassificationResult` ANTES do requeue é obrigatório (Pitfall 3) — senão a
+    idempotência do `classify_stage` (no-op se já existe CR) deixaria o doc preso
+    em PROCESSANDO sem reclassificar. Sem `forced_template_id`, o stage roda
+    matcher→decide→(IA)→filler com TODOS os templates atuais (pega edições pós-
+    quarentena de graça, D-11). NÃO loga valores/conteúdo (V7) — só metadados.
+    """
+    cr = session.scalar(
+        select(ClassificationResult).where(ClassificationResult.document_id == doc.id)
+    )
+    if cr is not None:
+        session.delete(cr)
+    transition(session, doc, DocState.PROCESSANDO)
+    _requeue(
+        session,
+        content_hash=doc.content_hash,
+        step=CLASSIFY_STEP,
+        payload={"content_hash": doc.content_hash},
+    )
+
+
+@router.post("/documents/reprocess", response_model=ReprocessBatchOut)
+def reprocess_documents(request: Request, body: ReprocessBatchIn) -> ReprocessBatchOut:
+    """Reprocessa em LOTE docs de um balde (QUARENTENA|EM_REVISAO) SEM forçar template (D-12).
+
+    Espelha `reprocess_document` (single) numa única sessão. Exatamente UM de
+    `bucket`/`ids` é exigido (XOR → 422). Para `bucket`, resolve os ids pelo mesmo
+    filtro de `get_attention` (`Document.state == DocState.<BALDE>`); para `ids`, usa
+    a lista. Cada doc ausente OU fora de {QUARENTENA, EM_REVISAO} é IGNORADO
+    silenciosamente (idempotente — não derruba o lote; T-10-05D). Re-enfileirar
+    `classify` não dispara IA por si só (matcher local custo-zero primeiro).
+
+    REGISTRADO ANTES de `GET /documents/{document_id}` (mesma razão de
+    `/documents/delete` e `/documents/attention`): o conversor `{document_id}: int`
+    rejeitaria "reprocess" com 422 se esta rota viesse depois.
+    """
+    # XOR: exatamente um de bucket/ids (422 se ambos None ou ambos preenchidos).
+    if (body.bucket is None) == (body.ids is None):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "informe exatamente um de 'bucket' ou 'ids'",
+        )
+
+    engine = request.app.state.engine
+    reprocessed = 0
+    with get_session(engine) as session:
+        if body.bucket is not None:
+            target_state = (
+                DocState.QUARENTENA if body.bucket == "quarentena" else DocState.EM_REVISAO
+            )
+            docs = list(
+                session.scalars(
+                    select(Document).where(Document.state == target_state)
+                ).all()
+            )
+        else:
+            docs = []
+            for doc_id in body.ids or []:
+                doc = session.get(Document, doc_id)
+                if doc is None:
+                    continue  # id inexistente → ignora (idempotente).
+                docs.append(doc)
+
+        for doc in docs:
+            if doc.state not in _REPROCESS_STATES:
+                continue  # fora dos estados elegíveis → ignora silenciosamente.
+            try:
+                _reprocess_one(session, doc)
+            except InvalidTransition:
+                continue  # transição inválida (corrida) → ignora, não derruba o lote.
+            reprocessed += 1
+
+        session.commit()
+
+    return ReprocessBatchOut(reprocessed=reprocessed)
+
+
 @router.get("/documents/{document_id}", response_model=DocumentDetailOut)
 def get_document(request: Request, document_id: int) -> DocumentDetailOut:
     """Detalhe de classificação SOMENTE LEITURA (S4, TPL-03/04); 404 se ausente.
@@ -650,6 +754,40 @@ def reclassify_document(
                 "forced_template_id": body.template_id,
             },
         )
+        return _build_detail(session, doc, _folder_path_for(session, doc))
+
+
+@router.post("/documents/{document_id}/reprocess", response_model=DocumentDetailOut)
+def reprocess_document(request: Request, document_id: int) -> DocumentDetailOut:
+    """Reprocessa um doc em QUARENTENA ou EM_REVISAO SEM forçar template (D-10/D-11).
+
+    Espelha `reclassify_document` com 3 diferenças: (a) aceita QUARENTENA E
+    EM_REVISAO; (b) sem body `template_id`; (c) requeue SEM `forced_template_id` — o
+    `classify_stage` roda matcher→decide→(IA)→filler com TODOS os templates atuais,
+    pegando as edições de template feitas após a quarentena (D-11).
+
+    GUARD (Pitfall 4 / T-10-05): a allowlist da state machine permite PROCESSANDO de
+    vários estados (CONCLUIDO inclusive), então checamos a origem semântica AQUI —
+    doc fora de {QUARENTENA, EM_REVISAO} → 409 (não 500). 404 se ausente. APAGA o CR
+    existente ANTES do requeue (Pitfall 3). NÃO loga valores/conteúdo (V7).
+    """
+    engine = request.app.state.engine
+    with get_session(engine) as session:
+        doc = session.get(Document, document_id)
+        if doc is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, f"documento {document_id} não encontrado"
+            )
+        # Pré-condição semântica do reprocess: só QUARENTENA ou EM_REVISAO.
+        if doc.state not in _REPROCESS_STATES:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "reprocessar só é permitido para documentos em QUARENTENA ou EM_REVISAO",
+            )
+        try:
+            _reprocess_one(session, doc)
+        except InvalidTransition as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
         return _build_detail(session, doc, _folder_path_for(session, doc))
 
 

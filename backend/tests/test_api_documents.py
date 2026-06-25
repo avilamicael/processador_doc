@@ -486,3 +486,196 @@ def test_delete_preserves_ingested_original_with_remaining_blocks(
     with get_session(schema_engine) as session:
         # O original é preservado porque d2 ainda o referencia.
         assert session.get(IngestedOriginal, original_id) is not None
+
+
+# ---------------------------------------------------------------------------
+# REPROCESS (Plano 10-03 — D-10/D-11/D-12): re-roda matcher→(IA)→filler com os
+# templates ATUAIS, SEM forçar template, para tirar docs de QUARENTENA/EM_REVISAO.
+# Single (POST /documents/{id}/reprocess) e batch por bucket (POST /documents/reprocess).
+# ---------------------------------------------------------------------------
+
+
+def _seed_doc_with_cr(
+    schema_engine: Engine,
+    *,
+    content_hash: str,
+    state: DocState,
+) -> int:
+    """Semeia um Document no estado pedido com um ClassificationResult + FilledField.
+
+    Devolve o id do Document. O CR existe para provar que o reprocess o APAGA
+    (Pitfall 3). A transição passa por PROCESSANDO quando necessário (a allowlist
+    não tem RECEBIDO→EM_REVISAO direto).
+    """
+    with get_session(schema_engine) as session:
+        template = Template(name=f"T-{content_hash[:4]}", doc_type="Fiscal", signals_json="[]")
+        session.add(template)
+        doc = Document(content_hash=content_hash, original_filename=f"{content_hash[:4]}.pdf")
+        session.add(doc)
+        session.flush()
+        cr = ClassificationResult(document_id=doc.id, template_id=template.id, confidence=0.9)
+        session.add(cr)
+        session.flush()
+        session.add(
+            FilledField(
+                classification_result_id=cr.id,
+                field_name="CNPJ",
+                raw_value="x",
+                normalized_value="x",
+                valid=True,
+            )
+        )
+        # Levar o doc ao estado pedido respeitando a allowlist.
+        if state == DocState.QUARENTENA:
+            transition(session, doc, DocState.QUARENTENA)
+        elif state == DocState.EM_REVISAO:
+            transition(session, doc, DocState.PROCESSANDO)
+            transition(session, doc, DocState.EM_REVISAO)
+        elif state == DocState.CONCLUIDO:
+            transition(session, doc, DocState.PROCESSANDO)
+            transition(session, doc, DocState.CONCLUIDO)
+        session.commit()
+        return doc.id
+
+
+def _pending_classify_payload(schema_engine: Engine, content_hash: str) -> dict:
+    """Carrega o payload (dict) do Job (content_hash, 'classify')."""
+    with get_session(schema_engine) as session:
+        raw = session.scalar(
+            select(Job.payload).where(Job.original_hash == content_hash, Job.step == "classify")
+        )
+    assert raw is not None, "Job classify não foi enfileirado"
+    import json
+
+    return json.loads(raw)
+
+
+def test_reprocess_single_quarantine_deletes_cr_and_requeues_without_forced(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """(a) QUARENTENA + CR → 200; estado PROCESSANDO, CR apagado, Job classify
+    pending cujo payload NÃO contém forced_template_id (D-11)."""
+    chash = "a" * 64
+    doc_id = _seed_doc_with_cr(schema_engine, content_hash=chash, state=DocState.QUARENTENA)
+
+    resp = client.post(f"/documents/{doc_id}/reprocess")
+    assert resp.status_code == 200, resp.text
+
+    with get_session(schema_engine) as session:
+        doc = session.get(Document, doc_id)
+        assert doc.state == DocState.PROCESSANDO
+        # CR apagado (Pitfall 3).
+        assert (
+            session.scalar(
+                select(func.count(ClassificationResult.id)).where(
+                    ClassificationResult.document_id == doc_id
+                )
+            )
+            == 0
+        )
+
+    # D-11: o requeue NÃO força template.
+    payload = _pending_classify_payload(schema_engine, chash)
+    assert "forced_template_id" not in payload
+    assert payload["content_hash"] == chash
+
+
+def test_reprocess_single_em_revisao(client: TestClient, schema_engine: Engine) -> None:
+    """(b) EM_REVISAO → 200 idem (PROCESSANDO + requeue classify sem forced)."""
+    chash = "b" * 64
+    doc_id = _seed_doc_with_cr(schema_engine, content_hash=chash, state=DocState.EM_REVISAO)
+
+    resp = client.post(f"/documents/{doc_id}/reprocess")
+    assert resp.status_code == 200, resp.text
+
+    with get_session(schema_engine) as session:
+        assert session.get(Document, doc_id).state == DocState.PROCESSANDO
+    payload = _pending_classify_payload(schema_engine, chash)
+    assert "forced_template_id" not in payload
+
+
+def test_reprocess_single_concluido_returns_409(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """(c) doc CONCLUIDO → 409 (Pitfall 4: guard semântico, não 500)."""
+    chash = "c" * 64
+    doc_id = _seed_doc_with_cr(schema_engine, content_hash=chash, state=DocState.CONCLUIDO)
+
+    resp = client.post(f"/documents/{doc_id}/reprocess")
+    assert resp.status_code == 409, resp.text
+    with get_session(schema_engine) as session:
+        # Estado intacto; CR preservado (nada foi tocado).
+        assert session.get(Document, doc_id).state == DocState.CONCLUIDO
+
+
+def test_reprocess_single_nonexistent_returns_404(client: TestClient) -> None:
+    """(d) id inexistente → 404."""
+    resp = client.post("/documents/999999/reprocess")
+    assert resp.status_code == 404, resp.text
+
+
+def test_reprocess_batch_bucket_quarantine(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """(e) bucket=quarentena reprocessa os 2 QUARENTENA; o EM_REVISAO fica intacto."""
+    q1 = _seed_doc_with_cr(schema_engine, content_hash="1" * 64, state=DocState.QUARENTENA)
+    q2 = _seed_doc_with_cr(schema_engine, content_hash="2" * 64, state=DocState.QUARENTENA)
+    rev = _seed_doc_with_cr(schema_engine, content_hash="3" * 64, state=DocState.EM_REVISAO)
+
+    resp = client.post("/documents/reprocess", json={"bucket": "quarentena"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["reprocessed"] == 2
+
+    with get_session(schema_engine) as session:
+        assert session.get(Document, q1).state == DocState.PROCESSANDO
+        assert session.get(Document, q2).state == DocState.PROCESSANDO
+        # O de EM_REVISAO não foi tocado pelo bucket quarentena.
+        assert session.get(Document, rev).state == DocState.EM_REVISAO
+
+
+def test_reprocess_batch_bucket_em_revisao(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """(f) bucket=em_revisao reprocessa só o de revisão; QUARENTENA intacto."""
+    q1 = _seed_doc_with_cr(schema_engine, content_hash="1" * 64, state=DocState.QUARENTENA)
+    rev = _seed_doc_with_cr(schema_engine, content_hash="3" * 64, state=DocState.EM_REVISAO)
+
+    resp = client.post("/documents/reprocess", json={"bucket": "em_revisao"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["reprocessed"] == 1
+
+    with get_session(schema_engine) as session:
+        assert session.get(Document, rev).state == DocState.PROCESSANDO
+        assert session.get(Document, q1).state == DocState.QUARENTENA
+
+
+def test_reprocess_batch_ids_ignores_ineligible(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """(g) ids com um id fora dos estados elegíveis → ignorado (idempotente); a
+    contagem reflete só os válidos."""
+    q1 = _seed_doc_with_cr(schema_engine, content_hash="1" * 64, state=DocState.QUARENTENA)
+    done = _seed_doc_with_cr(schema_engine, content_hash="c" * 64, state=DocState.CONCLUIDO)
+
+    resp = client.post("/documents/reprocess", json={"ids": [q1, done, 999999]})
+    assert resp.status_code == 200, resp.text
+    # Só o elegível (q1) conta; CONCLUIDO e id inexistente são ignorados.
+    assert resp.json()["reprocessed"] == 1
+
+    with get_session(schema_engine) as session:
+        assert session.get(Document, q1).state == DocState.PROCESSANDO
+        assert session.get(Document, done).state == DocState.CONCLUIDO
+
+
+def test_reprocess_batch_invalid_body_returns_422(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """(h) body inválido (ambos ou nenhum de bucket+ids) → 422."""
+    # Nenhum dos dois.
+    resp = client.post("/documents/reprocess", json={})
+    assert resp.status_code == 422, resp.text
+    # Ambos preenchidos.
+    resp = client.post(
+        "/documents/reprocess", json={"bucket": "quarentena", "ids": [1]}
+    )
+    assert resp.status_code == 422, resp.text
