@@ -28,7 +28,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 9: Automação — destino configurável e transformação de valores** - Renomear/mover utilizável: destino real escolhido pelo usuário (não confinado/mutilado) + transformação de valores no padrão. Backlog itens 10–11
 - [x] **Phase 10: Classificação robusta e reprocessamento** - Matcher tolerante (normalização acento/quebra/pontuação — N-de-M deferido, D-01) + testar sinais no construtor, reprocessar/reclassificar automático após editar template. Backlog itens 5,6 (itens 2,7 deferidos) (completed 2026-06-25; verificação visual 10-05 adiada)
 - [x] **Phase 11: UX e visibilidade** - Reverter movidos, dedup visível, seletor de campo na condição, rótulo "pronto", fuso de data. Backlog itens 1,3,4,8,9 (completed 2026-06-25; verificação visual 11-02/03/04 adiada)
-- [x] **Phase 12: Robustez de ingestão e modo de aprovação** - Varredura de pasta nova (item 2), re-ingest de split após remover (item 7) e toggle global "automações aguardam aprovação" com a prévia repurposada como fila de aprovação (item 12). Backlog itens 2, 7, 12 (completed 2026-06-25)
+- [x] **Phase 12: Robustez de ingestão e modo de aprovação** - Varredura de pasta nova (item 2), re-ingest de split após remover (item 7) e toggle global "automações aguardam aprovação" com a prévia repurposada como fila de aprovação (item 12). Backlog itens 2, 7, 12 (completed 2026-06-25; verificação visual 12-04 adiada)
 
 ## Phase Details
 
