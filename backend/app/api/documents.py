@@ -555,6 +555,17 @@ def delete_documents(request: Request, body: DeleteDocumentsIn) -> DeleteDocumen
         # (4) Jobs órfãos do(s) bloco(s) removido(s).
         for content_hash in block_hashes:
             session.execute(delete(Job).where(Job.original_hash == content_hash))
+            # D-02 (item 7): apaga TAMBÉM a entrada de gate de dedup do BLOCO (split
+            # anti-loop), cuja chave é exatamente o `content_hash` do bloco removido.
+            # Sem isso, "remover + forçar varredura" dedupa o arquivo de bloco e NÃO
+            # re-ingere. Para docs SEM split o content_hash não tem entrada de gate
+            # própria → o delete extra é no-op inofensivo (hashes distintos por
+            # conteúdo nunca colidem com original_hash não-split). SÓ registros são
+            # tocados — o arquivo na pasta e o blob no CAS permanecem (constraint
+            # sagrada "nunca perder arquivos").
+            session.execute(
+                delete(IngestedOriginal).where(IngestedOriginal.original_hash == content_hash)
+            )
 
         # (5) Anti-órfão de dedup: IngestedOriginal sem blocos restantes.
         for origin_id in touched_origin_ids:

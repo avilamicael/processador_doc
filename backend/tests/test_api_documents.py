@@ -491,6 +491,103 @@ def test_delete_preserves_ingested_original_with_remaining_blocks(
         assert session.get(IngestedOriginal, original_id) is not None
 
 
+# --- D-02 (item 7): remover doc de SPLIT libera a entrada de gate do BLOCO ---
+#
+# A materialização de split registra o hash do BLOCO no gate de dedup (anti-loop)
+# como entrada SEPARADA do original: IngestedOriginal.original_hash == content_hash
+# do Document do bloco. Sem limpar essa entrada, "remover + forçar varredura"
+# dedupa o arquivo de bloco e NÃO re-ingere. A limpeza só apaga REGISTROS — o
+# arquivo na pasta e o blob CAS permanecem (constraint sagrada).
+
+
+def test_delete_split_block_clears_block_gate_entry(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """D-02: remover um doc de SPLIT apaga a entrada de gate do BLOCO
+    (IngestedOriginal.original_hash == content_hash), liberando a re-ingestão."""
+    block_hash = "a" * 64
+    with get_session(schema_engine) as session:
+        # ORIGINAL referenciado pelo bloco via origin_original_id.
+        original = IngestedOriginal(
+            original_hash="f" * 64,
+            original_filename="multi.pdf",
+            source_folder_id=None,
+            block_count=1,
+        )
+        session.add(original)
+        session.flush()
+        # Entrada de gate do BLOCO (anti-loop do split): chave == content_hash do bloco.
+        block_gate = IngestedOriginal(
+            original_hash=block_hash,
+            original_filename="multi_bloco_1.pdf",
+            source_folder_id=None,
+            block_count=0,
+        )
+        session.add(block_gate)
+        # Document do bloco.
+        doc = Document(
+            content_hash=block_hash,
+            original_filename="multi_bloco_1.pdf",
+            origin_original_id=original.id,
+        )
+        session.add(doc)
+        session.commit()
+        doc_id = doc.id
+
+    resp = client.post("/documents/delete", json={"ids": [doc_id]})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["deleted"] == 1
+    with get_session(schema_engine) as session:
+        # A entrada de gate do bloco sumiu → re-varredura re-ingere (não dedupa).
+        assert (
+            session.scalar(
+                select(func.count(IngestedOriginal.id)).where(
+                    IngestedOriginal.original_hash == block_hash
+                )
+            )
+            == 0
+        )
+
+
+def test_delete_non_split_doc_does_not_remove_unrelated_gate(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """Regressão: doc SEM entrada de gate de bloco própria → o delete extra é no-op;
+    NÃO apaga o IngestedOriginal de outro fluxo (hashes distintos por conteúdo)."""
+    other_hash = "c" * 64
+    with get_session(schema_engine) as session:
+        # IngestedOriginal de OUTRO fluxo, não relacionado ao doc removido.
+        other_gate = IngestedOriginal(
+            original_hash=other_hash,
+            original_filename="outro.pdf",
+            source_folder_id=None,
+            block_count=0,
+        )
+        session.add(other_gate)
+        # Doc sem split: content_hash distinto, sem entrada de gate própria.
+        doc = Document(content_hash="d" * 64, original_filename="simples.pdf")
+        session.add(doc)
+        session.commit()
+        doc_id = doc.id
+        other_id = other_gate.id
+
+    resp = client.post("/documents/delete", json={"ids": [doc_id]})
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == 1
+    with get_session(schema_engine) as session:
+        # A entrada de gate alheia permanece (delete extra é no-op para esse doc).
+        assert session.get(IngestedOriginal, other_id) is not None
+
+
+def test_delete_endpoint_does_not_import_filesystem_ops() -> None:
+    """A limpeza de dedup é PURAMENTE de registros: o módulo do endpoint não pode
+    importar os/shutil (constraint sagrada 'nunca perder arquivos')."""
+    import app.api.documents as documents_module
+
+    assert not hasattr(documents_module, "os")
+    assert not hasattr(documents_module, "shutil")
+
+
 # ---------------------------------------------------------------------------
 # REPROCESS (Plano 10-03 — D-10/D-11/D-12): re-roda matcher→(IA)→filler com os
 # templates ATUAIS, SEM forçar template, para tirar docs de QUARENTENA/EM_REVISAO.
