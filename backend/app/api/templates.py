@@ -34,6 +34,8 @@ DELETE remove só o template — documentos já classificados permanecem (D-03):
 classificação sobrevive; novos documentos apenas deixam de casar com este template.
 """
 
+import base64
+import binascii
 import json
 from datetime import datetime
 from typing import Literal
@@ -43,10 +45,18 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from app.classification import matcher
+from app.config import get_settings
+from app.extraction import pdf_io
 from app.models.template import Template, TemplateField
 from app.storage.db import get_session
 
 router = APIRouter(prefix="/templates", tags=["templates"])
+
+# Teto do blob de PDF decodificado do base64 (bytes). Defesa anti-DoS no upload de
+# teste (T-10-04/V5): um base64 enorme decodificado é rejeitado ANTES de tocar o
+# PyMuPDF/matcher. 20 MB cobre PDFs de teste reais com folga; nunca persistido.
+_MAX_PREVIEW_BYTES = 20_000_000
 
 
 def _loads_signals_groups(raw: str | None) -> list[list[dict]]:
@@ -106,6 +116,46 @@ class SignalConditionOut(BaseModel):
 
     mode: str
     value: str
+
+
+class PreviewSignalsIn(BaseModel):
+    """Body da ferramenta "testar sinais" (D-07): id do template + PDF em base64.
+
+    Decisão de planning (Open Q1): base64 no body JSON, NÃO multipart/`UploadFile`
+    — evita a dependência `python-multipart` e mantém o cliente `api.ts` JSON-only.
+    O conteúdo é o PDF de teste; só `base64` da stdlib decodifica (sem pacote novo).
+    """
+
+    template_id: int
+    pdf_base64: str
+
+
+class PreviewConditionOut(BaseModel):
+    """Espelho de resposta de `matcher.ConditionReport` (casa/falha por condição)."""
+
+    mode: str
+    value: str
+    matched: bool
+
+
+class PreviewGroupOut(BaseModel):
+    """Espelho de resposta de `matcher.GroupReport` (E das condições do grupo)."""
+
+    matched: bool
+    conditions: list[PreviewConditionOut]
+
+
+class PreviewSignalsOut(BaseModel):
+    """Relatório do preview de sinais (D-07/D-09).
+
+    `scanned=True` sinaliza PDF escaneado (route='vision'): a ferramenta é custo-zero
+    (D-08/Pitfall 7) — NÃO chama IA, devolve `groups=[]`. Caso texto nativo, `groups`
+    reflete o relatório por-grupo/condição do MESMO motor (`matcher.evaluate_groups`).
+    """
+
+    scanned: bool
+    matched_any: bool
+    groups: list[PreviewGroupOut]
 
 
 class TemplateFieldIn(BaseModel):
@@ -334,6 +384,96 @@ def update_template(request: Request, template_id: int, body: TemplatePatch) -> 
             ) from exc
         session.refresh(template)
         return _serialize(template)
+
+
+@router.post("/preview-signals", response_model=PreviewSignalsOut)
+def preview_signals(request: Request, body: PreviewSignalsIn) -> PreviewSignalsOut:
+    """Testa os sinais de um template contra um PDF de teste (D-07) — CUSTO ZERO.
+
+    Decodifica o PDF (base64 → bytes em memória, NUNCA persistido), valida tipo por
+    magic bytes (V5), extrai o texto NATIVO (PyMuPDF, sem IA — D-08) e roda os sinais
+    pelo MESMO motor da classificação real (`matcher.evaluate_groups`, D-09): o
+    relatório por-grupo/condição é IDÊNTICO ao que a classificação produziria.
+
+    PDF escaneado (route='vision') → `scanned=True`, `groups=[]`, IA NÃO chamada
+    (Pitfall 7). Base64 inválido / não-PDF / acima do teto → 422 amigável.
+
+    LGPD/V7: NÃO loga o texto, o blob nem os valores de sinal — só `template_id`/route
+    poderiam ser logados (aqui nada é logado).
+    """
+    engine = request.app.state.engine
+    with get_session(engine) as session:
+        template = session.get(Template, body.template_id)
+        if template is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"template {body.template_id} não encontrado",
+            )
+        signals_json = template.signals_json
+
+    # Decodifica o base64 (memória só). base64 malformado → 422 amigável.
+    try:
+        blob = base64.b64decode(body.pdf_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="base64 inválido — envie o conteúdo do PDF codificado em base64.",
+        ) from exc
+
+    # Teto anti-DoS do blob decodificado (V5/T-10-04), antes de tocar o PyMuPDF.
+    if len(blob) > _MAX_PREVIEW_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="PDF de teste muito grande para o preview.",
+        )
+
+    # Tipo por magic bytes (V5/T-10-04T): só PDF de texto nativo é aceito aqui.
+    try:
+        blob_type = pdf_io.detect_blob_type(blob)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="envie um PDF de texto nativo (o arquivo não é um PDF).",
+        ) from exc
+    if blob_type != "pdf":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="envie um PDF de texto nativo (imagens não são suportadas no preview).",
+        )
+
+    # Texto nativo + decisão texto-vs-visão (custo zero). PDF malformado → 422.
+    try:
+        texto, route = pdf_io.extract_text_and_decide(
+            blob, get_settings().openai_extract_min_chars_per_page
+        )
+    except Exception as exc:  # PDF corrompido/malformado (fitz) — falha controlada.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="não foi possível ler o PDF de teste (arquivo corrompido?).",
+        ) from exc
+
+    # Escaneado: custo-zero garantido — NÃO chama IA (D-08/Pitfall 7).
+    if route == "vision":
+        return PreviewSignalsOut(scanned=True, matched_any=False, groups=[])
+
+    # Texto nativo: roda o MESMO motor da classificação real (D-09).
+    groups = _loads_signals_groups(signals_json)
+    reports = matcher.evaluate_groups(groups, texto)
+    out_groups = [
+        PreviewGroupOut(
+            matched=g.matched,
+            conditions=[
+                PreviewConditionOut(mode=c.mode, value=c.value, matched=c.matched)
+                for c in g.conditions
+            ],
+        )
+        for g in reports
+    ]
+    return PreviewSignalsOut(
+        scanned=False,
+        matched_any=any(g.matched for g in out_groups),
+        groups=out_groups,
+    )
 
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
