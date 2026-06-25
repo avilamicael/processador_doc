@@ -31,6 +31,14 @@ function resolvePill(state: DocState, lastCompletedStep?: string | null): PillSp
   if (state === 'processando' && lastCompletedStep === 'aguardando_extracao') {
     return { label: 'Aguardando extração', token: 'encontrado' }
   }
+  // D-10: doc bem classificado fica DE PROPÓSITO em processando + last_completed_step
+  // = "classificado" (estado "pronto, aguardando ação"). Mostrar "Classificado —
+  // pronto" (verde --st-tratado) em vez de "Processando", para não parecer travado.
+  // Rótulo DERIVADO — sem estado persistido novo, sem token novo. O literal
+  // 'classificado' casa com CLASSIFIED_STEP (backend/app/classification/stage.py:69).
+  if (state === 'processando' && lastCompletedStep === 'classificado') {
+    return { label: 'Classificado — pronto', token: 'tratado' }
+  }
   return STATE_PILL[state]
 }
 
