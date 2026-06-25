@@ -562,9 +562,21 @@ export function AutomationsPage() {
   // ── Validação + persistência (D-23/D-24) ──
   const validate = (d: AutoDraft): string | null => {
     if (!d.name.trim()) return 'Informe o nome da automação.'
+    // Template determinável do próprio draft (mesma regra de activeTemplate, mas
+    // resolvida a partir de `d` — independe do closure de `selected`).
+    const draftTemplate: Template | null = (() => {
+      const cond = d.conds.find((c) => c.field === 'template' && c.value.trim())
+      if (!cond) return null
+      return templates.find((t) => String(t.id) === cond.value) ?? null
+    })()
     for (const c of d.conds) {
       if (c.field === 'template' && !c.value.trim()) {
         return 'Na condição "Tipo de documento", escolha um template.'
+      }
+      // D-08: a condição "Valor de campo" exige um template determinável — sem ele
+      // não há dropdown de campos e a comparação seria às cegas. Bloqueia salvar.
+      if (c.field === 'field' && !draftTemplate) {
+        return 'Na condição "Valor de campo", escolha um template na condição "Tipo de documento" para comparar um campo.'
       }
       if (c.field === 'field' && !c.field_name.trim()) {
         return 'Na condição "Valor de campo", informe qual campo comparar.'
@@ -819,15 +831,46 @@ export function AutomationsPage() {
             </option>
           ))}
         </select>
-        {isField && (
-          <input
-            style={{ ...inpStyle, width: 130 }}
-            placeholder="nome do campo"
-            aria-label="Qual campo extraído comparar"
-            value={c.field_name}
-            onChange={(e) => patchCond(c.key, { field_name: e.target.value })}
-          />
-        )}
+        {isField &&
+          (activeTemplate ? (
+            // D-07: o nome do campo é escolhido num dropdown ESTRITO dos campos do
+            // template referenciado pela condição "Tipo de documento" — nunca digitado
+            // (um typo fazia a condição nunca casar, sem aviso).
+            <select
+              className="select"
+              style={{ width: 168, height: 34 }}
+              aria-label="Qual campo extraído comparar"
+              value={c.field_name}
+              onChange={(e) => patchCond(c.key, { field_name: e.target.value })}
+            >
+              <option value="">Escolha um campo…</option>
+              {activeTemplate.fields.map((f) => (
+                <option key={f.id} value={f.name}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            // D-08: sem template determinável, a condição é BLOQUEADA com aviso — sem
+            // fallback de texto livre nem autocomplete global. O guard correspondente
+            // em validate() impede salvar.
+            <span
+              className="nochip-box"
+              style={{
+                flex: 1,
+                minWidth: 200,
+                background: 'var(--surface-3)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '7px 10px',
+                fontSize: 11.5,
+                color: 'var(--text-3)',
+                fontStyle: 'italic',
+              }}
+            >
+              Escolha um template na condição «Tipo de documento» para comparar um campo.
+            </span>
+          ))}
         <select
           className="select"
           style={{ width: 96, height: 34 }}
