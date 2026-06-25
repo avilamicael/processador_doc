@@ -42,11 +42,19 @@ LGPD/V7: o matcher NÃO loga `full_text` nem valores de sinal.
 """
 
 import json
+import re as _re  # stdlib, SÓ para a regex de NORMALIZAÇÃO (NÃO o ReDoS abaixo)
+import unicodedata
 from dataclasses import dataclass
 
 import regex  # drop-in do `re` com timeout REAL de casamento (CR-01)
 
 from app.models.template import Template
+
+# Regex de NORMALIZAÇÃO (stdlib `_re`, sem timeout — operam sobre tamanho fixo já
+# limitado). Pontuação (qualquer não-alfanumérico/não-espaço) vira espaço; espaços
+# em sequência colapsam em um só.
+_PUNCT_RE = _re.compile(r"[^\w\s]", _re.UNICODE)
+_WS_RE = _re.compile(r"\s+")
 
 # Teto do PATTERN de regex colado pelo operador (caracteres). Defesa em profundidade:
 # corta patterns absurdos antes do `regex.compile` (cheap pre-check, T-06.1-06).
@@ -88,6 +96,39 @@ class MatchDecision:
     template_id: int | None
 
 
+@dataclass(frozen=True)
+class ConditionReport:
+    """Resultado por-condição do preview de sinais (D-09). Sem efeitos colaterais."""
+
+    mode: str
+    value: str
+    matched: bool
+
+
+@dataclass(frozen=True)
+class GroupReport:
+    """Resultado por-grupo: `matched` é o E das condições (D-T1). Base do preview."""
+
+    matched: bool
+    conditions: list[ConditionReport]
+
+
+def _normalize_text(s: str) -> str:
+    """Normaliza texto para casamento MECÂNICO-tolerante (D-02). PURA, NÃO loga (V7).
+
+    Pipeline simétrico (aplicado a value E haystack — Pitfall 2): NFKD-decompõe,
+    remove combinantes (diacríticos — corpo COPIADO de `naming._strip_accents`,
+    NÃO importado, Pitfall 8), `.lower()`, pontuação→espaço, colapsa espaços/quebras
+    de linha num único espaço e `.strip()`. Resolve acento/caixa/quebra/pontuação —
+    NÃO resolve palavra trocada (D-04, tradeoff aceito).
+    """
+    decomposed = unicodedata.normalize("NFKD", s or "")
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    lowered = stripped.lower()
+    no_punct = _PUNCT_RE.sub(" ", lowered)
+    return _WS_RE.sub(" ", no_punct).strip()
+
+
 def _parse_groups(raw: str | None) -> list[list[dict]]:
     """Lê `signals_json` como lista de grupos de condições (forward-compatible).
 
@@ -115,14 +156,17 @@ def _parse_groups(raw: str | None) -> list[list[dict]]:
     return groups
 
 
-def _condition_matches(cond: dict, haystack: str) -> bool:
-    """Avalia UMA condição contra o haystack (já em lower). Falha fechada.
+def _condition_matches(cond: dict, haystack_norm: str, haystack_lower: str) -> bool:
+    """Avalia UMA condição. Bifurca CEDO por modo (Pitfall 1). Falha fechada.
 
-    `texto`/default: substring case-insensitive. `regex`: `regex.search` IGNORECASE
-    com timeout REAL (`_REGEX_TIMEOUT_S`) que aborta backtracking catastrófico, tetos
-    de pattern/input como defesa em profundidade, e `try/except (regex.error,
-    TimeoutError)` → não casa (V5/T-06.1-01/02). Valor vazio → não casa. NUNCA `eval`
-    (dispatch explícito por etiqueta).
+    `regex`: roda contra `haystack_lower` (NÃO normalizado, D-03) — corpo byte-a-byte
+    preservado: `regex.search` IGNORECASE com timeout REAL (`_REGEX_TIMEOUT_S`) que
+    aborta backtracking catastrófico, tetos de pattern/input como defesa em
+    profundidade, `try/except (regex.error, TimeoutError)` → não casa
+    (V5/T-06.1-01/02). NUNCA `eval` (dispatch explícito por etiqueta).
+
+    `texto`/default: substring sobre o haystack NORMALIZADO, com o `value` passando
+    pela MESMA `_normalize_text` (simetria D-02, Pitfall 2). Needle vazio → não casa.
     """
     value = str(cond.get("value", ""))
     mode = cond.get("mode", "texto")
@@ -136,27 +180,68 @@ def _condition_matches(cond: dict, haystack: str) -> bool:
             # Defesa em profundidade: corte do haystack (cheap pre-check). Proteção
             # REAL contra ReDoS: timeout que aborta o backtracking → TimeoutError.
             return (
-                pattern.search(haystack[:_MAX_HAYSTACK_LEN], timeout=_REGEX_TIMEOUT_S)
+                pattern.search(
+                    haystack_lower[:_MAX_HAYSTACK_LEN], timeout=_REGEX_TIMEOUT_S
+                )
                 is not None
             )
         except (regex.error, TimeoutError):
             return False  # falha fechada (regex inválida OU ReDoS estourado)
 
-    # "texto" e desconhecidos: substring case-insensitive.
-    needle = value.strip().lower()
+    # "texto" e desconhecidos: substring sobre o haystack NORMALIZADO (simetria D-02).
+    needle = _normalize_text(value)
     if not needle:
         return False
-    return needle in haystack
+    return needle in haystack_norm
 
 
-def _group_matches(group: list[dict], haystack: str) -> bool:
+def _group_matches(
+    group: list[dict], haystack_norm: str, haystack_lower: str
+) -> bool:
     """E: todas as condições do grupo casam. Grupo vazio NÃO casa (falha fechada)."""
-    return bool(group) and all(_condition_matches(cond, haystack) for cond in group)
+    return bool(group) and all(
+        _condition_matches(cond, haystack_norm, haystack_lower) for cond in group
+    )
 
 
-def _template_matches(groups: list[list[dict]], haystack: str) -> bool:
+def _template_matches(
+    groups: list[list[dict]], haystack_norm: str, haystack_lower: str
+) -> bool:
     """OU: algum grupo casa. Sem grupos NÃO casa (falha fechada)."""
-    return any(_group_matches(group, haystack) for group in groups)
+    return any(
+        _group_matches(group, haystack_norm, haystack_lower) for group in groups
+    )
+
+
+def evaluate_groups(groups: list[list[dict]], full_text: str) -> list[GroupReport]:
+    """Detalhamento por-grupo/condição reusando a MESMA preparação de haystack do
+    `match_templates` (D-09) — FONTE-ÚNICA do preview de sinais (Plano 02).
+
+    Para cada grupo, avalia cada condição via `_condition_matches` (ramo texto sobre
+    o haystack normalizado, ramo regex sobre o lowercase-só) e monta o relatório;
+    `matched` do grupo = E das condições. PURA, NÃO loga `full_text`/valores (V7).
+    """
+    haystack_lower, haystack_norm = _prepare_haystacks(full_text)
+
+    reports: list[GroupReport] = []
+    for group in groups:
+        conditions: list[ConditionReport] = []
+        for cond in group:
+            mode = str(cond.get("mode", "texto"))
+            value = str(cond.get("value", ""))
+            matched = _condition_matches(cond, haystack_norm, haystack_lower)
+            conditions.append(ConditionReport(mode=mode, value=value, matched=matched))
+        group_matched = bool(group) and all(c.matched for c in conditions)
+        reports.append(GroupReport(matched=group_matched, conditions=conditions))
+    return reports
+
+
+def _prepare_haystacks(full_text: str) -> tuple[str, str]:
+    """Prepara os dois haystacks UMA vez: lowercase-só (ramo regex, D-03) e
+    normalizado (ramo texto, D-02). Fonte-única compartilhada por `match_templates`
+    e `evaluate_groups` para garantir resultado idêntico (D-09)."""
+    text = full_text or ""
+    return text.lower(), _normalize_text(text)
 
 
 def match_templates(
@@ -178,12 +263,16 @@ def match_templates(
     """
     del fields_json, doc_type_guess  # mantidos na assinatura por compat; não usados.
 
-    haystack = (full_text or "").lower()
+    # MESMA preparação consumida por evaluate_groups (D-09): ramo regex usa o
+    # lowercase-só (D-03), ramo texto usa o normalizado (D-02).
+    haystack_lower, haystack_norm = _prepare_haystacks(full_text)
 
     matches: list[TemplateMatch] = []
     for tpl in templates:
         groups = _parse_groups(tpl.signals_json)
-        confidence = 1.0 if _template_matches(groups, haystack) else 0.0
+        confidence = (
+            1.0 if _template_matches(groups, haystack_norm, haystack_lower) else 0.0
+        )
         matches.append(TemplateMatch(template_id=tpl.id, confidence=confidence))
 
     matches.sort(key=lambda m: m.confidence, reverse=True)

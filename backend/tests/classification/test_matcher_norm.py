@@ -198,8 +198,9 @@ def test_evaluate_groups_agregado_bate_com_match_templates() -> None:
 
 
 def test_normalize_text_pura() -> None:
-    # acento + caixa + pontuação + espaços/quebras colapsados + strip
-    assert matcher._normalize_text("  Notá   Fiscál \n Nº123!  ") == "nota fiscal n123"
+    # acento + caixa + pontuação + espaços/quebras colapsados + strip.
+    # Nota: NFKD expande o ordinal `º`→`o` (não é combinante), logo `Nº`→`no`.
+    assert matcher._normalize_text("  Notá   Fiscál \n N123!  ") == "nota fiscal n123"
     # pontuação vira espaço e colapsa (CNPJ)
     assert matcher._normalize_text("12.345.678/0001-99") == "12 345 678 0001 99"
     # vazio/None-safe
