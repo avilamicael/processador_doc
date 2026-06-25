@@ -18,9 +18,11 @@ Fase 06.1-02 — sinais como GRUPOS E/OU (D-T2):
 - field.name preservado byte-a-byte (ponte campo→token de automação, D-T9)
 """
 
+import base64
 import warnings
 from collections.abc import Iterator
 
+import fitz  # PyMuPDF — constrói PDFs de teste de texto nativo em memória
 import pytest
 from sqlalchemy import Engine, select
 
@@ -28,11 +30,26 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     from fastapi.testclient import TestClient
 
+from app.classification import matcher
 from app.main import app
 from app.models.classification import ClassificationResult
 from app.models.document import Document
 from app.models.template import Template, TemplateField
 from app.storage.db import get_session
+
+
+def _native_pdf_b64(text: str) -> str:
+    """Cria um PDF de TEXTO NATIVO com o `text` dado e devolve em base64.
+
+    Usa PyMuPDF para inserir o texto numa página — garante route='native_text' no
+    `pdf_io.extract_text_and_decide`, exercitando o caminho custo-zero do preview.
+    """
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), text)
+    data = doc.tobytes()
+    doc.close()
+    return base64.b64encode(data).decode("ascii")
 
 
 @pytest.fixture
@@ -315,3 +332,161 @@ def test_field_name_preservado_D_T9(client: TestClient) -> None:
     resp = client.post("/templates", json=body)
     assert resp.status_code == 201, resp.text
     assert resp.json()["fields"][0]["name"] == "CNPJ do emitente"
+
+
+# ---------------------------------------------------------------------------
+# Fase 10-02 — POST /templates/preview-signals (D-07/D-08/D-09)
+# ---------------------------------------------------------------------------
+
+
+def _make_template_with_signals(client: TestClient, signals: list) -> int:
+    body = {
+        "name": f"Preview {id(signals)}",
+        "signals": signals,
+        "fields": [{"name": "Campo"}],
+    }
+    resp = client.post("/templates", json=body)
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+def test_preview_texto_nativo_casa(client: TestClient) -> None:
+    """Sinais que casam o texto do PDF → scanned=false, matched_any=true (D-07)."""
+    signals = [
+        [{"mode": "texto", "value": "NOTA FISCAL"}],
+        [{"mode": "texto", "value": "inexistente"}],
+    ]
+    template_id = _make_template_with_signals(client, signals)
+    pdf_b64 = _native_pdf_b64("NOTA FISCAL ELETRONICA CNPJ 12.345.678/0001-99")
+
+    resp = client.post(
+        "/templates/preview-signals",
+        json={"template_id": template_id, "pdf_base64": pdf_b64},
+    )
+    assert resp.status_code == 200, resp.text
+    out = resp.json()
+    assert out["scanned"] is False
+    assert out["matched_any"] is True
+    # Grupo 1 (NOTA FISCAL) casa; grupo 2 (inexistente) falha — relatório por-grupo.
+    assert out["groups"][0]["matched"] is True
+    assert out["groups"][0]["conditions"][0]["matched"] is True
+    assert out["groups"][1]["matched"] is False
+    assert out["groups"][1]["conditions"][0]["matched"] is False
+
+
+def test_preview_texto_nativo_nao_casa(client: TestClient) -> None:
+    """Texto do PDF não contém os sinais → matched_any=false, condições matched=false."""
+    signals = [[{"mode": "texto", "value": "BOLETO BANCARIO"}]]
+    template_id = _make_template_with_signals(client, signals)
+    pdf_b64 = _native_pdf_b64("NOTA FISCAL ELETRONICA")
+
+    resp = client.post(
+        "/templates/preview-signals",
+        json={"template_id": template_id, "pdf_base64": pdf_b64},
+    )
+    assert resp.status_code == 200, resp.text
+    out = resp.json()
+    assert out["matched_any"] is False
+    assert out["groups"][0]["matched"] is False
+    assert out["groups"][0]["conditions"][0]["matched"] is False
+
+
+def test_preview_nao_pdf_422(client: TestClient) -> None:
+    """Blob que não é PDF (magic bytes) → 422, sem 500 (V5/T-10-04T)."""
+    template_id = _make_template_with_signals(client, [[{"mode": "texto", "value": "x"}]])
+    not_pdf_b64 = base64.b64encode(b"not a pdf at all").decode("ascii")
+
+    resp = client.post(
+        "/templates/preview-signals",
+        json={"template_id": template_id, "pdf_base64": not_pdf_b64},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_preview_base64_invalido_422(client: TestClient) -> None:
+    """base64 malformado → 422 amigável, sem 500."""
+    template_id = _make_template_with_signals(client, [[{"mode": "texto", "value": "x"}]])
+    resp = client.post(
+        "/templates/preview-signals",
+        json={"template_id": template_id, "pdf_base64": "!!!nao-e-base64!!!"},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_preview_template_inexistente_404(client: TestClient) -> None:
+    """template_id ausente → 404."""
+    pdf_b64 = _native_pdf_b64("qualquer texto")
+    resp = client.post(
+        "/templates/preview-signals",
+        json={"template_id": 999999, "pdf_base64": pdf_b64},
+    )
+    assert resp.status_code == 404, resp.text
+
+
+def test_preview_escaneado_scanned_true_sem_ia(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """route='vision' → scanned=true, groups=[], IA NUNCA chamada (D-08/Pitfall 7)."""
+    template_id = _make_template_with_signals(
+        client, [[{"mode": "texto", "value": "NOTA"}]]
+    )
+    pdf_b64 = _native_pdf_b64("NOTA FISCAL")
+
+    # Mock route='vision' (PDF escaneado) — assegura que não há texto extraível.
+    monkeypatch.setattr(
+        "app.api.templates.pdf_io.extract_text_and_decide",
+        lambda blob, min_chars: ("", "vision"),
+    )
+    # Sentinela: se evaluate_groups for chamado num escaneado, falha (custo IA evitado
+    # é simbolizado aqui pela ausência de avaliação de sinais sobre texto inexistente).
+    def _boom(*args, **kwargs):  # pragma: no cover - só dispara se o contrato quebrar
+        raise AssertionError("evaluate_groups não deve rodar em PDF escaneado")
+
+    monkeypatch.setattr("app.api.templates.matcher.evaluate_groups", _boom)
+
+    resp = client.post(
+        "/templates/preview-signals",
+        json={"template_id": template_id, "pdf_base64": pdf_b64},
+    )
+    assert resp.status_code == 200, resp.text
+    out = resp.json()
+    assert out["scanned"] is True
+    assert out["matched_any"] is False
+    assert out["groups"] == []
+
+
+def test_preview_identico_ao_motor_real(client: TestClient) -> None:
+    """O relatório do endpoint é IGUAL ao de matcher.evaluate_groups (D-09)."""
+    signals = [
+        [
+            {"mode": "texto", "value": "NOTA FISCAL"},
+            {"mode": "texto", "value": "CNPJ"},
+        ],
+        [{"mode": "regex", "value": r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}"}],
+    ]
+    template_id = _make_template_with_signals(client, signals)
+    texto = "NOTA FISCAL ELETRONICA CNPJ 12.345.678/0001-99"
+    pdf_b64 = _native_pdf_b64(texto)
+
+    resp = client.post(
+        "/templates/preview-signals",
+        json={"template_id": template_id, "pdf_base64": pdf_b64},
+    )
+    assert resp.status_code == 200, resp.text
+    out = resp.json()
+
+    # Roda o motor real diretamente sobre o MESMO texto e compara o agregado (D-09).
+    expected = matcher.evaluate_groups(signals, texto)
+    assert out["matched_any"] == any(g.matched for g in expected)
+    assert len(out["groups"]) == len(expected)
+    for got, exp in zip(out["groups"], expected, strict=True):
+        assert got["matched"] == exp.matched
+        assert [c["matched"] for c in got["conditions"]] == [
+            c.matched for c in exp.conditions
+        ]
+        assert [c["mode"] for c in got["conditions"]] == [
+            c.mode for c in exp.conditions
+        ]
+        assert [c["value"] for c in got["conditions"]] == [
+            c.value for c in exp.conditions
+        ]
