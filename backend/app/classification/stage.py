@@ -250,6 +250,44 @@ async def classify_stage(
             confidence = conf_by_id.get(matched_template_id)
         # "quarantine" → matched_template_id permanece None.
 
+    # (5.5) IA-FALLBACK opt-in (Fase 10, D-05/D-06): quando NADA casou (matcher local
+    # não resolveu, confiança 0.0), o toggle global está ON e o caminho NÃO é forçado,
+    # damos uma chance à IA contra TODOS os templates ANTES de quarentenar — reusando
+    # o caminho de IA existente (`disambiguate`). A decisão de chamar IA vive AQUI, no
+    # stage, NUNCA no `matcher.decide` (seam D-06 preservado). CUSTO EXPLÍCITO: cada
+    # doc não-casado vira 1 chamada PAGA quando ON. Diferença vs o desempate (5): ali
+    # só os candidatos ≥ threshold entram; aqui passam TODOS os templates (nada casou).
+    # `templates`/`by_id` existem porque o gate exige `forced_template_id is None`
+    # (ramo `else` acima já os definiu). Pitfall 5: o `Usage` da tentativa é SEMPRE
+    # registrado (a chamada foi paga), mesmo quando a IA não casa — o bloco de
+    # quarentena (6) persiste `usages` junto, e o caminho de casamento (9) também.
+    if (
+        matched_template_id is None
+        and settings.classify_ai_fallback_enabled
+        and forced_template_id is None
+    ):
+        result, usage = await openai_client.disambiguate(
+            _candidates_summary(templates),
+            extraction.full_text,
+        )
+        called_ai = True
+        usages.append(
+            Usage(
+                document_id=doc.id,
+                step=USAGE_STEP,
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+            )
+        )
+        if (
+            result.matched_template_id is not None
+            and result.matched_template_id in by_id
+        ):
+            matched_template_id = result.matched_template_id
+            confidence = result.confidence
+        # IA não casou → matched_template_id segue None → quarentena (6), MAS o
+        # Usage da tentativa já está em `usages` e será persistido junto (Pitfall 5).
+
     # (6) Quarentena (nenhum template casou). ATOMICIDADE: add ANTES do transition;
     # o transition faz o commit interno e persiste TUDO junto (T-04-14). NUNCA
     # avançar o marcador "classificado". NUNCA commit manual aqui.
