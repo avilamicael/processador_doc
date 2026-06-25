@@ -28,7 +28,7 @@ da resposta (consumo legítimo da UI), NUNCA em log; o endpoint não loga valore
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -68,6 +68,22 @@ _MOTIVO_FALHA_FALLBACK = (
 )
 
 router = APIRouter(tags=["documents"])
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Marca um datetime naive como UTC tz-aware SEM deslocar a hora (D-13).
+
+    Causa-raiz: o SQLite grava `func.now()` como string naive; ao ler vem um
+    `datetime` sem `tzinfo` e o Pydantic o serializa sem offset. O frontend faz
+    `new Date(iso)` sobre essa string e a interpreta no fuso LOCAL, errando a
+    hora. A correção canônica é marcar o instante como UTC (o valor gravado pelo
+    banco JÁ é UTC) — `replace`, não `astimezone`: 18:04 permanece 18:04 e ganha
+    `+00:00`. Quando o datetime já carrega `tzinfo` (ex.: colunas tz-aware), é
+    devolvido inalterado.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
 
 
 class DocumentOut(BaseModel):
@@ -259,7 +275,7 @@ def _build_detail(session: Session, doc: Document, folder_path: str | None) -> D
         state=doc.state.value,
         last_completed_step=doc.last_completed_step,
         source_folder_path=folder_path,
-        created_at=doc.created_at,
+        created_at=_as_utc(doc.created_at),
         classification=classification,
     )
 
@@ -348,7 +364,7 @@ def list_documents(
                 state=doc.state.value,
                 last_completed_step=doc.last_completed_step,
                 source_folder_path=folder_path,
-                created_at=doc.created_at,
+                created_at=_as_utc(doc.created_at),
             )
             for doc, folder_path in rows
         ]
