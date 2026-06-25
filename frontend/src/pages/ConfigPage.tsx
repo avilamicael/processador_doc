@@ -10,7 +10,12 @@ import {
   useUpdateFolder,
   useWatchedFolders,
 } from '../hooks/useWatchedFolders'
-import { useReviewThreshold, useSaveReviewThreshold } from '../hooks/useAttention'
+import {
+  useAiFallback,
+  useReviewThreshold,
+  useSaveAiFallback,
+  useSaveReviewThreshold,
+} from '../hooks/useAttention'
 
 interface ConfigPageProps {
   tab: ConfigTab
@@ -505,6 +510,81 @@ function LeituraTab({ deskew, denoise }: ConfigPageProps) {
       {/* S6 — Limiar de confiança (D-03): lê/salva /config/review-threshold.
           PERMANECE FUNCIONAL — não é mock. */}
       <ReviewThresholdField />
+
+      {/* IA-fallback opt-in (D-05): lê/salva /config/ai-fallback. Default OFF. */}
+      <AiFallbackField />
+    </div>
+  )
+}
+
+// IA-fallback opt-in (D-05). Toggle "IA classifica quando nenhum template casa": quando
+// ligado, todo documento que NENHUM template reconhecer gera 1 chamada de IA (custo por
+// token). Default OFF refletido pelo valor do GET. Salva ao alternar.
+function AiFallbackField() {
+  const fallbackQuery = useAiFallback()
+  const saveFallback = useSaveAiFallback()
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const enabled = fallbackQuery.data?.enabled ?? false
+
+  const toggle = () => {
+    setSaveError(null)
+    saveFallback.mutate(!enabled, {
+      onError: () => setSaveError('Não foi possível salvar a opção. Tente novamente.'),
+    })
+  }
+
+  return (
+    <div className="card" style={{ padding: 18, marginTop: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>
+            IA classifica quando nenhum template casa
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+            Quando ligado, cada documento que nenhum template reconhecer gera 1 chamada de IA
+            (custo por token). Padrão: desligado.
+          </span>
+        </div>
+        {!fallbackQuery.isLoading && !fallbackQuery.isError && (
+          <span style={{ pointerEvents: saveFallback.isPending ? 'none' : 'auto', flex: 'none' }}>
+            <Switch
+              on={enabled}
+              onToggle={toggle}
+              title="IA classifica quando nenhum template casa"
+            />
+          </span>
+        )}
+      </div>
+
+      {fallbackQuery.isLoading && (
+        <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 10 }}>
+          Carregando configuração…
+        </div>
+      )}
+
+      {fallbackQuery.isError && (
+        <div style={{ marginTop: 10 }}>
+          <p style={{ fontSize: 13, margin: '0 0 12px' }}>
+            Não foi possível carregar a configuração. Verifique se o serviço está em execução.
+          </p>
+          <button className="btn-primary" onClick={() => fallbackQuery.refetch()}>
+            <Icon name="refresh" size={15} />
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {saveError && (
+        <p style={{ fontSize: 13, color: 'var(--st-erro)', margin: '10px 0 0' }}>{saveError}</p>
+      )}
     </div>
   )
 }

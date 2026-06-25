@@ -13,6 +13,7 @@ import { Switch } from '../components/Switch'
 import {
   useCreateTemplate,
   useDeleteTemplate,
+  usePreviewSignals,
   useTemplates,
   useUpdateTemplate,
 } from '../hooks/useTemplates'
@@ -367,6 +368,9 @@ export function TemplatesPage() {
                 + OU — adicionar grupo
               </button>
             </div>
+
+            {/* Testar sinais (D-07/D-08/D-09) — só para template já salvo (precisa de id). */}
+            <TestSignalsPanel templateId={form.id} />
           </div>
 
           {/* Passo 2 — CAMPOS (com IA) — linhas densas (D-T7) */}
@@ -663,7 +667,7 @@ export function TemplatesPage() {
         </div>
       )}
 
-      {/* S3 — Confirmação destrutiva de remoção */}
+      {/* S3 — Confirmação destrutiva de remoção (renderizado fora do form abaixo) */}
       {confirmRemove && (
         <div
           style={{
@@ -704,6 +708,144 @@ export function TemplatesPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Painel "Testar sinais" (D-07): faz upload de um PDF de teste, envia em base64 ao
+// backend (POST /templates/preview-signals) e mostra o relatório por-grupo/condição
+// (casa ✓ / falha ✗) — o MESMO motor da classificação real (D-09). PDF escaneado →
+// aviso de que a ferramenta só funciona com texto nativo (a IA cuida de escaneados na
+// ingestão real, D-08). Só aparece para template JÁ SALVO (precisa de template_id).
+// Valores do backend renderizados como TEXTO PURO (sem dangerouslySetInnerHTML, T-10-XSS).
+function TestSignalsPanel({ templateId }: { templateId: number | null }) {
+  const preview = usePreviewSignals()
+  const [file, setFile] = useState<File | null>(null)
+
+  if (templateId == null) {
+    return (
+      <div className="tpl-sec-mini" style={{ marginTop: 14 }}>
+        Salve o template para liberar a ferramenta <b>Testar sinais</b> (enviar um PDF de teste
+        e ver quais sinais casam ou falham).
+      </div>
+    )
+  }
+
+  const result = preview.data
+
+  return (
+    <div className="card" style={{ padding: 14, marginTop: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Testar sinais</div>
+      <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
+        Envie um PDF de teste (texto nativo) para conferir quais grupos e sinais casam ou
+        falham — sem IA e sem custo. Use para diagnosticar por que um documento não casou.
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <input
+          type="file"
+          accept="application/pdf"
+          aria-label="PDF de teste para testar os sinais"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
+        <button
+          className="btn-primary"
+          disabled={!file || preview.isPending}
+          onClick={() => file && preview.mutate({ templateId, file })}
+        >
+          <Icon name="checkSmall" size={15} />
+          {preview.isPending ? 'Testando…' : 'Testar sinais'}
+        </button>
+      </div>
+
+      {preview.isError && (
+        <p style={{ fontSize: 13, color: 'var(--st-erro)', margin: '10px 0 0' }}>
+          Não foi possível testar os sinais. Confira se o arquivo é um PDF válido e tente novamente.
+        </p>
+      )}
+
+      {result && (
+        <div style={{ marginTop: 12 }}>
+          {result.scanned ? (
+            <div
+              className="card"
+              style={{
+                padding: 12,
+                background: 'var(--st-leitura-bg)',
+                color: 'var(--text-2)',
+                fontSize: 13,
+              }}
+            >
+              Este documento parece <b>escaneado</b>; o teste de sinais só funciona com PDF de
+              texto nativo. Na ingestão real, a <b>IA</b> cuida de escaneados.
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+                {result.matched_any ? (
+                  <span style={{ color: 'var(--st-encontrado, var(--st-ok, green))' }}>
+                    ✓ O documento casa este template.
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--st-erro)' }}>
+                    ✗ Nenhum grupo casou — o documento não casaria este template.
+                  </span>
+                )}
+              </div>
+
+              {result.groups.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
+                  Este template não tem sinais definidos.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {result.groups.map((g, gi) => (
+                    <div key={gi} className="group" style={{ padding: 10 }}>
+                      <div className="group-h" style={{ marginBottom: 8 }}>
+                        Grupo {gi + 1} —{' '}
+                        {g.matched ? (
+                          <span style={{ color: 'var(--st-encontrado, var(--st-ok, green))' }}>
+                            casa (todas as condições)
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--st-erro)' }}>não casa</span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {g.conditions.map((c, ci) => (
+                          <div
+                            key={ci}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}
+                          >
+                            <span
+                              aria-hidden
+                              style={{
+                                fontWeight: 700,
+                                color: c.matched
+                                  ? 'var(--st-encontrado, var(--st-ok, green))'
+                                  : 'var(--st-erro)',
+                              }}
+                            >
+                              {c.matched ? '✓' : '✗'}
+                            </span>
+                            <span style={{ color: 'var(--text-3)' }}>
+                              {c.mode === 'regex' ? 'regex' : 'texto'}:
+                            </span>
+                            <span style={{ fontFamily: 'var(--font-mono)' }}>{c.value}</span>
+                            <span style={{ color: 'var(--text-3)' }}>
+                              {c.matched ? '— encontrado' : '— não encontrado'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

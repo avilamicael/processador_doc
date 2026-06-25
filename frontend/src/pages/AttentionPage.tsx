@@ -10,6 +10,8 @@ import {
   useAttentionDocuments,
   usePatchField,
   useReclassifyDocument,
+  useReprocessBucket,
+  useReprocessDocument,
   useRetryDocument,
 } from '../hooks/useAttention'
 
@@ -180,10 +182,51 @@ function BucketView({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* "Reprocessar todos" — só em QUARENTENA/EM_REVISAO (FALHA usa retry, D-12). */}
+      {(bucket === 'quarentena' || bucket === 'em_revisao') && (
+        <ReprocessBucketBar bucket={bucket} />
+      )}
       {bucket === 'falha' && falha.map((it) => <FailureRow key={it.id} item={it} />)}
       {bucket === 'quarentena' &&
         quarentena.map((it) => <QuarantineRow key={it.id} item={it} />)}
       {bucket === 'em_revisao' && emRevisao.map((it) => <ReviewRow key={it.id} item={it} />)}
+    </div>
+  )
+}
+
+// Cabeçalho do balde com "Reprocessar todos" — re-roda matcher→(IA)→filler com os
+// templates ATUAIS para o balde inteiro (D-12). Confirmação simples antes do lote.
+function ReprocessBucketBar({ bucket }: { bucket: 'quarentena' | 'em_revisao' }) {
+  const reprocess = useReprocessBucket()
+  const label = bucket === 'quarentena' ? 'a quarentena' : 'a revisão'
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        flexWrap: 'wrap',
+      }}
+    >
+      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+        Editou os templates? Reprocesse {label} para reaplicar a classificação.
+      </span>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+        <button
+          className="btn-ghost"
+          disabled={reprocess.isPending}
+          onClick={() => {
+            if (window.confirm(`Reprocessar todos os documentos d${label}?`)) {
+              reprocess.mutate(bucket)
+            }
+          }}
+        >
+          <Icon name="refresh" size={15} />
+          {reprocess.isPending ? 'Reprocessando…' : 'Reprocessar todos'}
+        </button>
+        <ActionError show={reprocess.isError} />
+      </div>
     </div>
   )
 }
@@ -242,6 +285,7 @@ function FailureRow({ item }: { item: AttentionItem }) {
 // S3 — QUARENTENA: motivo + select "Atribuir template" + "Reclassificar".
 function QuarantineRow({ item }: { item: AttentionItem }) {
   const reclassify = useReclassifyDocument()
+  const reprocess = useReprocessDocument()
   const templatesQuery = useQuery({ queryKey: ['templates'], queryFn: getTemplates })
   const templates = templatesQuery.data ?? []
   const [templateId, setTemplateId] = useState<number | ''>('')
@@ -249,7 +293,25 @@ function QuarantineRow({ item }: { item: AttentionItem }) {
   return (
     <ItemCard filename={item.original_filename}>
       <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 12px' }}>{item.motivo}</p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          justifyContent: 'flex-end',
+          flexWrap: 'wrap',
+        }}
+      >
+        {/* Reprocessar (sem template forçado): reaplica matcher→(IA)→filler com os
+            templates ATUAIS — use após editar/criar um template (D-10). */}
+        <button
+          className="btn-ghost"
+          disabled={reprocess.isPending}
+          onClick={() => reprocess.mutate(item.id)}
+        >
+          <Icon name="refresh" size={15} />
+          {reprocess.isPending ? 'Reprocessando…' : 'Reprocessar'}
+        </button>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>
             Atribuir template
@@ -278,7 +340,7 @@ function QuarantineRow({ item }: { item: AttentionItem }) {
           {reclassify.isPending ? 'Reclassificando…' : 'Reclassificar'}
         </button>
       </div>
-      <ActionError show={reclassify.isError} />
+      <ActionError show={reclassify.isError || reprocess.isError} />
     </ItemCard>
   )
 }
@@ -286,6 +348,7 @@ function QuarantineRow({ item }: { item: AttentionItem }) {
 // S4 — EM_REVISAO: ConfidenceBadge + tabela de campos com correção inline + "Aprovar".
 function ReviewRow({ item }: { item: ReviewItem }) {
   const approve = useApproveDocument()
+  const reprocess = useReprocessDocument()
   // Algum campo inválido → o gate D-07 (defesa em profundidade na UI; backend é o
   // guard autoritativo). Aproximação na UI: bloqueia se HOUVER qualquer campo inválido.
   const hasInvalid = item.fields.some((f) => !f.valid)
@@ -328,16 +391,27 @@ function ReviewRow({ item }: { item: ReviewItem }) {
             Corrija os campos obrigatórios inválidos antes de aprovar o documento.
           </span>
         )}
-        <button
-          className="btn-primary"
-          disabled={hasInvalid || approve.isPending}
-          aria-label={`Aprovar documento ${item.original_filename}`}
-          onClick={() => approve.mutate(item.id)}
-        >
-          <Icon name="check" size={15} />
-          {approve.isPending ? 'Aprovando…' : 'Aprovar documento'}
-        </button>
-        <ActionError show={approve.isError} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {/* Reprocessar: reaplica matcher→(IA)→filler com os templates ATUAIS (D-10). */}
+          <button
+            className="btn-ghost"
+            disabled={reprocess.isPending}
+            onClick={() => reprocess.mutate(item.id)}
+          >
+            <Icon name="refresh" size={15} />
+            {reprocess.isPending ? 'Reprocessando…' : 'Reprocessar'}
+          </button>
+          <button
+            className="btn-primary"
+            disabled={hasInvalid || approve.isPending}
+            aria-label={`Aprovar documento ${item.original_filename}`}
+            onClick={() => approve.mutate(item.id)}
+          >
+            <Icon name="check" size={15} />
+            {approve.isPending ? 'Aprovando…' : 'Aprovar documento'}
+          </button>
+        </div>
+        <ActionError show={approve.isError || reprocess.isError} />
       </div>
     </ItemCard>
   )
