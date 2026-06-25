@@ -229,12 +229,25 @@ def _fields_map(session: Session, doc: Document) -> dict[str, str]:
 
 
 def _source_path(session: Session, doc: Document) -> Path:
-    """Reconstrói o caminho de ORIGEM do arquivo do documento.
+    """Reconstrói o caminho de ORIGEM do arquivo do documento (o que está no disco).
 
-    Padrão de documents.py: `WatchedFolder.path / IngestedOriginal.original_filename`
-    via `origin_original_id`. Sem original registrado (ex.: testes/legados) → cai no
-    `original_filename` do próprio documento como caminho relativo. NÃO loga conteúdo.
+    Resolve `WatchedFolder.path / IngestedOriginal.original_filename`. PREFERE a
+    `IngestedOriginal` cujo `original_hash == doc.content_hash` — é o gate do PRÓPRIO
+    arquivo na pasta. Para documentos de SPLIT isso é a entrada do BLOCO (nome `_p1`,
+    que está de fato na pasta após a materialização do split), e não o original
+    pré-split apontado por `origin_original_id` (que já foi removido). Sem essa
+    preferência, o `remove_original` do apply mirava o original inexistente e o bloco
+    ficava órfão (bug do deploy 2026-06-25). Fallbacks: `origin_original_id` e, por fim,
+    `original_filename` do próprio documento. NÃO loga conteúdo.
     """
+    row = session.execute(
+        select(WatchedFolder.path, IngestedOriginal.original_filename)
+        .join(IngestedOriginal, IngestedOriginal.source_folder_id == WatchedFolder.id)
+        .where(IngestedOriginal.original_hash == doc.content_hash)
+    ).first()
+    if row is not None:
+        folder_path, original_filename = row
+        return Path(folder_path) / original_filename
     if doc.origin_original_id is not None:
         row = session.execute(
             select(WatchedFolder.path, IngestedOriginal.original_filename)
@@ -340,16 +353,29 @@ def _resolve_plan(session: Session, doc: Document) -> tuple[Path, AutomationPlan
     return source, plan
 
 
+def _has_real_extension(name: str) -> bool:
+    """True se `name` termina numa extensão de arquivo REAL (não num valor com pontos).
+
+    `Path(name).suffix` confunde um valor com pontos (ex.: Numero_NF `000.076.737` →
+    `.737`) com extensão, fazendo o sistema NÃO preservar a extensão do original. Uma
+    extensão de verdade (pdf/txt/jpg/docx…) começa com LETRA; um sufixo iniciando por
+    dígito (`.737`) é parte do valor, não extensão. Limitação aceita: uma extensão rara
+    iniciada por dígito (`.7z`) seria tratada como valor — caso desprezível.
+    """
+    suffix = Path(name).suffix
+    return bool(suffix) and suffix[1:2].isalpha()
+
+
 def _plan_dest(source: Path, plan: AutomationPlan) -> Path:
     """Compõe o caminho-destino final do `AutomationPlan` (pasta/nome), preservando ext.
 
-    Sanitiza o nome-alvo como componente; se o padrão não trouxe extensão e a origem
-    tem, preserva a extensão do original. Só faz sentido quando o plano NÃO está
-    bloqueado.
+    Sanitiza o nome-alvo como componente; se o padrão não trouxe extensão REAL e a
+    origem tem, preserva a extensão do original (ver `_has_real_extension` — valores com
+    pontos não contam como extensão). Só faz sentido quando o plano NÃO está bloqueado.
     """
     folder = plan.target_folder if plan.target_folder is not None else source.parent
     name = plan.target_name if plan.target_name is not None else source.name
-    if not Path(name).suffix and source.suffix:
+    if not _has_real_extension(name) and source.suffix:
         name = name + source.suffix
     return folder / name
 
@@ -357,11 +383,11 @@ def _plan_dest(source: Path, plan: AutomationPlan) -> Path:
 def _copy_dest(source: Path, copy) -> Path:
     """Compõe o destino de UMA `PlannedCopy`, preservando a extensão do original.
 
-    Mesma lógica de `_plan_dest` (sanitiza/preserva ext) aplicada à pasta confinada e
-    ao nome-alvo CORRENTE da cópia (D-03). `copy` é um `executor.PlannedCopy`.
+    Mesma lógica de `_plan_dest` (sanitiza/preserva ext REAL) aplicada à pasta confinada
+    e ao nome-alvo CORRENTE da cópia (D-03). `copy` é um `executor.PlannedCopy`.
     """
     name = copy.name if copy.name is not None else source.name
-    if not Path(name).suffix and source.suffix:
+    if not _has_real_extension(name) and source.suffix:
         name = name + source.suffix
     return copy.folder / name
 

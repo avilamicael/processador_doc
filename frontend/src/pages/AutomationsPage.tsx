@@ -750,7 +750,14 @@ export function AutomationsPage() {
     const isRn = a.action_type === 'rename'
     let out: string
     if (isRn) {
-      out = resolvePattern(a.pattern, activeTemplate.fields) + '.pdf'
+      // Espelha a regra do backend (_has_real_extension): se o nome resolvido já
+      // termina numa extensão REAL (sufixo começando por LETRA — ".pdf"/".txt"), o
+      // usuário definiu a extensão e ela é respeitada; senão acrescenta a do original
+      // (tipicamente .pdf). Assim valores com pontos (Numero_NF "000.001.137") NÃO são
+      // confundidos com extensão.
+      const base = resolvePattern(a.pattern, activeTemplate.fields)
+      const hasRealExt = /\.[A-Za-z][A-Za-z0-9]*$/.test(base)
+      out = hasRealExt ? base : base + '.pdf'
     } else {
       out = resolveFolderPreview(a.pattern, activeTemplate.fields).text
     }
@@ -1051,10 +1058,20 @@ export function AutomationsPage() {
         {renderPreview(a)}
         {isRn ? (
           <div style={hintStyle}>
-            <code>{'{campo}'}</code> é trocado pelo <b>valor lido do documento</b>. Os campos
-            vêm do template da condição "Tipo de documento". Você pode transformar o valor com{' '}
-            <b>filtros</b>: <code>{'{fornecedor:maiusc:palavras=2}'}</code>,{' '}
-            <code>{'{cliente:sem_acento}'}</code>, <code>{'{data:formato=aaaa-mm-dd}'}</code>.
+            <code>{'{campo}'}</code> é trocado pelo <b>valor lido do documento</b> (os campos
+            vêm do template da condição "Tipo de documento"). A <b>extensão do arquivo é
+            mantida automaticamente</b> — não precisa digitar <code>.pdf</code>; só inclua uma
+            extensão no padrão se quiser <b>trocá-la</b> (ex.: <code>{'{cliente}_{numero}.pdf'}</code>).
+            <br />
+            Exemplo: <code>{'{Nome_Emitente}_{Numero_NF}'}</code> vira{' '}
+            <span className="cell-mono" style={{ color: 'var(--st-tratado)' }}>
+              IGUACU DIST_000.001.137.pdf
+            </span>
+            . A <b>Prévia</b> acima mostra exatamente como vai ficar com os seus campos.
+            <br />
+            Dá para transformar o valor com <b>filtros</b>:{' '}
+            <code>{'{fornecedor:maiusc:palavras=2}'}</code>, <code>{'{cliente:sem_acento}'}</code>,{' '}
+            <code>{'{data:formato=aaaa-mm-dd}'}</code>.
           </div>
         ) : (
           <div style={hintStyle}>

@@ -161,6 +161,87 @@ def test_split_audit_does_not_block_apply(
     assert result.no_match is False
 
 
+def test_plan_dest_preserva_extensao_com_valor_pontuado() -> None:
+    """Bug 2 (deploy 2026-06-25): Numero_NF '000.076.737' tem pontos; o sistema NÃO pode
+    confundir '.737' com extensão — deve preservar a extensão real do original (.pdf)."""
+    from pathlib import Path
+
+    from app.automation.executor import AutomationPlan
+
+    source = Path("/mon/TESTE/nota_p1.pdf")
+    plan = AutomationPlan(
+        target_folder=Path("/dest/LABORATORIO"),
+        target_name="LABORATORIO OPTICO UPLAB LTDA_000.076.737",
+        matched=True,
+    )
+    assert stage._plan_dest(source, plan).name == (
+        "LABORATORIO OPTICO UPLAB LTDA_000.076.737.pdf"
+    )
+
+
+def test_plan_dest_respeita_extensao_do_usuario() -> None:
+    """Se o padrão de rename trouxe uma extensão REAL (.txt), respeita — não acrescenta
+    a do original."""
+    from pathlib import Path
+
+    from app.automation.executor import AutomationPlan
+
+    source = Path("/mon/TESTE/file.pdf")
+    plan = AutomationPlan(
+        target_folder=Path("/dest"), target_name="nota_123.txt", matched=True
+    )
+    assert stage._plan_dest(source, plan).name == "nota_123.txt"
+
+
+def test_source_path_resolve_bloco_de_split_pelo_content_hash(
+    schema_engine: Engine,
+) -> None:
+    """Bug 1 (deploy 2026-06-25): para doc de split, _source_path resolve o BLOCO real
+    no disco ('nota_p1.pdf', gate por content_hash), NÃO o original pré-split apontado
+    por origin_original_id (já removido). Sem isso, remove_original mira arquivo
+    inexistente e o bloco fica órfão após o move."""
+    from pathlib import Path
+
+    from app.models.document import Document
+    from app.models.ingested_original import IngestedOriginal
+    from app.models.watched_folder import WatchedFolder
+
+    block_hash = "b" * 64
+    with get_session(schema_engine) as session:
+        folder = WatchedFolder(path="/mon/TESTE")
+        session.add(folder)
+        session.flush()
+        # Gate do ORIGINAL pré-split (origin_original_id aponta aqui).
+        orig = IngestedOriginal(
+            original_hash="o" * 64,
+            original_filename="nota.pdf",
+            source_folder_id=folder.id,
+            block_count=1,
+        )
+        session.add(orig)
+        # Gate do BLOCO (nome real no disco) — original_hash == content_hash do doc.
+        session.add(
+            IngestedOriginal(
+                original_hash=block_hash,
+                original_filename="nota_p1.pdf",
+                source_folder_id=folder.id,
+                block_count=0,
+            )
+        )
+        session.flush()
+        doc = Document(
+            content_hash=block_hash,
+            original_filename="nota.pdf",
+            origin_original_id=orig.id,
+            state=DocState.PROCESSANDO,
+            last_completed_step=stage.CLASSIFIED_STEP,
+        )
+        session.add(doc)
+        session.commit()
+        src = stage._source_path(session, doc)
+    assert src == Path("/mon/TESTE") / "nota_p1.pdf"
+
+
 def test_reconcile_orphan_intent(
     schema_engine: Engine, classified_doc: ClassifiedDoc
 ) -> None:
