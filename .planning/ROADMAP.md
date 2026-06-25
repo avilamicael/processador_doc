@@ -378,13 +378,13 @@ Plans:
 **Goal:** (Item 5) Classificação por sinais menos frágil: ferramenta de "testar sinais contra um documento de exemplo" no construtor de templates (mostra quais sinais casam/falham contra o texto extraído); casamento mais tolerante — limiar N-de-M em vez de E-exato de todos + normalização opcional (pontuação/quebra de linha/acento); avaliar (decisão de produto) deixar a IA classificar quando o matcher local não casa nenhum template, antes da quarentena direta. (Item 6) Ação "reprocessar/reclassificar automático" (por doc e em lote) que re-roda matcher→(IA)→filler com os templates ATUAIS sem forçar template, para sair da quarentena após editar um template.
 **Requirements**: Backlog itens 5, 6 (`.planning/notes/2026-06-24-melhorias-teste-usuario-final.md`). Itens 2 (varredura de pasta nova) e 7 (re-ingerir split) deferidos para futura fase de robustez de ingestão.
 **Depends on:** Phase 5 (classificação/revisão/quarentena)
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 **UI hint**: yes
 
 Plans:
 **Wave 1**
 
-- [ ] 10-01-PLAN.md — Matcher tolerante: normalização simétrica (acento/quebra/pontuação/espaço) só no ramo texto, regex intacto (ReDoS/timeout), helper público `evaluate_groups` [BL-05]
+- [x] 10-01-PLAN.md — Matcher tolerante: normalização simétrica (acento/quebra/pontuação/espaço) só no ramo texto, regex intacto (ReDoS/timeout), helper público `evaluate_groups` [BL-05]
 
 **Wave 2** *(blocked on 10-01)*
 
