@@ -172,6 +172,22 @@ class Settings(BaseSettings):
             "CLASSIFY_AI_FALLBACK_ENABLED", "classify_ai_fallback_enabled"
         ),
     )
+    # `approval_mode_enabled` (Fase 12, D-03/D-04/D-05): toggle GLOBAL de "modo de
+    # aprovação". Com OFF (default) o sweep `enqueue_pending_applications` auto-aplica
+    # os docs de ALTA confiança como hoje — a trava de confiança/limiar (D-04) segue
+    # intacta no `classify_stage` (baixa confiança continua indo a EM_REVISAO). Com ON,
+    # o sweep curto-circuita e NÃO auto-aplica nada: os docs de alta confiança ficam
+    # pendentes aguardando aprovação humana via DryRunPage (modo de teste, D-05). O
+    # GATE vive SÓ no enqueue do worker, NUNCA em `apply_stage` (executor compartilhado
+    # com a aprovação manual — gateá-lo quebraria D-06: aprovar = apply). Lido de env
+    # sem deploy (mesmo padrão dos tunables vizinhos); espelhado em GET/PUT
+    # /config/approval-mode.
+    approval_mode_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "APPROVAL_MODE_ENABLED", "approval_mode_enabled"
+        ),
+    )
     # `openai_classify_model`: modelo das chamadas PAGAS de desempate/classificação
     # (D-01/D-06). Modelos giram rápido (CLAUDE.md) → tunável por env; o default
     # reusa o modelo de extract para uma instância só precisar definir um modelo.
