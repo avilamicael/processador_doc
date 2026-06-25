@@ -28,7 +28,7 @@ da resposta (consumo legítimo da UI), NUNCA em log; o endpoint não loga valore
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.classification.confidence import compute_confidence
 from app.ingest.watcher import active_folder_paths, scan_and_enqueue
+from app.models.audit_log import AuditLog
 from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
 from app.models.enums import DocState
@@ -68,6 +69,22 @@ _MOTIVO_FALHA_FALLBACK = (
 )
 
 router = APIRouter(tags=["documents"])
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Marca um datetime naive como UTC tz-aware SEM deslocar a hora (D-13).
+
+    Causa-raiz: o SQLite grava `func.now()` como string naive; ao ler vem um
+    `datetime` sem `tzinfo` e o Pydantic o serializa sem offset. O frontend faz
+    `new Date(iso)` sobre essa string e a interpreta no fuso LOCAL, errando a
+    hora. A correção canônica é marcar o instante como UTC (o valor gravado pelo
+    banco JÁ é UTC) — `replace`, não `astimezone`: 18:04 permanece 18:04 e ganha
+    `+00:00`. Quando o datetime já carrega `tzinfo` (ex.: colunas tz-aware), é
+    devolvido inalterado.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
 
 
 class DocumentOut(BaseModel):
@@ -168,6 +185,29 @@ class DocumentDetailOut(BaseModel):
     classification: ClassificationOut | None
 
 
+class AuditEntryOut(BaseModel):
+    """Uma operação registrada no AuditLog de um documento (origem→destino/status)."""
+
+    id: int
+    action: str
+    status: str
+    source_path: str | None
+    dest_path: str | None
+    run_id: str | None
+    created_at: datetime
+
+
+class DocumentAuditOut(BaseModel):
+    """Auditoria de um documento: as operações + se o documento pode ser revertido.
+
+    `can_undo` espelha o critério de `undo_document` (reverte os registros com
+    `status == "done"`) — a tela de reverter (item 1) o usa para habilitar a ação.
+    """
+
+    items: list[AuditEntryOut]
+    can_undo: bool
+
+
 class DuplicatesCountOut(BaseModel):
     """Total de arquivos duplicados ignorados (D-10)."""
 
@@ -175,9 +215,12 @@ class DuplicatesCountOut(BaseModel):
 
 
 class RescanOut(BaseModel):
-    """Resultado de uma varredura forçada: quantos candidatos enfileirados."""
+    """Resultado de uma varredura forçada: enfileirados + pulados por duplicata (D-04)."""
 
     enqueued: int
+    # Candidatos pulados pelo gate de dedup nesta varredura — alimenta o toast
+    # pós-varredura do frontend ("N enfileirados, M duplicatas ignoradas").
+    skipped_duplicates: int
 
 
 class DeleteDocumentsIn(BaseModel):
@@ -259,7 +302,7 @@ def _build_detail(session: Session, doc: Document, folder_path: str | None) -> D
         state=doc.state.value,
         last_completed_step=doc.last_completed_step,
         source_folder_path=folder_path,
-        created_at=doc.created_at,
+        created_at=_as_utc(doc.created_at),
         classification=classification,
     )
 
@@ -348,7 +391,7 @@ def list_documents(
                 state=doc.state.value,
                 last_completed_step=doc.last_completed_step,
                 source_folder_path=folder_path,
-                created_at=doc.created_at,
+                created_at=_as_utc(doc.created_at),
             )
             for doc, folder_path in rows
         ]
@@ -650,6 +693,48 @@ def get_document(request: Request, document_id: int) -> DocumentDetailOut:
         return _build_detail(session, doc, folder_path)
 
 
+@router.get("/documents/{document_id}/audit", response_model=DocumentAuditOut)
+def get_document_audit(request: Request, document_id: int) -> DocumentAuditOut:
+    """Operações aplicadas a um documento (origem→destino/status/run_id) — SÓ LEITURA.
+
+    Alimenta a tela de reverter (item 1, D-02): lista o `AuditLog` do documento em
+    ordem decrescente (mais recente primeiro) e expõe `can_undo` (há algum registro
+    `status == "done"` reversível). 404 se o documento não existe.
+
+    SEGURANÇA (T-11-01/02/03): estritamente read-only — só faz `select(AuditLog)`
+    filtrado por `document_id` (tipado `int`, sem string-building de SQL); NÃO
+    dispara undo nem escreve, e só retorna colunas já persistidas no audit (não
+    constrói paths a partir de input). NÃO loga valores (docstring do módulo).
+    """
+    engine = request.app.state.engine
+    with get_session(engine) as session:
+        doc = session.get(Document, document_id)
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"documento {document_id} não encontrado",
+            )
+        rows = session.scalars(
+            select(AuditLog)
+            .where(AuditLog.document_id == document_id)
+            .order_by(AuditLog.id.desc())
+        ).all()
+        items = [
+            AuditEntryOut(
+                id=r.id,
+                action=r.action,
+                status=r.status,
+                source_path=r.source_path,
+                dest_path=r.dest_path,
+                run_id=r.run_id,
+                created_at=_as_utc(r.created_at),
+            )
+            for r in rows
+        ]
+        can_undo = any(r.status == "done" for r in rows)
+    return DocumentAuditOut(items=items, can_undo=can_undo)
+
+
 def _requeue(session: Session, *, content_hash: str, step: str, payload: dict) -> None:
     """Reenfileira (content_hash, step): reseta o job existente ou enfileira novo.
 
@@ -900,5 +985,8 @@ async def rescan(request: Request) -> RescanOut:
     engine = request.app.state.engine
     with get_session(engine) as session:
         paths = list(active_folder_paths(session).keys())
-    enqueued = await scan_and_enqueue(engine, paths)
-    return RescanOut(enqueued=enqueued)
+    result = await scan_and_enqueue(engine, paths)
+    return RescanOut(
+        enqueued=result.enqueued,
+        skipped_duplicates=result.skipped_duplicates,
+    )
