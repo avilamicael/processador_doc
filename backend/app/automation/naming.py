@@ -35,7 +35,6 @@ NÃO cria pasta no disco (criar diretório é responsabilidade do fileops, Plan 
 NUNCA loga valores de campo (V7/V9 — dados sensíveis LGPD).
 """
 
-import ntpath
 import re
 import unicodedata
 from pathlib import Path, PurePosixPath, PureWindowsPath

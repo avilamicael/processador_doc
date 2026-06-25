@@ -27,14 +27,14 @@ import logging
 from pathlib import Path
 
 from openai import AuthenticationError
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, or_, select
 from sqlalchemy.orm import Session
 
 from app.automation.stage import APPLY_STEP, apply_stage, reconcile_orphans
 from app.classification.stage import CLASSIFIED_STEP, classify_stage
 from app.config import get_settings
 from app.extraction.stage import EXTRACTED_STEP, extract_stage
-from app.models.audit_log import AuditLog
+from app.models.audit_log import SPLIT_MATERIALIZE_DETAILS_PREFIX, AuditLog
 from app.models.classification import ClassificationResult
 from app.models.document import Document
 from app.models.enums import DocState
@@ -401,7 +401,20 @@ def enqueue_pending_applications(session: Session) -> int:
             ClassificationResult.confidence_score.is_not(None),
             ClassificationResult.confidence_score >= threshold,
             ~Document.id.in_(
-                select(AuditLog.document_id).where(AuditLog.status == "done")
+                # Exclui APENAS automações reais já concluídas. Os AuditLog "done" da
+                # materialização de split (details com SPLIT_MATERIALIZE_DETAILS_PREFIX)
+                # NÃO contam — senão docs de pasta com split nunca auto-aplicariam
+                # (bug do deploy 2026-06-25). Automações reais deixam details nulo.
+                select(AuditLog.document_id).where(
+                    AuditLog.status == "done",
+                    AuditLog.document_id.is_not(None),
+                    or_(
+                        AuditLog.details.is_(None),
+                        ~AuditLog.details.startswith(
+                            SPLIT_MATERIALIZE_DETAILS_PREFIX
+                        ),
+                    ),
+                )
             ),
         )
     ).all()

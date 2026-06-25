@@ -19,6 +19,15 @@ if TYPE_CHECKING:
     from app.models.document import Document
 
 
+# Prefixo do campo `details` dos AuditLog gravados pela materialização de split
+# (split_to_files, quick 260623-pzy). Esses registros usam action="apply" mas NÃO
+# são automações — são a gravação física do bloco na pasta. A idempotência do apply
+# (`_has_done`) e o sweep de auto-apply (`enqueue_pending_applications`) DEVEM
+# ignorá-los; senão um documento vindo de pasta com split nunca aplica sua automação
+# (o audit "done" do split curto-circuita o apply real). Ver bug do deploy 2026-06-25.
+SPLIT_MATERIALIZE_DETAILS_PREFIX = "split_to_files:"
+
+
 class AuditLog(Base):
     """Registro de auditoria de ações aplicadas (ou a aplicar) a documentos."""
 

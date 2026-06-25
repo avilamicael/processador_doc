@@ -121,6 +121,46 @@ def test_idempotencia_done_existente_no_op(
     assert second.materialized is False
 
 
+def test_split_audit_does_not_block_apply(
+    schema_engine: Engine, classified_doc: ClassifiedDoc, automation_factory, monkeypatch
+) -> None:
+    """Regressão (deploy 2026-06-25): o AuditLog 'done' da materialização de split
+    (action='apply' + details com SPLIT_MATERIALIZE_DETAILS_PREFIX) NÃO pode contar
+    como 'automação já aplicada'. Antes do fix, `_has_done` casava esse audit e o apply
+    virava no-op eterno — docs de pasta com split nunca aplicavam a automação."""
+    import app.automation.fileops as fileops
+    from app.models.audit_log import SPLIT_MATERIALIZE_DETAILS_PREFIX
+
+    _rename_automation(automation_factory)
+    monkeypatch.setattr(fileops, "materialize_to_dest", lambda *a, **k: str(a[1]))
+    monkeypatch.setattr(fileops, "remove_original", lambda *a, **k: None)
+
+    # Semeia o audit deixado pela materialização do split (bloco gravado na pasta).
+    with get_session(schema_engine) as session:
+        session.add(
+            AuditLog(
+                document_id=classified_doc.document_id,
+                action="apply",
+                status="done",
+                details=f"{SPLIT_MATERIALIZE_DETAILS_PREFIX} grava bloco na pasta",
+                content_hash=classified_doc.content_hash,
+            )
+        )
+        session.commit()
+        # O audit de split é ignorado pela idempotência.
+        assert stage._has_done(session, classified_doc.document_id) is False
+
+    # apply_stage roda a automação real (materializa) APESAR do audit de split presente.
+    with get_session(schema_engine) as session:
+        result = asyncio.run(
+            stage.apply_stage(
+                session, content_hash=classified_doc.content_hash, run_id="run-split"
+            )
+        )
+    assert result.materialized is True
+    assert result.no_match is False
+
+
 def test_reconcile_orphan_intent(
     schema_engine: Engine, classified_doc: ClassifiedDoc
 ) -> None:

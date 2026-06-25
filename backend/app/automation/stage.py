@@ -45,7 +45,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.automation import fileops, naming
@@ -57,7 +57,7 @@ from app.automation.executor import (
 )
 from app.automation.rules import ConditionSpec
 from app.config import get_settings
-from app.models.audit_log import AuditLog
+from app.models.audit_log import SPLIT_MATERIALIZE_DETAILS_PREFIX, AuditLog
 from app.models.automation import Automation
 from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
@@ -405,11 +405,23 @@ def _plan_anchor_missing(source: Path, plan: AutomationPlan) -> bool:
 
 
 def _has_done(session: Session, document_id: int) -> bool:
-    """True se já existe um AuditLog(status="done") para o doc (idempotência)."""
+    """True se já existe um AuditLog de AUTOMAÇÃO concluído para o doc (idempotência).
+
+    IGNORA os AuditLog da materialização de split (`details` com o prefixo
+    SPLIT_MATERIALIZE_DETAILS_PREFIX): esses usam `action="apply"` mas são a gravação
+    física do bloco na pasta, NÃO uma automação. Sem essa exclusão, um documento vindo
+    de pasta com split nunca aplicaria a automação — o audit "done" do split
+    curto-circuitava o apply real (bug do deploy 2026-06-25). Automações reais deixam
+    `details` nulo.
+    """
     existing = session.scalar(
         select(AuditLog).where(
             AuditLog.document_id == document_id,
             AuditLog.status == "done",
+            or_(
+                AuditLog.details.is_(None),
+                ~AuditLog.details.startswith(SPLIT_MATERIALIZE_DETAILS_PREFIX),
+            ),
         )
     )
     return existing is not None

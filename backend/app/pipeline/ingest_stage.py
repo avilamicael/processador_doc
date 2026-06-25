@@ -42,7 +42,7 @@ from app.automation import fileops
 from app.automation.naming import sanitize_component
 from app.config import get_settings
 from app.ingest.splitter import is_supported_ext, split_pdf
-from app.models.audit_log import AuditLog
+from app.models.audit_log import SPLIT_MATERIALIZE_DETAILS_PREFIX, AuditLog
 from app.models.document import Document
 from app.models.enums import DocState
 from app.models.ingested_original import IngestedOriginal
@@ -324,7 +324,7 @@ def _materialize_blocks_to_folder(
             source_path=str(dest),
             dest_path=str(dest),
             content_hash=block_hash,
-            details="split_to_files: grava bloco na pasta (260623-pzy)",
+            details=f"{SPLIT_MATERIALIZE_DETAILS_PREFIX} grava bloco na pasta (260623-pzy)",
         )
         session.add(audit)
         session.commit()
@@ -344,7 +344,7 @@ def _materialize_blocks_to_folder(
         source_path=str(source_path),
         dest_path=None,
         content_hash=original_hash,
-        details="split_to_files: remove o original (recuperável do CAS, 260623-pzy)",
+        details=f"{SPLIT_MATERIALIZE_DETAILS_PREFIX} remove o original (CAS, 260623-pzy)",
     )
     session.add(removal)
     session.commit()
