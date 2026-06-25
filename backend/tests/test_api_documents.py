@@ -21,6 +21,7 @@ with warnings.catch_warnings():
     from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models.audit_log import AuditLog
 from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
 from app.models.enums import DocState
@@ -681,3 +682,92 @@ def test_reprocess_batch_invalid_body_returns_422(
         "/documents/reprocess", json={"bucket": "quarentena", "ids": [1]}
     )
     assert resp.status_code == 422, resp.text
+
+
+# --- GET /documents/{id}/audit — auditoria por documento (read-only, D-02) ---
+
+
+def test_audit_nonexistent_document_returns_404(client: TestClient) -> None:
+    """Documento inexistente → 404 (mesmo guard do detalhe)."""
+    resp = client.get("/documents/9999/audit")
+    assert resp.status_code == 404, resp.text
+
+
+def test_audit_returns_operations_and_can_undo(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """Doc com AuditLog status=done → 200, can_undo=true, itens com origem→destino."""
+    with get_session(schema_engine) as session:
+        doc = Document(content_hash="a" * 64, original_filename="nf.pdf")
+        session.add(doc)
+        session.flush()
+        session.add(
+            AuditLog(
+                document_id=doc.id,
+                action="apply",
+                status="done",
+                source_path="/in/nf.pdf",
+                dest_path="/out/2026/nf.pdf",
+                run_id="run-123",
+                content_hash="a" * 64,
+            )
+        )
+        session.commit()
+        doc_id = doc.id
+
+    resp = client.get(f"/documents/{doc_id}/audit")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["can_undo"] is True
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["source_path"] == "/in/nf.pdf"
+    assert item["dest_path"] == "/out/2026/nf.pdf"
+    assert item["run_id"] == "run-123"
+    assert item["status"] == "done"
+    # created_at sai tz-aware (offset UTC) via _as_utc.
+    assert item["created_at"].endswith("+00:00") or item["created_at"].endswith("Z")
+
+
+def test_audit_can_undo_false_when_only_undone(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """Doc cujo único registro já foi revertido → can_undo=false, mas item aparece."""
+    with get_session(schema_engine) as session:
+        doc = Document(content_hash="b" * 64, original_filename="bol.pdf")
+        session.add(doc)
+        session.flush()
+        session.add(
+            AuditLog(
+                document_id=doc.id,
+                action="apply",
+                status="undone",
+                source_path="/in/bol.pdf",
+                dest_path="/out/bol.pdf",
+            )
+        )
+        session.commit()
+        doc_id = doc.id
+
+    resp = client.get(f"/documents/{doc_id}/audit")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["can_undo"] is False
+    assert len(body["items"]) == 1
+
+
+def test_audit_empty_when_no_operations(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """Doc sem nenhum AuditLog → 200 com lista vazia e can_undo=false."""
+    with get_session(schema_engine) as session:
+        doc = Document(content_hash="c" * 64, original_filename="x.pdf")
+        session.add(doc)
+        session.commit()
+        doc_id = doc.id
+
+    resp = client.get(f"/documents/{doc_id}/audit")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["items"] == []
+    assert body["can_undo"] is False

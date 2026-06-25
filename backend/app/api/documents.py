@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.classification.confidence import compute_confidence
 from app.ingest.watcher import active_folder_paths, scan_and_enqueue
+from app.models.audit_log import AuditLog
 from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
 from app.models.enums import DocState
@@ -182,6 +183,29 @@ class DocumentDetailOut(BaseModel):
     source_folder_path: str | None
     created_at: datetime
     classification: ClassificationOut | None
+
+
+class AuditEntryOut(BaseModel):
+    """Uma operação registrada no AuditLog de um documento (origem→destino/status)."""
+
+    id: int
+    action: str
+    status: str
+    source_path: str | None
+    dest_path: str | None
+    run_id: str | None
+    created_at: datetime
+
+
+class DocumentAuditOut(BaseModel):
+    """Auditoria de um documento: as operações + se o documento pode ser revertido.
+
+    `can_undo` espelha o critério de `undo_document` (reverte os registros com
+    `status == "done"`) — a tela de reverter (item 1) o usa para habilitar a ação.
+    """
+
+    items: list[AuditEntryOut]
+    can_undo: bool
 
 
 class DuplicatesCountOut(BaseModel):
@@ -667,6 +691,48 @@ def get_document(request: Request, document_id: int) -> DocumentDetailOut:
             )
         doc, folder_path = row
         return _build_detail(session, doc, folder_path)
+
+
+@router.get("/documents/{document_id}/audit", response_model=DocumentAuditOut)
+def get_document_audit(request: Request, document_id: int) -> DocumentAuditOut:
+    """Operações aplicadas a um documento (origem→destino/status/run_id) — SÓ LEITURA.
+
+    Alimenta a tela de reverter (item 1, D-02): lista o `AuditLog` do documento em
+    ordem decrescente (mais recente primeiro) e expõe `can_undo` (há algum registro
+    `status == "done"` reversível). 404 se o documento não existe.
+
+    SEGURANÇA (T-11-01/02/03): estritamente read-only — só faz `select(AuditLog)`
+    filtrado por `document_id` (tipado `int`, sem string-building de SQL); NÃO
+    dispara undo nem escreve, e só retorna colunas já persistidas no audit (não
+    constrói paths a partir de input). NÃO loga valores (docstring do módulo).
+    """
+    engine = request.app.state.engine
+    with get_session(engine) as session:
+        doc = session.get(Document, document_id)
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"documento {document_id} não encontrado",
+            )
+        rows = session.scalars(
+            select(AuditLog)
+            .where(AuditLog.document_id == document_id)
+            .order_by(AuditLog.id.desc())
+        ).all()
+        items = [
+            AuditEntryOut(
+                id=r.id,
+                action=r.action,
+                status=r.status,
+                source_path=r.source_path,
+                dest_path=r.dest_path,
+                run_id=r.run_id,
+                created_at=_as_utc(r.created_at),
+            )
+            for r in rows
+        ]
+        can_undo = any(r.status == "done" for r in rows)
+    return DocumentAuditOut(items=items, can_undo=can_undo)
 
 
 def _requeue(session: Session, *, content_hash: str, step: str, payload: dict) -> None:
