@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import type { DocState, Page, StatusFilter } from '../types'
 import { Icon } from '../components/Icon'
 import { StatusPill } from '../components/StatusPill'
-import { useApproveDocument, useDeleteDocuments, useDocuments, useDuplicatesCount, useRescan, useUndoDocument } from '../hooks/useDocuments'
+import { useDeleteDocuments, useDocuments, useDuplicatesCount, useRescan, useUndoDocument } from '../hooks/useDocuments'
+import { useApply } from '../hooks/useAutomations'
 import { getDocumentAudit, getDocumentDetail } from '../lib/api'
 
 interface DocumentsPageProps {
@@ -71,7 +72,7 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
   const dupQuery = useDuplicatesCount()
   const rescan = useRescan()
   const deleteDocs = useDeleteDocuments()
-  const approve = useApproveDocument()
+  const apply = useApply()
 
   // S4 — detalhe de classificação somente leitura (TPL-03/04). Abre num modal ao
   // clicar no nome do arquivo; busca GET /documents/{id} sob demanda.
@@ -335,9 +336,11 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <StatusPill state={d.state} lastCompletedStep={d.last_completed_step} />
-                          {/* D-11/D-12: CTA na própria linha quando o doc está "pronto".
-                              "Pré-visualizar" navega ao dry-run; "Aprovar" dispara o POST
-                              approve (backend decide a conclusão — sem auto-conclude aqui). */}
+                          {/* D-11/D-12: CTA na própria linha quando o doc está "pronto"
+                              (PROCESSANDO + classificado). "Pré-visualizar" navega ao
+                              dry-run; "Aprovar" dispara o APPLY das automações (POST
+                              /automations/apply). NÃO usa /documents/{id}/approve — esse
+                              é só para EM_REVISAO e devolve 409 para docs prontos. */}
                           {isClassifiedReady(d.state, d.last_completed_step) && (
                             <span style={{ display: 'inline-flex', gap: 6 }}>
                               <button
@@ -351,11 +354,11 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
                               <button
                                 className="btn-primary"
                                 style={{ height: 26, padding: '0 10px', fontSize: 12 }}
-                                onClick={() => approve.mutate(d.id)}
-                                disabled={approve.isPending}
-                                title="Aprovar este documento e executar as automações configuradas"
+                                onClick={() => apply.mutate([d.id])}
+                                disabled={apply.isPending}
+                                title="Aplicar as automações configuradas a este documento"
                               >
-                                {approve.isPending && approve.variables === d.id ? 'Aprovando…' : 'Aprovar'}
+                                {apply.isPending && apply.variables?.[0] === d.id ? 'Aplicando…' : 'Aprovar'}
                               </button>
                             </span>
                           )}
