@@ -408,6 +408,14 @@ export interface AiFallback {
   enabled: boolean
 }
 
+// --- Modo de aprovação (Fase 12 Plano 03/04 — D-03/D-06) ---
+// GET/PUT /config/approval-mode: liga/desliga "automações aguardam minha aprovação".
+// LIGADO = alta confiança NÃO é auto-aplicada (gate no worker, 12-03); os docs
+// aguardam aprovação na Pré-visualização. DESLIGADO = auto-apply atual.
+export interface ApprovalMode {
+  enabled: boolean
+}
+
 // --- Status do watcher (GET /watcher/status — quick 260624-far) ---
 // Estado REAL exibido na Sidebar (substitui o hardcode "4 pastas · varredura há 2 min").
 export interface WatcherStatus {

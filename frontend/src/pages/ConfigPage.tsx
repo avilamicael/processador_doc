@@ -12,8 +12,10 @@ import {
 } from '../hooks/useWatchedFolders'
 import {
   useAiFallback,
+  useApprovalMode,
   useReviewThreshold,
   useSaveAiFallback,
+  useSaveApprovalMode,
   useSaveReviewThreshold,
 } from '../hooks/useAttention'
 
@@ -513,6 +515,84 @@ function LeituraTab({ deskew, denoise }: ConfigPageProps) {
 
       {/* IA-fallback opt-in (D-05): lê/salva /config/ai-fallback. Default OFF. */}
       <AiFallbackField />
+
+      {/* Modo de aprovação (D-03/D-06): lê/salva /config/approval-mode. Default OFF. */}
+      <ApprovalModeField />
+    </div>
+  )
+}
+
+// Modo de aprovação (D-03/D-06). Toggle "Automações aguardam minha aprovação": quando
+// ligado, os documentos de alta confiança NÃO são aplicados sozinhos (gate no worker,
+// 12-03) — ficam pendentes na Pré-visualização para você aprovar (aplicar) ou negar.
+// Default OFF refletido pelo valor do GET. Salva ao alternar.
+function ApprovalModeField() {
+  const approvalQuery = useApprovalMode()
+  const saveApproval = useSaveApprovalMode()
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const enabled = approvalQuery.data?.enabled ?? false
+
+  const toggle = () => {
+    setSaveError(null)
+    saveApproval.mutate(!enabled, {
+      onError: () => setSaveError('Não foi possível salvar a opção. Tente novamente.'),
+    })
+  }
+
+  return (
+    <div className="card" style={{ padding: 18, marginTop: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>
+            Automações aguardam minha aprovação
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+            Quando ligado, as automações ficam pendentes na Pré-visualização para você
+            aprovar ou negar — nada é movido sozinho. Quando desligado, documentos de alta
+            confiança são aplicados automaticamente (a trava de confiança continua valendo).
+            Padrão: desligado.
+          </span>
+        </div>
+        {!approvalQuery.isLoading && !approvalQuery.isError && (
+          <span style={{ pointerEvents: saveApproval.isPending ? 'none' : 'auto', flex: 'none' }}>
+            <Switch
+              on={enabled}
+              onToggle={toggle}
+              title="Automações aguardam minha aprovação"
+            />
+          </span>
+        )}
+      </div>
+
+      {approvalQuery.isLoading && (
+        <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 10 }}>
+          Carregando configuração…
+        </div>
+      )}
+
+      {approvalQuery.isError && (
+        <div style={{ marginTop: 10 }}>
+          <p style={{ fontSize: 13, margin: '0 0 12px' }}>
+            Não foi possível carregar a configuração. Verifique se o serviço está em execução.
+          </p>
+          <button className="btn-primary" onClick={() => approvalQuery.refetch()}>
+            <Icon name="refresh" size={15} />
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {saveError && (
+        <p style={{ fontSize: 13, color: 'var(--st-erro)', margin: '10px 0 0' }}>{saveError}</p>
+      )}
     </div>
   )
 }

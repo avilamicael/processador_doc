@@ -11,6 +11,7 @@
 
 import type {
   AiFallback,
+  ApprovalMode,
   ApplyResult,
   AttentionList,
   Automation,
@@ -180,6 +181,19 @@ export function getAiFallback(): Promise<AiFallback> {
 
 export function putAiFallback(enabled: boolean): Promise<AiFallback> {
   return request<AiFallback>('/config/ai-fallback', {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+// --- Modo de aprovação (Config; D-03/D-06). Default OFF refletido pelo GET. ---
+
+export function getApprovalMode(): Promise<ApprovalMode> {
+  return request<ApprovalMode>('/config/approval-mode')
+}
+
+export function putApprovalMode(enabled: boolean): Promise<ApprovalMode> {
+  return request<ApprovalMode>('/config/approval-mode', {
     method: 'PUT',
     body: JSON.stringify({ enabled }),
   })

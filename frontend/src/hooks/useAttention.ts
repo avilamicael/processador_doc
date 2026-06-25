@@ -9,6 +9,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getAiFallback,
+  getApprovalMode,
   getAttention,
   getReviewThreshold,
   patchField,
@@ -18,6 +19,7 @@ import {
   postReprocessBatch,
   postRetry,
   putAiFallback,
+  putApprovalMode,
   putReviewThreshold,
 } from '../lib/api'
 
@@ -25,6 +27,7 @@ const ATTENTION_KEY = ['attention'] as const
 const DOCUMENTS_KEY = ['documents'] as const
 const REVIEW_THRESHOLD_KEY = ['review-threshold'] as const
 const AI_FALLBACK_KEY = ['ai-fallback'] as const
+const APPROVAL_MODE_KEY = ['approval-mode'] as const
 const POLL_INTERVAL_MS = 4000
 
 // Lista os 3 baldes por polling (padrão useDocuments).
@@ -144,6 +147,26 @@ export function useSaveAiFallback() {
     mutationFn: (enabled: boolean) => putAiFallback(enabled),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: AI_FALLBACK_KEY })
+    },
+  })
+}
+
+// --- Modo de aprovação (Config; D-03/D-06). Default OFF refletido pelo GET. ---
+// LIGADO: a Pré-visualização vira a fila de aprovação (aprovar=aplicar; negar=local).
+
+export function useApprovalMode() {
+  return useQuery({
+    queryKey: APPROVAL_MODE_KEY,
+    queryFn: getApprovalMode,
+  })
+}
+
+export function useSaveApprovalMode() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) => putApprovalMode(enabled),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: APPROVAL_MODE_KEY })
     },
   })
 }
