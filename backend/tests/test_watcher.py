@@ -21,7 +21,7 @@ import pytest
 from sqlalchemy import Engine, func, select
 
 from app import config
-from app.ingest.watcher import scan_and_enqueue
+from app.ingest.watcher import _scan_new_active_folders, scan_and_enqueue
 from app.models.ingested_original import IngestedOriginal
 from app.models.job import Job
 from app.models.watched_folder import WatchedFolder
@@ -128,6 +128,61 @@ def test_scan_increments_duplicate_hits_when_already_ingested(
             select(IngestedOriginal).where(IngestedOriginal.original_hash == original_hash)
         )
         assert original.duplicate_hits == 1
+
+
+def test_scan_new_active_folder_enqueues_existing_files(
+    schema_engine: Engine, data_dir: Path, fast_stabilization: None, tmp_path: Path
+) -> None:
+    """D-01: pasta que passa a ser ativa em runtime tem seus arquivos JÁ presentes
+    varridos (diff current - previous) sem /rescan manual."""
+    watched = tmp_path / "hot"
+    watched.mkdir()
+    _make_pdf(watched / "doc.pdf")
+
+    with get_session(schema_engine) as session:
+        session.add(WatchedFolder(path=str(watched.resolve()), pages_per_block=None, active=True))
+        session.commit()
+
+    # A pasta NÃO estava na iteração anterior (previous vazio) → é varrida agora.
+    asyncio.run(_scan_new_active_folders(schema_engine, {watched.resolve()}, set()))
+
+    assert _count_jobs(schema_engine) == 1
+
+
+def test_scan_new_active_folder_skips_already_observed(
+    schema_engine: Engine, data_dir: Path, fast_stabilization: None, tmp_path: Path
+) -> None:
+    """Pasta já observada na iteração anterior NÃO é re-varrida (só o diff)."""
+    watched = tmp_path / "hot"
+    watched.mkdir()
+    _make_pdf(watched / "doc.pdf")
+
+    with get_session(schema_engine) as session:
+        session.add(WatchedFolder(path=str(watched.resolve()), pages_per_block=None, active=True))
+        session.commit()
+
+    # A pasta já estava no conjunto anterior → diff vazio → nada é enfileirado.
+    asyncio.run(_scan_new_active_folders(schema_engine, {watched.resolve()}, {watched.resolve()}))
+
+    assert _count_jobs(schema_engine) == 0
+
+
+def test_scan_new_active_folder_is_idempotent(
+    schema_engine: Engine, data_dir: Path, fast_stabilization: None, tmp_path: Path
+) -> None:
+    """Varrer a mesma pasta nova duas vezes não duplica enfileiramento (dedup gate)."""
+    watched = tmp_path / "hot"
+    watched.mkdir()
+    _make_pdf(watched / "doc.pdf")
+
+    with get_session(schema_engine) as session:
+        session.add(WatchedFolder(path=str(watched.resolve()), pages_per_block=None, active=True))
+        session.commit()
+
+    asyncio.run(_scan_new_active_folders(schema_engine, {watched.resolve()}, set()))
+    asyncio.run(_scan_new_active_folders(schema_engine, {watched.resolve()}, set()))
+
+    assert _count_jobs(schema_engine) == 1
 
 
 def test_run_watcher_and_app_import() -> None:
