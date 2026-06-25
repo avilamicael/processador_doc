@@ -379,7 +379,18 @@ def enqueue_pending_applications(session: Session) -> int:
     doc já aplicado. Rodar 2x não duplica.
 
     Retorna quantos jobs NOVOS foram criados (no-ops não contam).
+
+    GATE do modo de aprovação (Fase 12, D-05): com `approval_mode_enabled` LIGADO,
+    curto-circuitamos no TOPO — NÃO auto-aplicamos nada. Os docs de alta confiança
+    ficam pendentes aguardando aprovação humana via DryRunPage (modo de teste). A
+    trava de confiança (D-04) segue no `classify_stage`, fora deste sweep — docs de
+    baixa confiança continuam indo a EM_REVISAO independentemente do toggle. O gate
+    vive SÓ aqui, NUNCA em `apply_stage` (executor compartilhado com a aprovação
+    manual — gateá-lo quebraria D-06: aprovar = apply).
     """
+    if get_settings().approval_mode_enabled:
+        return 0
+
     threshold = get_settings().review_confidence_threshold
     docs = session.scalars(
         select(Document)
