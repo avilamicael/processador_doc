@@ -17,6 +17,7 @@ import type {
   AutomationCreate,
   AutomationPatch,
   Doc,
+  DocumentAudit,
   DocumentDetail,
   DocumentList,
   DryRunResult,
@@ -77,8 +78,16 @@ export function getDocumentDetail(id: number): Promise<DocumentDetail> {
   return request<DocumentDetail>(`/documents/${id}`)
 }
 
-export function postRescan(): Promise<{ enqueued: number }> {
-  return request<{ enqueued: number }>('/rescan', { method: 'POST' })
+// Auditoria de um documento (origem→destino/status/run_id — item 1, D-02).
+// Read-only; alimenta a UI de "Reverter para a origem" no detalhe.
+export function getDocumentAudit(id: number): Promise<DocumentAudit> {
+  return request<DocumentAudit>(`/documents/${id}/audit`)
+}
+
+// Após D-04, o /rescan também conta quantas duplicatas-de-conteúdo foram puladas
+// na varredura (`skipped_duplicates`) — base do toast pós-"Forçar varredura".
+export function postRescan(): Promise<{ enqueued: number; skipped_duplicates: number }> {
+  return request<{ enqueued: number; skipped_duplicates: number }>('/rescan', { method: 'POST' })
 }
 
 // Remoção em LOTE — remove SÓ o registro do app (Document + cascata + órfãos);

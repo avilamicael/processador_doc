@@ -195,6 +195,25 @@ export interface DocumentDetail {
   classification: Classification | null
 }
 
+// Uma operação aplicada a um documento (origem→destino), lida do AuditLog
+// (GET /documents/{id}/audit — AuditEntryOut do backend, item 1/D-02).
+export interface AuditEntry {
+  id: number
+  action: string // "apply" (move) | "copy"
+  status: string // "done" | "undone" | "undone_from_cas" | "intent"
+  source_path: string | null
+  dest_path: string | null
+  run_id: string | null
+  created_at: string
+}
+
+// Auditoria de um documento (DocumentAuditOut do backend). `can_undo` é true
+// quando existe ao menos uma operação com status "done" (espelha undo_document).
+export interface DocumentAudit {
+  items: AuditEntry[]
+  can_undo: boolean
+}
+
 // --- Automações: MODELO FINAL (forma REAL da API /automations — Fase 6,        ---
 // --- D-23..D-26, TPL-02/AUT-01..AUT-06). VÁRIAS automações nomeadas; cada uma = ---
 // --- CONDIÇÕES (quando rodar, combinadas por E) → AÇÕES (o que fazer: rename/move). ---

@@ -6,7 +6,7 @@
 // a tabela NUNCA piscar/colapsar num spinner em refetch de background.
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getDocuments, getDuplicatesCount, postApprove, postDeleteDocuments, postRescan } from '../lib/api'
+import { getDocuments, getDuplicatesCount, postApprove, postDeleteDocuments, postRescan, postUndo } from '../lib/api'
 
 const POLL_INTERVAL_MS = 4000
 
@@ -52,6 +52,23 @@ export function useApproveDocument() {
     onSuccess: (_d, id) => {
       qc.invalidateQueries({ queryKey: ['documents'] })
       qc.invalidateQueries({ queryKey: ['document-detail', id] })
+    },
+  })
+}
+
+// Item 1/D-01: reverter UM documento à origem (botão "Reverter para a origem"
+// no detalhe). Reusa POST /automations/undo por document_id — o backend restaura
+// do CAS com seu próprio guard (a UI envia só o document_id do doc aberto).
+// Molde: useRescan; invalida a lista, o detalhe e a auditoria do doc no sucesso
+// (o doc reabre CONCLUIDO→PROCESSANDO).
+export function useUndoDocument() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => postUndo({ document_id: id }),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ['documents'] })
+      qc.invalidateQueries({ queryKey: ['document-detail', id] })
+      qc.invalidateQueries({ queryKey: ['document-audit', id] })
     },
   })
 }
