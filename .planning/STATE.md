@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 11 context gathered
-last_updated: "2026-06-25T15:05:07.792Z"
-last_activity: 2026-06-25 -- Phase 11 execution started
+last_updated: "2026-06-25T15:19:50.636Z"
+last_activity: 2026-06-25
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 0
-  percent: 0
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 ## Current Position
 
 Phase: 11 (ux-e-visibilidade-reverter-movidos-dedup-visivel-rotulos-e-f) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 11
-Last activity: 2026-06-25 -- Phase 11 execution started
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-06-25
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -90,6 +90,7 @@ Progress: [█░░░░░░░░░] 13%
 | Phase 09 P01 | 22 | 4 tasks | 6 files |
 | Phase 09 P02 | ~8 min | 2 tasks | 2 files |
 | Phase 10 P01 | 9 | 2 tasks | 2 files |
+| Phase 11 P04 | 12 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -146,6 +147,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [09-01] resolve_dest_folder com 3 ramos (Windows drive/UNC, POSIX /..., relativo+base): absoluto literal sem .resolve() e sem is_relative_to (D-03), anchor nunca sanitizado, segmentos sim (D-08); _is_abs_windows exige DRIVE real para nao confundir /tmp POSIX com Windows. D-05 via _anchor_missing/_plan_anchor_missing checa exists() do anchor ANTES do mkdir no dry-run e apply. D-04 provado por teste de integracao de API. Sem schema.
 - [Phase ?]: [09-02] Engine de filtros inline em _substitute via pipeline split-por-':' + dispatch EXPLICITO (_apply_filter), nunca eval (T-09-05); filtro desconhecido e int() invalido = inerte. padrao= resolvido ANTES de _MissingField (A3): campo ausente + padrao=X usa X. Atalho legado {data:aaaa-mm} preservado (A1). Sanitize DEPOIS dos filtros por segmento (D-08). Sem schema, sem dep nova (so unicodedata stdlib).
 - [Phase ?]: [10-01]: NORMALIZAÇÃO (não N-de-M) torna o ramo texto do matcher tolerante a acento/caixa/quebra/pontuação via _normalize_text simétrica (D-01/D-02); regex INTACTO no haystack lowercase-só (D-03, ReDoS/tetos preservados); palavra trocada não resolvida (D-04); evaluate_groups público reusa _prepare_haystacks do match_templates (D-09, base do preview do Plano 02); zero dependência nova.
+- [Phase ?]: [11-04]: Reverter pela tela chama undo por document_id (UI envia so o id do doc aberto; backend restaura do CAS com guard proprio T-11-08/10); so entradas status=done rendem origem-destino; toast de duplicatas via estado local+timeout (zero npm novo); checkpoint visual Task 3 DEFERIDO p/ teste final combinado.
 
 ### Pending Todos
 
@@ -185,6 +187,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-25T14:40:18.321Z
+Last session: 2026-06-25T15:19:34.588Z
 Stopped at: Phase 11 context gathered
-Resume file: .planning/phases/11-ux-e-visibilidade-reverter-movidos-dedup-visivel-rotulos-e-f/11-CONTEXT.md
+Resume file: None
