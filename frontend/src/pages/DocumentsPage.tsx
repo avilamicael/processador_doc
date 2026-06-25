@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { DocState, Page, StatusFilter } from '../types'
 import { Icon } from '../components/Icon'
 import { StatusPill } from '../components/StatusPill'
-import { useApproveDocument, useDeleteDocuments, useDocuments, useDuplicatesCount, useRescan } from '../hooks/useDocuments'
-import { getDocumentDetail } from '../lib/api'
+import { useApproveDocument, useDeleteDocuments, useDocuments, useDuplicatesCount, useRescan, useUndoDocument } from '../hooks/useDocuments'
+import { getDocumentAudit, getDocumentDetail } from '../lib/api'
 
 interface DocumentsPageProps {
   search: string
@@ -78,6 +78,31 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
   const [openDocId, setOpenDocId] = useState<number | null>(null)
   // Confirmação destrutiva da remoção em lote (só registro — nunca o arquivo).
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // Item 3/D-05: toast efêmero pós-"Forçar varredura" (sem lib de toast — estado
+  // local + timeout). Mostra quantos foram enfileirados e quantos pulados por
+  // duplicata, para o /rescan não "parecer que não fez nada".
+  const [rescanToast, setRescanToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current)
+    }
+  }, [])
+
+  const runRescan = () => {
+    rescan.mutate(undefined, {
+      onSuccess: (r) => {
+        const enq = r.enqueued
+        const dup = r.skipped_duplicates
+        const enqTxt = `${enq} ${enq === 1 ? 'novo enfileirado' : 'novos enfileirados'}`
+        const dupTxt = `${dup} ${dup === 1 ? 'pulado por já existir' : 'pulados por já existirem'}`
+        setRescanToast(`${enqTxt}, ${dupTxt}`)
+        if (toastTimer.current) clearTimeout(toastTimer.current)
+        toastTimer.current = setTimeout(() => setRescanToast(null), 6000)
+      },
+    })
+  }
 
   const confirmRemove = () => {
     deleteDocs.mutate(selected, {
@@ -172,7 +197,7 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
           )}
           <button
             className="btn-primary"
-            onClick={() => rescan.mutate()}
+            onClick={runRescan}
             disabled={rescan.isPending}
             title="Forçar uma varredura das pastas monitoradas agora"
           >
@@ -180,6 +205,26 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
             {rescan.isPending ? 'Varrendo…' : 'Forçar varredura'}
           </button>
         </div>
+
+        {/* Toast efêmero pós-varredura (D-05) — mensagem neutra no estilo do chip
+            de footer (var(--text-3)); valor TEXTO PURO, some sozinho após ~6s. */}
+        {rescanToast && (
+          <div
+            role="status"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              fontSize: 13,
+              color: 'var(--text-3)',
+              borderBottom: '1px solid var(--border)',
+            }}
+          >
+            <Icon name="check" size={14} stroke="var(--text-3)" />
+            <span>{rescanToast}</span>
+          </div>
+        )}
 
         {/* table */}
         <div className="table-scroll">
@@ -411,9 +456,35 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
     queryFn: () => getDocumentDetail(docId),
   })
 
+  // Item 1/D-02: operações aplicadas (origem→destino) lidas do AuditLog. Alimenta
+  // a seção "Operações aplicadas" e o botão "Reverter para a origem" (can_undo).
+  const auditQuery = useQuery({
+    queryKey: ['document-audit', docId],
+    queryFn: () => getDocumentAudit(docId),
+  })
+  const undo = useUndoDocument()
+  // Confirmação destrutiva antes de reverter (molde do confirmDelete da lista).
+  const [confirmUndo, setConfirmUndo] = useState(false)
+
   const detail = detailQuery.data
   const cls = detail?.classification ?? null
   const isQuarantine = cls != null && cls.template_id == null
+
+  const audit = auditQuery.data
+  // Apenas as operações de fato materializadas (origem→destino reais).
+  const doneOps = audit?.items.filter((it) => it.status === 'done') ?? []
+  const canUndo = audit?.can_undo ?? false
+
+  const doUndo = () => {
+    undo.mutate(docId, {
+      onSuccess: () => {
+        setConfirmUndo(false)
+        // O doc reabre (CONCLUIDO→PROCESSANDO); as queries do detalhe/audit/lista
+        // são invalidadas no hook. Fecha o modal para refletir o novo estado.
+        onClose()
+      },
+    })
+  }
 
   return (
     <div
@@ -553,6 +624,75 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Item 1/D-01: Operações aplicadas (origem→destino) + Reverter para a
+            origem. Só aparece quando há operações materializadas para este doc.
+            Os caminhos vêm do AuditLog persistido (não de input) e são renderizados
+            como TEXTO PURO em cell-mono. O Reverter chama undo por document_id — o
+            backend restaura do CAS com seu próprio guard. */}
+        {doneOps.length > 0 && (
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>
+              Operações aplicadas
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {doneOps.map((op) => (
+                <div key={op.id} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                    {op.action === 'copy' ? 'Cópia' : 'Movido'}
+                  </span>
+                  <span className="cell-mono" style={{ fontSize: 12.5 }}>
+                    {op.source_path ?? '—'}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>→</span>
+                  <span className="cell-mono" style={{ fontSize: 12.5 }}>
+                    {op.dest_path ?? '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {canUndo &&
+              (confirmUndo ? (
+                <div
+                  className="card"
+                  style={{ marginTop: 14, padding: 14, background: 'var(--surface-3)' }}
+                >
+                  <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 12px' }}>
+                    Reverter para a origem? O arquivo volta para a pasta original (restaurado do
+                    armazenamento interno) e o documento reabre para reprocessamento.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button
+                      className="btn-ghost"
+                      onClick={() => setConfirmUndo(false)}
+                      disabled={undo.isPending}
+                    >
+                      Cancelar
+                    </button>
+                    <button className="btn-primary" onClick={doUndo} disabled={undo.isPending}>
+                      {undo.isPending ? 'Revertendo…' : 'Confirmar reversão'}
+                    </button>
+                  </div>
+                  {undo.isError && (
+                    <p style={{ fontSize: 12.5, color: 'var(--st-erro)', margin: '10px 0 0' }}>
+                      Não foi possível reverter. Tente novamente.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <button
+                  className="btn-primary"
+                  style={{ marginTop: 14 }}
+                  onClick={() => setConfirmUndo(true)}
+                  title="Desfazer as operações deste documento e devolver o arquivo à origem"
+                >
+                  <Icon name="refresh" size={15} />
+                  Reverter para a origem
+                </button>
+              ))}
           </div>
         )}
       </div>
