@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 12 (robustez-de-ingestao-e-modo-de-aprovacao) — EXECUTING
 Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-06-26 - Completed gate fixes (quick 260626-g4g/gfr/g6x) for phases 10/12
+Last activity: 2026-06-26 - Refatoração de copy do frontend (linguagem leiga + genérica): ~120 strings, 3 clusters
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
