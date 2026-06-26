@@ -21,7 +21,7 @@ with warnings.catch_warnings():
     from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models.audit_log import AuditLog
+from app.models.audit_log import SPLIT_MATERIALIZE_DETAILS_PREFIX, AuditLog
 from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
 from app.models.enums import DocState
@@ -868,3 +868,56 @@ def test_audit_empty_when_no_operations(
     body = resp.json()
     assert body["items"] == []
     assert body["can_undo"] is False
+
+
+def test_audit_excludes_split_materialize_rows(
+    client: TestClient, schema_engine: Engine
+) -> None:
+    """Registros de materialização de split (details com prefixo) NÃO aparecem.
+
+    Espelha o filtro de `stage._has_done`: a tela "Operações aplicadas" deve mostrar
+    SÓ automações reais (details NULL). A linha "Movido" espúria (origem=destino) que
+    a materialização de split grava some sozinha — `can_undo` reflete só as reais.
+    """
+    with get_session(schema_engine) as session:
+        doc = Document(content_hash="d" * 64, original_filename="lote.pdf")
+        session.add(doc)
+        session.flush()
+        # (1) Registro de split — origem=destino, details com o prefixo: linha espúria.
+        session.add(
+            AuditLog(
+                document_id=doc.id,
+                action="apply",
+                status="done",
+                source_path="/in/lote.pdf",
+                dest_path="/in/lote.pdf",
+                details=f"{SPLIT_MATERIALIZE_DETAILS_PREFIX}lote_p1.pdf,lote_p2.pdf",
+                content_hash="d" * 64,
+            )
+        )
+        # (2) Automação real — details NULL, origem≠destino, com run_id.
+        session.add(
+            AuditLog(
+                document_id=doc.id,
+                action="apply",
+                status="done",
+                source_path="/in/lote.pdf",
+                dest_path="/out/2026/lote.pdf",
+                run_id="run-split",
+                content_hash="d" * 64,
+            )
+        )
+        session.commit()
+        doc_id = doc.id
+
+    resp = client.get(f"/documents/{doc_id}/audit")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # Só a automação real volta; a linha de split foi excluída.
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["source_path"] == "/in/lote.pdf"
+    assert item["dest_path"] == "/out/2026/lote.pdf"
+    assert item["run_id"] == "run-split"
+    # can_undo reflete só a automação real (a linha de split não conta).
+    assert body["can_undo"] is True

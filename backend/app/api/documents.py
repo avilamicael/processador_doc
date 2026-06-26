@@ -33,12 +33,12 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.classification.confidence import compute_confidence
 from app.ingest.watcher import active_folder_paths, scan_and_enqueue
-from app.models.audit_log import AuditLog
+from app.models.audit_log import SPLIT_MATERIALIZE_DETAILS_PREFIX, AuditLog
 from app.models.classification import ClassificationResult, FilledField
 from app.models.document import Document
 from app.models.enums import DocState
@@ -716,6 +716,12 @@ def get_document_audit(request: Request, document_id: int) -> DocumentAuditOut:
     filtrado por `document_id` (tipado `int`, sem string-building de SQL); NÃO
     dispara undo nem escreve, e só retorna colunas já persistidas no audit (não
     constrói paths a partir de input). NÃO loga valores (docstring do módulo).
+
+    Os registros de materialização de split (`details` começando com
+    `SPLIT_MATERIALIZE_DETAILS_PREFIX`) são EXCLUÍDOS — mesmo filtro de
+    `stage._has_done` —, para a tela "Operações aplicadas" não exibir a linha
+    "Movido" espúria (origem=destino) de documentos vindos de pasta com split.
+    Automações reais (details NULL) permanecem; `can_undo` reflete só elas.
     """
     engine = request.app.state.engine
     with get_session(engine) as session:
@@ -727,7 +733,13 @@ def get_document_audit(request: Request, document_id: int) -> DocumentAuditOut:
             )
         rows = session.scalars(
             select(AuditLog)
-            .where(AuditLog.document_id == document_id)
+            .where(
+                AuditLog.document_id == document_id,
+                or_(
+                    AuditLog.details.is_(None),
+                    ~AuditLog.details.startswith(SPLIT_MATERIALIZE_DETAILS_PREFIX),
+                ),
+            )
             .order_by(AuditLog.id.desc())
         ).all()
         items = [
