@@ -571,12 +571,12 @@ export function AutomationsPage() {
     })()
     for (const c of d.conds) {
       if (c.field === 'template' && !c.value.trim()) {
-        return 'Na condição "Tipo de documento", escolha um template.'
+        return 'Na condição "Tipo de documento", escolha um tipo de documento.'
       }
       // D-08: a condição "Valor de campo" exige um template determinável — sem ele
       // não há dropdown de campos e a comparação seria às cegas. Bloqueia salvar.
       if (c.field === 'field' && !draftTemplate) {
-        return 'Na condição "Valor de campo", escolha um template na condição "Tipo de documento" para comparar um campo.'
+        return 'Na condição "Valor de campo", escolha um tipo de documento na condição "Tipo de documento" para comparar um campo.'
       }
       if (c.field === 'field' && !c.field_name.trim()) {
         return 'Na condição "Valor de campo", informe qual campo comparar.'
@@ -699,8 +699,8 @@ export function AutomationsPage() {
             fontStyle: 'italic',
           }}
         >
-          Adicione a condição <b>«Tipo de documento»</b> para usar os campos do template
-          como tokens.
+          Adicione a condição <b>«Tipo de documento»</b> para usar os campos desse tipo de
+          documento.
         </div>
       )
     }
@@ -715,13 +715,13 @@ export function AutomationsPage() {
         }}
       >
         <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginBottom: 8 }}>
-          Campos do template <b style={{ color: 'var(--accent)' }}>{activeTemplate.name}</b> —
+          Campos do tipo de documento <b style={{ color: 'var(--accent)' }}>{activeTemplate.name}</b> —
           clique para inserir:
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {activeTemplate.fields.length === 0 && (
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-              Esse template ainda não tem campos.
+              Esse tipo de documento ainda não tem campos.
             </span>
           )}
           {activeTemplate.fields.map((f) => (
@@ -846,7 +846,7 @@ export function AutomationsPage() {
             <select
               className="select"
               style={{ width: 168, height: 34 }}
-              aria-label="Qual campo extraído comparar"
+              aria-label="Qual campo comparar"
               value={c.field_name}
               onChange={(e) => patchCond(c.key, { field_name: e.target.value })}
             >
@@ -875,7 +875,7 @@ export function AutomationsPage() {
                 fontStyle: 'italic',
               }}
             >
-              Escolha um template na condição «Tipo de documento» para comparar um campo.
+              Escolha um tipo de documento na condição «Tipo de documento» para comparar um campo.
             </span>
           ))}
         <select
@@ -897,7 +897,7 @@ export function AutomationsPage() {
             value={c.value}
             onChange={(e) => patchCond(c.key, { value: e.target.value })}
           >
-            <option value="">Escolha um template…</option>
+            <option value="">Escolha um tipo de documento…</option>
             {templates.map((t) => (
               <option key={t.id} value={String(t.id)}>
                 {t.name}
@@ -1049,7 +1049,7 @@ export function AutomationsPage() {
         <input
           className="cell-mono"
           style={{ ...monoInpStyle, width: '100%', height: 36 }}
-          placeholder={isRn ? '{cliente}_{numero}' : 'Documentos/{cliente}/{data}/'}
+          placeholder={isRn ? '{Cliente}_{Data}' : 'Documentos/{Cliente}/{Data}/'}
           value={a.pattern}
           onChange={(e) => patchAct(a.key, { pattern: e.target.value })}
           onBlur={isRn ? undefined : (e) => patchAct(a.key, { pattern: stripQuotes(e.target.value) })}
@@ -1059,27 +1059,27 @@ export function AutomationsPage() {
         {isRn ? (
           <div style={hintStyle}>
             <code>{'{campo}'}</code> é trocado pelo <b>valor lido do documento</b> (os campos
-            vêm do template da condição "Tipo de documento"). A <b>extensão do arquivo é
-            mantida automaticamente</b> — não precisa digitar <code>.pdf</code>; só inclua uma
-            extensão no padrão se quiser <b>trocá-la</b> (ex.: <code>{'{cliente}_{numero}.pdf'}</code>).
+            vêm do tipo de documento da condição "Tipo de documento"). A <b>extensão do arquivo
+            é mantida automaticamente</b> — não precisa digitar <code>.pdf</code>; só inclua uma
+            extensão no padrão se quiser <b>trocá-la</b> (ex.: <code>{'{Cliente}_{Data}.pdf'}</code>).
             <br />
-            Exemplo: <code>{'{Nome_Emitente}_{Numero_NF}'}</code> vira{' '}
+            Exemplo: <code>{'{Cliente}_{Data}'}</code> vira{' '}
             <span className="cell-mono" style={{ color: 'var(--st-tratado)' }}>
-              IGUACU DIST_000.001.137.pdf
+              Maria Souza_2026-01-15.pdf
             </span>
             . A <b>Prévia</b> acima mostra exatamente como vai ficar com os seus campos.
             <br />
-            Dá para transformar o valor com <b>filtros</b>:{' '}
-            <code>{'{fornecedor:maiusc:palavras=2}'}</code>, <code>{'{cliente:sem_acento}'}</code>,{' '}
-            <code>{'{data:formato=aaaa-mm-dd}'}</code>.
+            Dá para transformar o valor com <b>ajustes do texto</b>:{' '}
+            <code>{'{Cliente:maiusc:palavras=2}'}</code>, <code>{'{Cliente:sem_acento}'}</code>,{' '}
+            <code>{'{Data:formato=aaaa-mm-dd}'}</code>.
           </div>
         ) : (
           <div style={hintStyle}>
-            Cole o caminho como vier do Windows — <code>"C:\Users\…\Análise"</code> ou{' '}
-            <code>C:\Users\…\Análise</code>: as aspas são removidas ao sair do campo. Caminhos
+            Cole o caminho como vier do Windows — <code>"C:\Documentos\Clientes"</code> ou{' '}
+            <code>C:\Documentos\Clientes</code>: as aspas são removidas ao sair do campo. Caminhos
             absolutos (<code>C:\…</code>, <code>\\servidor\…</code>) vão exatamente para onde
-            você indicar. Use <b>filtros</b> nos campos, ex.:{' '}
-            <code>{'C:\\NOTAS\\{fornecedor:maiusc:palavras=1}'}</code>.
+            você indicar. Use <b>ajustes do texto</b> nos campos, ex.:{' '}
+            <code>{'C:\\Documentos\\{Cliente:maiusc:palavras=1}'}</code>.
           </div>
         )}
         {a.action_type === 'copy' && (
@@ -1098,9 +1098,9 @@ export function AutomationsPage() {
         <div className="sec-head-col">
           <h2 className="sec-title">Automações</h2>
           <p className="sec-desc">
-            Quando um documento bate nas <b>condições</b>, a automação executa suas{' '}
+            Quando um documento atende às <b>condições</b>, a automação executa suas{' '}
             <b>ações</b> (renomear/mover), na ordem definida. As automações são avaliadas de
-            cima para baixo — a primeira cujas condições casam vence.
+            cima para baixo — vale a primeira cujas condições forem atendidas.
           </p>
         </div>
       </div>
@@ -1119,9 +1119,9 @@ export function AutomationsPage() {
       {/* Erro */}
       {isError && (
         <div className="card" style={{ padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Não foi possível carregar.</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Não foi possível carregar as automações.</div>
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 16px' }}>
-            Verifique se o servidor está rodando e tente de novo.
+            Verifique se o aplicativo está aberto e tente de novo.
           </p>
           <button className="btn-primary" onClick={() => autosQuery.refetch()}>
             <Icon name="refresh" size={15} />
@@ -1309,7 +1309,7 @@ export function AutomationsPage() {
                     Condições
                   </div>
                   <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
-                    O documento precisa atender a TODAS as condições (E) para esta automação rodar.
+                    O documento precisa atender a TODAS as condições para esta automação rodar.
                   </p>
                   {selected.conds.map((c, i) => renderCond(c, i))}
                   <button

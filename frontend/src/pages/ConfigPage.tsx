@@ -167,8 +167,8 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
         <div className="sec-head-col">
           <h2 className="sec-title">Pastas monitoradas</h2>
           <p className="sec-desc">
-            O watcher varre estas pastas em busca de novos documentos e os envia para a fila de
-            processamento conforme a regra de separação definida por pasta.
+            O monitoramento procura novos documentos nestas pastas e os envia para a fila
+            conforme a regra de separação definida por pasta.
           </p>
         </div>
         <button className="btn-primary" onClick={openAdd}>
@@ -225,13 +225,13 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
                 <Switch
                   on={form.splitToFiles}
                   onToggle={() => setForm({ ...form, splitToFiles: !form.splitToFiles })}
-                  title="Separar fisicamente o PDF em arquivos na pasta"
+                  title="Separar o PDF em arquivos na pasta"
                 />
-                Separar fisicamente o PDF em arquivos na pasta
+                Separar o PDF em arquivos na pasta
               </span>
               <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
                 Quando ligado, ao chegar um PDF a separação acontece NA PRÓPRIA PASTA: o PDF é
-                dividido em arquivos (substituindo o original) antes do processamento. O arquivo
+                dividido em vários arquivos (no lugar do original) antes da leitura. O arquivo
                 original continua recuperável — nada é perdido. Depende de "Separar a cada N
                 páginas" estar configurado.
               </span>
@@ -266,12 +266,12 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
                 background: watcher ? 'var(--st-tratado)' : 'var(--text-3)',
               }}
             />
-            <span style={{ fontSize: 13, fontWeight: 600 }}>Watcher global</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Monitoramento geral</span>
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
               monitora as pastas ativas continuamente
             </span>
           </div>
-          <Switch on={watcher} onToggle={onToggleWatcher} title="Ativar/desativar watcher" />
+          <Switch on={watcher} onToggle={onToggleWatcher} title="Ativar/desativar monitoramento" />
         </div>
 
         {foldersQuery.isLoading && (
@@ -283,7 +283,7 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
         {foldersQuery.isError && (
           <div style={{ padding: '24px 18px' }}>
             <p style={{ fontSize: 13, margin: '0 0 12px' }}>
-              Não foi possível carregar as pastas. Verifique se o serviço está em execução.
+              Não foi possível carregar as pastas. Verifique se o aplicativo está aberto e tente de novo.
             </p>
             <button className="btn-primary" onClick={() => foldersQuery.refetch()}>
               <Icon name="refresh" size={15} />
@@ -296,7 +296,7 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
           <div style={{ padding: '48px 24px', textAlign: 'center' }}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Nenhuma pasta monitorada</div>
             <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-              Adicione uma pasta para o sistema começar a ingerir documentos automaticamente.
+              Adicione uma pasta para o sistema começar a receber documentos automaticamente.
             </p>
           </div>
         )}
@@ -356,7 +356,7 @@ function PastasTab({ watcher, onToggleWatcher }: { watcher: boolean; onToggleWat
             </h3>
             <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 18px' }}>
               Remover <b style={{ fontFamily: 'var(--font-mono)' }}>{confirmRemove.path}</b> do
-              monitoramento? Os documentos já ingeridos permanecem; apenas o monitoramento desta
+              monitoramento? Os documentos já recebidos permanecem; apenas o monitoramento desta
               pasta para.
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -437,15 +437,15 @@ function LeituraTab({ deskew, denoise }: ConfigPageProps) {
   const mutedRow: CSSProperties = { opacity: 0.5 }
   return (
     <div className="read-card">
-      <h2 className="sec-title">Leitura e extração de dados</h2>
+      <h2 className="sec-title">Leitura dos dados</h2>
       <div className="card" style={{ overflow: 'hidden' }}>
         <div className="read-row" style={mutedRow}>
           <div>
             <div className="read-label">
-              Motor de OCR
+              Leitura de imagem
               <SoonTag />
             </div>
-            <div className="read-hint">Engine usado quando o PDF não possui texto nativo</div>
+            <div className="read-hint">Usada quando o PDF é uma imagem (foto ou escaneado), sem texto.</div>
           </div>
           <select className="select" defaultValue="Tesseract 5" disabled title="em breve">
             <option>Tesseract 5</option>
@@ -486,10 +486,10 @@ function LeituraTab({ deskew, denoise }: ConfigPageProps) {
         <div className="read-row" style={mutedRow}>
           <div>
             <div className="read-label">
-              Corrigir inclinação (deskew)
+              Corrigir inclinação
               <SoonTag />
             </div>
-            <div className="read-hint">Endireita páginas digitalizadas antes do OCR</div>
+            <div className="read-hint">Endireita páginas escaneadas antes da leitura.</div>
           </div>
           <span style={{ pointerEvents: 'none' }}>
             <Switch on={deskew} onToggle={() => {}} title="em breve" />
@@ -556,9 +556,9 @@ function ApprovalModeField() {
           </span>
           <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
             Quando ligado, as automações ficam pendentes na Pré-visualização para você
-            aprovar ou negar — nada é movido sozinho. Quando desligado, documentos de alta
-            confiança são aplicados automaticamente (a trava de confiança continua valendo).
-            Padrão: desligado.
+            aprovar ou negar — nada é movido sozinho. Quando desligado, documentos lidos com
+            bastante certeza são aplicados automaticamente (o nível mínimo de certeza continua
+            valendo). Padrão: desligado.
           </span>
         </div>
         {!approvalQuery.isLoading && !approvalQuery.isError && (
@@ -581,7 +581,7 @@ function ApprovalModeField() {
       {approvalQuery.isError && (
         <div style={{ marginTop: 10 }}>
           <p style={{ fontSize: 13, margin: '0 0 12px' }}>
-            Não foi possível carregar a configuração. Verifique se o serviço está em execução.
+            Não foi possível carregar a configuração. Verifique se o aplicativo está aberto e tente de novo.
           </p>
           <button className="btn-primary" onClick={() => approvalQuery.refetch()}>
             <Icon name="refresh" size={15} />
@@ -626,11 +626,11 @@ function AiFallbackField() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>
-            IA classifica quando nenhum template casa
+            Usar IA quando nenhum tipo reconhecer
           </span>
           <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-            Quando ligado, cada documento que nenhum template reconhecer gera 1 chamada de IA
-            (custo por token). Padrão: desligado.
+            Quando ligado, cada documento que nenhum tipo reconhecer gera 1 consulta à IA
+            (custo por uso). Padrão: desligado.
           </span>
         </div>
         {!fallbackQuery.isLoading && !fallbackQuery.isError && (
@@ -638,7 +638,7 @@ function AiFallbackField() {
             <Switch
               on={enabled}
               onToggle={toggle}
-              title="IA classifica quando nenhum template casa"
+              title="Usar IA quando nenhum tipo reconhecer"
             />
           </span>
         )}
@@ -653,7 +653,7 @@ function AiFallbackField() {
       {fallbackQuery.isError && (
         <div style={{ marginTop: 10 }}>
           <p style={{ fontSize: 13, margin: '0 0 12px' }}>
-            Não foi possível carregar a configuração. Verifique se o serviço está em execução.
+            Não foi possível carregar a configuração. Verifique se o aplicativo está aberto e tente de novo.
           </p>
           <button className="btn-primary" onClick={() => fallbackQuery.refetch()}>
             <Icon name="refresh" size={15} />
@@ -695,7 +695,7 @@ function ReviewThresholdField() {
     }
     saveThreshold.mutate(parsed / 100, {
       onError: () =>
-        setSaveError('Não foi possível salvar o limiar. Tente novamente.'),
+        setSaveError('Não foi possível salvar o nível mínimo de certeza. Tente novamente.'),
     })
   }
 
@@ -703,22 +703,22 @@ function ReviewThresholdField() {
     <div className="card" style={{ padding: 18, marginTop: 16 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>
-          Limiar de confiança
+          Nível mínimo de certeza
         </span>
         <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-          Documentos com confiança abaixo deste valor, ou com qualquer campo obrigatório
-          inválido, vão para revisão.
+          Documentos lidos com certeza abaixo deste valor, ou com algum campo obrigatório
+          inválido, vão para sua conferência.
         </span>
       </div>
 
       {thresholdQuery.isLoading && (
-        <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Carregando limiar…</div>
+        <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Carregando o nível mínimo de certeza…</div>
       )}
 
       {thresholdQuery.isError && (
         <div>
           <p style={{ fontSize: 13, margin: '0 0 12px' }}>
-            Não foi possível carregar o limiar. Verifique se o serviço está em execução.
+            Não foi possível carregar o nível mínimo de certeza. Verifique se o aplicativo está aberto e tente de novo.
           </p>
           <button className="btn-primary" onClick={() => thresholdQuery.refetch()}>
             <Icon name="refresh" size={15} />
@@ -738,12 +738,12 @@ function ReviewThresholdField() {
               style={{ width: 120 }}
               value={pct}
               onChange={(e) => setPct(e.target.value)}
-              aria-label="Limiar de confiança em porcentagem"
+              aria-label="Nível mínimo de certeza em porcentagem"
             />
             <span style={{ fontSize: 13, color: 'var(--text-2)' }}>%</span>
           </div>
           <button className="btn-primary" onClick={submit} disabled={saveThreshold.isPending}>
-            {saveThreshold.isPending ? 'Salvando…' : 'Salvar limiar'}
+            {saveThreshold.isPending ? 'Salvando…' : 'Salvar'}
           </button>
         </div>
       )}
