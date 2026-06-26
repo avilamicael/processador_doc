@@ -190,8 +190,17 @@ def _condition_matches(cond: dict, haystack_norm: str, haystack_lower: str) -> b
 
     # "texto" e desconhecidos: substring sobre o haystack NORMALIZADO (simetria D-02).
     needle = _normalize_text(value)
-    if not needle:
-        return False
+    # WR-04: needle normalizado curto demais (<3 chars) NÃO é um sinal significativo —
+    # a normalização colapsa símbolos ("R$"→"r", "Nº"→"no") e o resultado passaria a
+    # casar QUALQUER haystack que contenha aquela letra/sílaba solta ("r" em "carro",
+    # "no" em "norte"): over-match silencioso (misclassificação). Para esses needles
+    # curtos, casamos o RAW casefolded contra o `haystack_lower` (lowercase-só, já
+    # recebido): só casa quando o símbolo realmente aparece no documento. value vazio
+    # → raw "" → fail-closed (não casa). Needle normal (>=3) mantém TODA a tolerância
+    # de acento/caixa/quebra/pontuação do ramo normalizado.
+    if len(needle) < 3:
+        raw = value.casefold().strip()
+        return bool(raw) and raw in haystack_lower
     return needle in haystack_norm
 
 
