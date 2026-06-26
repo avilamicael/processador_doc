@@ -272,6 +272,27 @@ def get_settings() -> Settings:
     return Settings()
 
 
+def read_approval_mode_fresh() -> bool:
+    """Lê `approval_mode_enabled` FRESCO da fonte (.env/env), bypassando o lru_cache.
+
+    Constrói um `Settings()` novo a cada chamada — relê o `.env` e as variáveis de
+    ambiente com a mesma semântica de pydantic-settings — e devolve só o booleano do
+    toggle. NÃO toca em `get_settings` nem no seu cache.
+
+    Porquê (WR-01): o gate do modo de aprovação precisa enxergar o valor ATUAL do
+    toggle mesmo quando o `get_settings()` deste processo já cacheou o valor antigo.
+    Em modo servidor/arq o worker roda em OUTRO processo: o `get_settings.cache_clear()`
+    que o endpoint PUT /config/approval-mode dispara roda no processo da API e NUNCA
+    chega ao worker — que ficaria lendo o valor velho até reiniciar. Escolhemos o
+    acessor de leitura fresca (Settings() novo) em vez de chamar `get_settings.cache_clear()`
+    no loop do worker porque ele é LOCAL ao ponto de gate, sem efeito colateral global
+    (não invalida o cache compartilhado por outros consumidores de get_settings), e
+    funciona igual em modo in-process e em modo servidor/arq. Custo desprezível: os
+    gates rodam só em sweeps ociosos e em jobs de apply, não no hot loop.
+    """
+    return Settings().approval_mode_enabled
+
+
 def env_file_path() -> Path:
     """Caminho do arquivo `.env` que o `Settings` lê (SettingsConfigDict.env_file).
 

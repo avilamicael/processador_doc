@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.automation.stage import APPLY_STEP, apply_stage, reconcile_orphans
 from app.classification.stage import CLASSIFIED_STEP, classify_stage
-from app.config import get_settings
+from app.config import get_settings, read_approval_mode_fresh
 from app.extraction.stage import EXTRACTED_STEP, extract_stage
 from app.models.audit_log import SPLIT_MATERIALIZE_DETAILS_PREFIX, AuditLog
 from app.models.classification import ClassificationResult
@@ -387,8 +387,14 @@ def enqueue_pending_applications(session: Session) -> int:
     baixa confiança continuam indo a EM_REVISAO independentemente do toggle. O gate
     vive SÓ aqui, NUNCA em `apply_stage` (executor compartilhado com a aprovação
     manual — gateá-lo quebraria D-06: aprovar = apply).
+
+    LEITURA FRESCA (WR-01): o gate lê o toggle via `read_approval_mode_fresh()` (não
+    `get_settings()`) porque em modo servidor/arq o worker roda em OUTRO processo — o
+    `get_settings.cache_clear()` do endpoint PUT /config/approval-mode roda no processo
+    da API e NUNCA chega aqui, deixando o cache do worker preso no valor velho até
+    reiniciar. A leitura fresca relê a fonte a cada sweep, sem efeito colateral global.
     """
-    if get_settings().approval_mode_enabled:
+    if read_approval_mode_fresh():
         return 0
 
     threshold = get_settings().review_confidence_threshold
