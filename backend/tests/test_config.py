@@ -8,7 +8,8 @@ e a garantia de que a chave OpenAI nunca aparece em repr/str.
 import os
 from pathlib import Path
 
-from app.config import Settings, ensure_data_dir
+from app import config
+from app.config import Settings, ensure_data_dir, read_approval_mode_fresh
 
 
 def _make_settings(**overrides) -> Settings:
@@ -120,6 +121,39 @@ def test_stabilization_window_overridden_by_env(monkeypatch):
     monkeypatch.setenv("STABILIZATION_WINDOW_SECONDS", "12.5")
     settings = _make_settings()
     assert settings.stabilization_window_seconds == 12.5
+
+
+def test_read_approval_mode_fresh_bypassa_lru_cache(monkeypatch, tmp_path):
+    """read_approval_mode_fresh enxerga o env novo SEM cache_clear (WR-01).
+
+    Regressão do worker em processo separado (modo servidor/arq): o
+    `get_settings.cache_clear()` do request da API NÃO cruza o limite de processo,
+    então o `lru_cache` do worker prende o valor velho até reiniciar. A leitura
+    fresca relê a fonte (.env/env) a cada chamada, sem efeito colateral global —
+    NÃO invalida o cache compartilhado por outros consumidores de get_settings.
+    """
+    # Isola o toggle: `.env` temporário + sem APPROVAL_MODE_ENABLED no ambiente,
+    # para o default-OFF não ser poluído por um `.env` real do CWD.
+    env = tmp_path / ".env"
+    monkeypatch.setattr(config, "env_file_path", lambda: env)
+    monkeypatch.setitem(config.Settings.model_config, "env_file", str(env))
+    monkeypatch.delenv("APPROVAL_MODE_ENABLED", raising=False)
+    config.get_settings.cache_clear()
+
+    # OFF: get_settings() cacheia False; a leitura fresca também vê False.
+    assert config.get_settings().approval_mode_enabled is False
+    assert read_approval_mode_fresh() is False
+
+    # Liga o toggle no env SEM novo cache_clear (simula o flip num processo que não
+    # invalida o cache deste processo).
+    monkeypatch.setenv("APPROVAL_MODE_ENABLED", "true")
+
+    # get_settings() ainda devolve o cache VELHO (False)...
+    assert config.get_settings().approval_mode_enabled is False
+    # ...mas a leitura fresca enxerga o valor NOVO (True).
+    assert read_approval_mode_fresh() is True
+
+    config.get_settings.cache_clear()
 
 
 def test_queue_tunables_have_sensible_defaults(monkeypatch):

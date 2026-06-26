@@ -115,6 +115,33 @@ def test_on_nao_auto_aplica_nada(
         assert _apply_jobs(s) == set()
 
 
+def test_gate_do_sweep_le_o_toggle_fresco(
+    schema_engine: Engine, isolated_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O gate do sweep enxerga o toggle novo SEM cache_clear (WR-01).
+
+    Em modo servidor/arq o worker roda em OUTRO processo: o `cache_clear()` que o
+    endpoint PUT /config/approval-mode dispara roda no processo da API e NÃO chega
+    ao worker, que ficaria lendo o valor velho até reiniciar. Prendemos o cache de
+    get_settings em False (chamando get_settings() ANTES do flip) e ligamos o env
+    SEM novo cache_clear: o sweep deve enxergar ON (fresco) e retornar 0.
+    """
+    # Prende o cache de get_settings em OFF.
+    assert config.get_settings().approval_mode_enabled is False
+    # Liga o env SEM cache_clear (o flip não cruza ao processo do worker).
+    monkeypatch.setenv("APPROVAL_MODE_ENABLED", "true")
+
+    with get_session(schema_engine) as s:
+        _seed_classified(s, HASH_HIGH, score=0.95)
+
+    with get_session(schema_engine) as s:
+        created = worker.enqueue_pending_applications(s)
+
+    assert created == 0
+    with get_session(schema_engine) as s:
+        assert _apply_jobs(s) == set()
+
+
 def test_trava_de_confianca_intacta_em_ambos_os_modos(
     schema_engine: Engine, isolated_env: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.automation.stage import APPLY_STEP, apply_stage, reconcile_orphans
 from app.classification.stage import CLASSIFIED_STEP, classify_stage
-from app.config import get_settings
+from app.config import get_settings, read_approval_mode_fresh
 from app.extraction.stage import EXTRACTED_STEP, extract_stage
 from app.models.audit_log import SPLIT_MATERIALIZE_DETAILS_PREFIX, AuditLog
 from app.models.classification import ClassificationResult
@@ -188,6 +188,23 @@ async def _dispatch(engine: Engine, *, step: str, original_hash: str, payload: s
         # IO síncrono mas roda dentro do stage; não há event loop na thread). O
         # `run_id` do lote (apply por-run, D-03) viaja no payload; ausente = None.
         run_id = json.loads(payload).get("run_id")
+        # GATE de auto-apply EM VOO (Fase 12, WR-03 / A): o gate do sweep
+        # (`enqueue_pending_applications`) só decide se ENFILEIRA novos jobs — um job
+        # de auto-apply JÁ enfileirado (payload SEM `run_id`) escaparia dele se o
+        # usuário ligasse o modo de aprovação DEPOIS do enfileiramento. Aqui, ANTES
+        # de tocar o disco, suprimimos esse caso: sem `run_id` (= auto-apply) E modo
+        # de aprovação LIGADO (lido FRESCO, WR-01 — vale no worker em processo
+        # separado) → no-op concluído (return sem exceção → `_run_once` faz
+        # `mark_done`; sem mover, sem retry, T-g6x-03). Jobs COM `run_id` (aprovação
+        # manual) caem direto no `apply_stage` — SEMPRE aplicam (D-06: aprovar =
+        # apply). Log só metadados (nunca conteúdo/campo, V7/V8). NÃO gateamos dentro
+        # de `apply_stage` (executor compartilhado com a aprovação manual, D-06).
+        if run_id is None and read_approval_mode_fresh():
+            logger.info(
+                "Auto-apply em voo suprimido pelo modo de aprovação (hash=%s, sem run_id)",
+                original_hash,
+            )
+            return
         with get_session(engine) as session:
             await apply_stage(
                 session, content_hash=original_hash, run_id=run_id
@@ -387,8 +404,14 @@ def enqueue_pending_applications(session: Session) -> int:
     baixa confiança continuam indo a EM_REVISAO independentemente do toggle. O gate
     vive SÓ aqui, NUNCA em `apply_stage` (executor compartilhado com a aprovação
     manual — gateá-lo quebraria D-06: aprovar = apply).
+
+    LEITURA FRESCA (WR-01): o gate lê o toggle via `read_approval_mode_fresh()` (não
+    `get_settings()`) porque em modo servidor/arq o worker roda em OUTRO processo — o
+    `get_settings.cache_clear()` do endpoint PUT /config/approval-mode roda no processo
+    da API e NUNCA chega aqui, deixando o cache do worker preso no valor velho até
+    reiniciar. A leitura fresca relê a fonte a cada sweep, sem efeito colateral global.
     """
-    if get_settings().approval_mode_enabled:
+    if read_approval_mode_fresh():
         return 0
 
     threshold = get_settings().review_confidence_threshold
