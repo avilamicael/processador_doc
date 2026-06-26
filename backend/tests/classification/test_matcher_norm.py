@@ -95,6 +95,54 @@ def test_d04_palavra_trocada_nao_casa() -> None:
     assert _confidence(tpl, "campo natureza de operacao preenchido") == 0.0
 
 
+# --- WR-04: needle simbólico curto não over-matcha por letra/sílaba solta ---
+# A normalização colapsa "R$"→"r" e "Nº"→"no" (símbolos viram pontuação→espaço ou
+# expandem via NFKD). Um needle normalizado curto demais (<3) deixaria de ser um
+# sinal significativo e passaria a casar QUALQUER haystack que contenha aquela
+# letra/sílaba solta ("r" em "carro", "no" em "norte") — over-match silencioso
+# (misclassificação). Para esses needles curtos, casamos o RAW casefolded contra o
+# haystack lowercase-só: só casa quando o símbolo realmente aparece no documento.
+
+
+def test_wr04_rs_nao_casa_letra_solta() -> None:
+    # "R$" normaliza para "r"; NÃO pode casar haystack só por causa de um "r" solto.
+    tpl = _tpl(1, signals=[[{"mode": "texto", "value": "R$"}]])
+    assert _confidence(tpl, "tenho um carro rural antigo") == 0.0
+
+
+def test_wr04_no_ordinal_nao_casa_silaba_solta() -> None:
+    # "Nº" normaliza para "no" (NFKD expande º→o); NÃO pode casar por "no"/"norte".
+    tpl = _tpl(2, signals=[[{"mode": "texto", "value": "Nº"}]])
+    assert _confidence(tpl, "documento no campo norte") == 0.0
+
+
+def test_wr04_rs_casa_quando_simbolo_raw_presente() -> None:
+    # Prova que o fallback RAW funciona (não é só negar): "R$" casa quando o símbolo
+    # de fato aparece no documento.
+    tpl = _tpl(1, signals=[[{"mode": "texto", "value": "R$"}]])
+    assert _confidence(tpl, "valor total R$ 1.234,00 pago") == 1.0
+
+
+def test_wr04_no_ordinal_casa_quando_raw_presente() -> None:
+    # "Nº" casa quando o ordinal raw "nº" aparece literalmente no documento.
+    tpl = _tpl(2, signals=[[{"mode": "texto", "value": "Nº"}]])
+    assert _confidence(tpl, "Nota fiscal Nº 4567 emitida") == 1.0
+
+
+def test_wr04_needle_normal_preserva_tolerancia() -> None:
+    # Needle normal (len normalizado >= 3) mantém TODA a tolerância de caixa/acento.
+    tpl_nf = _tpl(1, signals=[[{"mode": "texto", "value": "nota fiscal"}]])
+    assert _confidence(tpl_nf, "ISTO E UMA NOTÁ FISCÁL") == 1.0
+    tpl_danfe = _tpl(2, signals=[[{"mode": "texto", "value": "DANFE"}]])
+    assert _confidence(tpl_danfe, "documento danfe emitido") == 1.0
+
+
+def test_wr04_value_vazio_fail_closed() -> None:
+    # value vazio não casa nada (fail-closed), no caminho raw curto.
+    tpl = _tpl(1, signals=[[{"mode": "texto", "value": ""}]])
+    assert _confidence(tpl, "qualquer texto aqui") == 0.0
+
+
 # --- D-03: regex intacto (haystack lowercase-só, NÃO normalizado) ---
 
 

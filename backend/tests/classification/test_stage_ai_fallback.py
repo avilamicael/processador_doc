@@ -354,6 +354,122 @@ async def test_on_forced_template_nao_dispara_fallback(
         assert cr is not None and cr.template_id == tpl_id
 
 
+async def test_on_ambiguo_ia_recusa_nao_paga_duas_vezes(
+    schema_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-01: 2 templates AMBÍGUOS + IA de desempate recusa (null) → paga 1x, não 2x.
+
+    Os 2 templates casam AMBOS o mesmo full_text (confiança 1.0/1.0 → decide
+    'ambiguous'). O desempate (D-01) é PAGO 1x e a IA devolve matched_template_id=None
+    (recusa). Sem a guarda `not called_ai` no gate do fallback, o doc não-casado
+    re-dispararia a IA (call_count==2). COM a guarda: o fallback NÃO re-dispara após
+    um desempate ambíguo recusado → call_count==1; o doc vai para QUARENTENA.
+    """
+    _set_fallback(monkeypatch, enabled=True)
+    with respx.mock(base_url="https://api.openai.com/v1", assert_all_called=False) as router:
+        with get_session(schema_engine) as s:
+            _template(
+                s,
+                name="Boleto A",
+                doc_type="boleto",
+                signals=["documento comum"],
+                fields=[("valor", "moeda", True)],
+            )
+            _template(
+                s,
+                name="Boleto B",
+                doc_type="boleto",
+                signals=["documento comum"],
+                fields=[("valor", "moeda", True)],
+            )
+            doc = _seed_doc(
+                s,
+                content_hash="6" * 64,
+                fields_json=_pairs_json([("algo", "x")]),
+                full_text="este e um documento comum para ambos os templates",
+            )
+            doc_id = doc.id
+
+        structured = {
+            "matched_template_id": None,
+            "confidence": 0.0,
+            "reason": "A IA não conseguiu desempatar entre os candidatos.",
+        }
+        route = router.post("/responses").mock(
+            return_value=HxResponse(200, json=_envelope(structured, "resp_ambig_null"))
+        )
+
+        with get_session(schema_engine) as s:
+            result = await classify_stage(s, content_hash="6" * 64)
+
+        assert result.matched is False
+        assert result.template_id is None
+        assert result.called_ai is True
+        # desempate pago 1x; o fallback NÃO re-dispara após recusa ambígua (WR-01)
+        assert route.call_count == 1
+
+    with get_session(schema_engine) as s:
+        reloaded = s.get(Document, doc_id)
+        assert reloaded.state == DocState.QUARENTENA
+        cr = s.scalar(
+            select(ClassificationResult).where(
+                ClassificationResult.document_id == doc_id
+            )
+        )
+        assert cr is not None and cr.template_id is None
+        # exatamente 1 Usage (o desempate pago), nunca 2
+        n_usage = s.scalar(
+            select(func.count())
+            .select_from(Usage)
+            .where(Usage.document_id == doc_id, Usage.step == USAGE_STEP)
+        )
+        assert n_usage == 1
+
+
+async def test_on_sem_templates_nao_paga_ia(
+    schema_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-03: nenhum template cadastrado + fallback ON → 0 chamadas pagas; quarentena.
+
+    Sem templates não há nada que a IA possa casar — chamar `disambiguate` contra uma
+    lista vazia só queima token e retorna null. A guarda `templates` (lista vazia =
+    falsy) impede a chamada: call_count==0, doc em QUARENTENA, sem Usage.
+    """
+    _set_fallback(monkeypatch, enabled=True)
+    with respx.mock(base_url="https://api.openai.com/v1", assert_all_called=False) as router:
+        route = router.post("/responses")
+        with get_session(schema_engine) as s:
+            doc = _seed_doc(
+                s,
+                content_hash="7" * 64,
+                fields_json=_pairs_json([("algo", "x")]),
+                full_text="documento qualquer sem nenhum template cadastrado",
+            )
+            doc_id = doc.id
+
+        with get_session(schema_engine) as s:
+            result = await classify_stage(s, content_hash="7" * 64)
+
+        assert result.matched is False
+        assert result.template_id is None
+        assert result.called_ai is False
+        assert route.call_count == 0  # sem templates → nada paga (WR-03)
+
+    with get_session(schema_engine) as s:
+        reloaded = s.get(Document, doc_id)
+        assert reloaded.state == DocState.QUARENTENA
+        cr = s.scalar(
+            select(ClassificationResult).where(
+                ClassificationResult.document_id == doc_id
+            )
+        )
+        assert cr is not None and cr.template_id is None
+        n_usage = s.scalar(
+            select(func.count()).select_from(Usage).where(Usage.document_id == doc_id)
+        )
+        assert n_usage == 0
+
+
 async def test_on_matcher_casou_comportamento_inalterado(
     schema_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
