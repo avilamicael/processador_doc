@@ -33,7 +33,7 @@ function isClassifiedReady(state: DocState, lastCompletedStep?: string | null): 
 // terminal da Fase 2; aqui o card agrega por estado de domínio (processando).
 const STAT_CARDS: { key: DocState; label: string; sub: string }[] = [
   { key: 'recebido', label: 'Na fila', sub: 'aguardando processamento' },
-  { key: 'processando', label: 'Processando', sub: 'ingestão / separação' },
+  { key: 'processando', label: 'Processando', sub: 'recebendo / separando' },
   { key: 'concluido', label: 'Concluídos', sub: 'prontos / arquivados' },
   { key: 'falha', label: 'Falhas', sub: 'requerem atenção' },
 ]
@@ -96,7 +96,7 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
       onSuccess: (r) => {
         const enq = r.enqueued
         const dup = r.skipped_duplicates
-        const enqTxt = `${enq} ${enq === 1 ? 'novo enfileirado' : 'novos enfileirados'}`
+        const enqTxt = `${enq} ${enq === 1 ? 'novo recebido' : 'novos recebidos'}`
         const dupTxt = `${dup} ${dup === 1 ? 'pulado por já existir' : 'pulados por já existirem'}`
         setRescanToast(`${enqTxt}, ${dupTxt}`)
         if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -200,10 +200,10 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
             className="btn-primary"
             onClick={runRescan}
             disabled={rescan.isPending}
-            title="Forçar uma varredura das pastas monitoradas agora"
+            title="Procurar novos arquivos nas pastas monitoradas agora"
           >
             <Icon name="refresh" size={15} />
-            {rescan.isPending ? 'Varrendo…' : 'Forçar varredura'}
+            {rescan.isPending ? 'Procurando…' : 'Procurar novos arquivos'}
           </button>
         </div>
 
@@ -273,7 +273,7 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
                         Não foi possível carregar os documentos.
                       </div>
                       <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 16px' }}>
-                        Verifique se o serviço está em execução e tente novamente.
+                        Verifique se o aplicativo está aberto e tente de novo.
                       </p>
                       <button className="btn-primary" onClick={() => docsQuery.refetch()}>
                         <Icon name="refresh" size={15} />
@@ -319,7 +319,7 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
                         <button
                           className="file-cell"
                           onClick={() => setOpenDocId(d.id)}
-                          aria-label={`Ver classificação de ${d.original_filename}`}
+                          aria-label={`Ver identificação de ${d.original_filename}`}
                           style={{
                             background: 'transparent',
                             border: 0,
@@ -388,9 +388,9 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
             <span
               className="foot-text"
               style={{ color: 'var(--text-3)' }}
-              title="Arquivos com conteúdo idêntico a documentos já ingeridos não são reprocessados."
+              title="Arquivos iguais a um já recebido não são processados de novo."
             >
-              {dupCount} {dupCount === 1 ? 'duplicado ignorado' : 'duplicados ignorados'}
+              {dupCount} {dupCount === 1 ? 'arquivo repetido ignorado' : 'arquivos repetidos ignorados'}
             </span>
           )}
         </div>
@@ -423,7 +423,7 @@ export function DocumentsPage({ search, status, onStatus, selected, onToggleSel,
             <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 18px' }}>
               Isto remove apenas o registro no aplicativo — os arquivos originais{' '}
               <b>NÃO são apagados nem movidos</b>. Se um arquivo ainda estiver numa pasta
-              monitorada, ele pode ser reprocessado numa próxima varredura.
+              monitorada, ele pode ser recebido de novo numa próxima verificação.
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
@@ -510,7 +510,7 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
         <div className="sec-head" style={{ marginBottom: 14 }}>
           <div className="sec-head-col">
             <h3 className="sec-title" style={{ fontSize: 15 }}>
-              Classificação
+              Identificação do documento
             </h3>
             {detail && (
               <p className="sec-desc" style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>
@@ -525,14 +525,14 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
 
         {detailQuery.isLoading && (
           <div style={{ padding: '24px 0', fontSize: 13, color: 'var(--text-3)' }}>
-            Carregando classificação…
+            Carregando identificação…
           </div>
         )}
 
         {detailQuery.isError && (
           <div style={{ padding: '24px 0' }}>
             <p style={{ fontSize: 13, margin: '0 0 12px' }}>
-              Não foi possível carregar a classificação. Verifique se o serviço está em execução.
+              Não foi possível carregar a identificação. Verifique se o aplicativo está aberto e tente de novo.
             </p>
             <button className="btn-primary" onClick={() => detailQuery.refetch()}>
               <Icon name="refresh" size={15} />
@@ -544,10 +544,10 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
         {detail && cls == null && (
           <div style={{ padding: '24px 0', textAlign: 'center' }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
-              Aguardando classificação
+              Aguardando identificação
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-              Este documento ainda não foi classificado.
+              Este documento ainda não foi identificado.
             </p>
           </div>
         )}
@@ -557,7 +557,7 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
             {/* Badge do template casado OU pílula de quarentena */}
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
-                Template
+                Tipo de documento
               </div>
               {isQuarantine ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -566,11 +566,11 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
                     style={{ color: 'var(--st-leitura)', background: 'var(--st-leitura-bg)' }}
                   >
                     <span className="pill-dot" style={{ background: 'var(--st-leitura)' }} />
-                    Quarentena
+                    Não identificado
                   </span>
                   <span style={{ fontSize: 13, color: 'var(--text-3)' }}>
-                    Nenhum template casou com este documento. Ele fica em quarentena e nunca é
-                    descartado.
+                    Nenhum tipo de documento reconheceu este arquivo. Ele fica separado para você
+                    conferir — e nunca é apagado.
                   </span>
                 </div>
               ) : (
@@ -584,7 +584,7 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
                 <div
                   style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}
                 >
-                  Campos extraídos
+                  Dados lidos
                 </div>
                 <div className="card" style={{ overflow: 'hidden' }}>
                   <div className="table-scroll">
@@ -593,8 +593,8 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
                         <tr>
                           <th>Campo</th>
                           <th>Valor</th>
-                          <th>Normalizado</th>
-                          <th>Marca</th>
+                          <th>Valor padronizado</th>
+                          <th>Situação</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -638,7 +638,7 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
         {doneOps.length > 0 && (
           <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>
-              Operações aplicadas
+              O que foi feito com o arquivo
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {doneOps.map((op) => (
@@ -664,8 +664,8 @@ function DocumentDetailModal({ docId, onClose }: { docId: number; onClose: () =>
                   style={{ marginTop: 14, padding: 14, background: 'var(--surface-3)' }}
                 >
                   <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 12px' }}>
-                    Reverter para a origem? O arquivo volta para a pasta original (restaurado do
-                    armazenamento interno) e o documento reabre para reprocessamento.
+                    Reverter para a origem? O arquivo volta para a pasta original (restaurado de uma
+                    cópia preservada pelo sistema) e o documento é aberto de novo.
                   </p>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button

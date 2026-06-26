@@ -30,7 +30,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: 'PROCESSAMENTO',
     items: [
-      { page: 'templates', label: 'Templates', icon: 'grid' },
+      { page: 'templates', label: 'Tipos de documento', icon: 'grid' },
       { page: 'automacoes', label: 'Automações', icon: 'bolt' },
       { page: 'dryrun', label: 'Pré-visualização', icon: 'eye' },
     ],
@@ -55,7 +55,7 @@ export function Sidebar({ page, onNavigate }: SidebarProps) {
     sub = '—'
   } else if (status) {
     const n = status.active_folder_count
-    sub = `${n} ${n === 1 ? 'pasta' : 'pastas'} · varredura ${relativeScan(status.last_scan_at)}`
+    sub = `${n} ${n === 1 ? 'pasta' : 'pastas'} · última verificação ${relativeScan(status.last_scan_at)}`
   } else {
     sub = '—'
   }
@@ -98,7 +98,7 @@ export function Sidebar({ page, onNavigate }: SidebarProps) {
             style={{ background: active ? 'var(--st-tratado)' : 'var(--text-3)' }}
           />
           <div style={{ lineHeight: 1.25 }}>
-            <div className="watcher-title">{active ? 'Watcher ativo' : 'Watcher inativo'}</div>
+            <div className="watcher-title">{active ? 'Monitoramento ativo' : 'Monitoramento inativo'}</div>
             <div className="watcher-sub">{sub}</div>
           </div>
         </div>

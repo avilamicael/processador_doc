@@ -25,14 +25,14 @@ type BucketKey = 'falha' | 'quarentena' | 'em_revisao'
 
 const BUCKETS: { key: BucketKey; label: string; sub: string; token: 'erro' | 'leitura' | 'quarentena' }[] = [
   { key: 'falha', label: 'Falhas', sub: 'erro no processamento', token: 'erro' },
-  { key: 'quarentena', label: 'Quarentena', sub: 'nenhum template casou', token: 'quarentena' },
-  { key: 'em_revisao', label: 'Em revisão', sub: 'confiança baixa ou campo inválido', token: 'leitura' },
+  { key: 'quarentena', label: 'Não identificados', sub: 'nenhum tipo reconheceu o arquivo', token: 'quarentena' },
+  { key: 'em_revisao', label: 'Aguardando conferência', sub: 'pouca certeza ou dado a conferir', token: 'leitura' },
 ]
 
 const EMPTY_BY_BUCKET: Record<BucketKey, string> = {
   falha: 'Nenhuma falha pendente.',
-  quarentena: 'Nada em quarentena.',
-  em_revisao: 'Nada aguardando revisão.',
+  quarentena: 'Nada para identificar.',
+  em_revisao: 'Nada aguardando conferência.',
 }
 
 export function AttentionPage() {
@@ -115,7 +115,7 @@ export function AttentionPage() {
                 Não foi possível carregar os documentos.
               </div>
               <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 16px' }}>
-                Verifique se o serviço está em execução e tente novamente.
+                Verifique se o aplicativo está aberto e tente de novo.
               </p>
               <button className="btn-primary" onClick={() => query.refetch()}>
                 <Icon name="refresh" size={15} />
@@ -136,8 +136,8 @@ export function AttentionPage() {
                   marginInline: 'auto',
                 }}
               >
-                Nenhum documento precisa de atenção agora. Documentos com falha, em quarentena ou
-                com baixa confiança aparecem aqui automaticamente.
+                Nenhum documento precisa de atenção agora. Documentos com falha, não identificados ou
+                com pouca certeza na leitura aparecem aqui automaticamente.
               </p>
             </div>
           )}
@@ -198,7 +198,7 @@ function BucketView({
 // templates ATUAIS para o balde inteiro (D-12). Confirmação simples antes do lote.
 function ReprocessBucketBar({ bucket }: { bucket: 'quarentena' | 'em_revisao' }) {
   const reprocess = useReprocessBucket()
-  const label = bucket === 'quarentena' ? 'a quarentena' : 'a revisão'
+  const label = bucket === 'quarentena' ? 'os não identificados' : 'os que aguardam conferência'
   return (
     <div
       style={{
@@ -210,7 +210,7 @@ function ReprocessBucketBar({ bucket }: { bucket: 'quarentena' | 'em_revisao' })
       }}
     >
       <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-        Editou os templates? Reprocesse {label} para reaplicar a classificação.
+        Mudou os tipos de documento? Tente identificar de novo {label} para aplicar as mudanças.
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
         <button
@@ -219,15 +219,15 @@ function ReprocessBucketBar({ bucket }: { bucket: 'quarentena' | 'em_revisao' })
           onClick={() => {
             const message =
               bucket === 'em_revisao'
-                ? 'Reprocessar toda a revisão vai re-rodar a classificação e DESCARTAR as correções manuais dos documentos. Continuar?'
-                : `Reprocessar todos os documentos d${label}?`
+                ? 'Isto vai ler e identificar todos os documentos de novo e DESCARTAR as correções que você fez à mão. Continuar?'
+                : `Tentar identificar de novo ${label}?`
             if (window.confirm(message)) {
               reprocess.mutate(bucket)
             }
           }}
         >
           <Icon name="refresh" size={15} />
-          {reprocess.isPending ? 'Reprocessando…' : 'Reprocessar todos'}
+          {reprocess.isPending ? 'Processando…' : 'Tentar identificar de novo'}
         </button>
         <ActionError show={reprocess.isError} />
       </div>
@@ -312,24 +312,24 @@ function QuarantineRow({ item }: { item: AttentionItem }) {
           className="btn-ghost"
           disabled={reprocess.isPending}
           onClick={() => {
-            if (window.confirm('Reprocessar este documento?')) {
+            if (window.confirm('Tentar identificar este documento de novo?')) {
               reprocess.mutate(item.id)
             }
           }}
         >
           <Icon name="refresh" size={15} />
-          {reprocess.isPending ? 'Reprocessando…' : 'Reprocessar'}
+          {reprocess.isPending ? 'Processando…' : 'Tentar de novo'}
         </button>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>
-            Atribuir template
+            Escolher o tipo manualmente
           </span>
           <select
             className="select"
             value={templateId}
             onChange={(e) => setTemplateId(e.target.value === '' ? '' : Number(e.target.value))}
           >
-            <option value="">Escolha um template…</option>
+            <option value="">Escolha um tipo…</option>
             {templates.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
@@ -345,7 +345,7 @@ function QuarantineRow({ item }: { item: AttentionItem }) {
           }
         >
           <Icon name="refresh" size={15} />
-          {reclassify.isPending ? 'Reclassificando…' : 'Reclassificar'}
+          {reclassify.isPending ? 'Aplicando…' : 'Aplicar tipo'}
         </button>
       </div>
       <ActionError show={reclassify.isError || reprocess.isError} />
@@ -366,14 +366,14 @@ function ReviewRow({ item }: { item: ReviewItem }) {
   return (
     <ItemCard filename={item.original_filename}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>Confiança</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>Certeza da leitura</span>
         <ConfidenceBadge score={item.confidence_score} />
       </div>
 
       {item.fields.length > 0 && (
         <div className="card" style={{ overflow: 'hidden', marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', padding: '10px 14px 0' }}>
-            Campos extraídos
+            Dados lidos
           </div>
           <div className="table-scroll">
             <table className="docs" style={{ minWidth: 0 }}>
@@ -381,8 +381,8 @@ function ReviewRow({ item }: { item: ReviewItem }) {
                 <tr>
                   <th>Campo</th>
                   <th>Valor</th>
-                  <th>Normalizado</th>
-                  <th>Marca</th>
+                  <th>Valor padronizado</th>
+                  <th>Situação</th>
                 </tr>
               </thead>
               <tbody>
@@ -408,15 +408,15 @@ function ReviewRow({ item }: { item: ReviewItem }) {
             disabled={reprocess.isPending}
             onClick={() => {
               const message = hasCorrections
-                ? 'Reprocessar vai re-rodar a classificação e DESCARTAR as correções manuais feitas neste documento. Continuar?'
-                : 'Reprocessar vai re-rodar a classificação deste documento. Continuar?'
+                ? 'Isto vai ler e identificar o documento de novo e DESCARTAR as correções que você fez à mão. Continuar?'
+                : 'Isto vai ler e identificar o documento de novo. Continuar?'
               if (window.confirm(message)) {
                 reprocess.mutate(item.id)
               }
             }}
           >
             <Icon name="refresh" size={15} />
-            {reprocess.isPending ? 'Reprocessando…' : 'Reprocessar'}
+            {reprocess.isPending ? 'Processando…' : 'Tentar de novo'}
           </button>
           <button
             className="btn-primary"

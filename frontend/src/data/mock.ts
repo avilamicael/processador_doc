@@ -7,10 +7,10 @@
 import type { Integration, Rule } from '../types'
 
 export const RULES: Rule[] = [
-  { id: 1, name: 'Por marcador QR Code', param: 'SEP-DOC', desc: 'Divide o lote sempre que detecta um QR Code de separação na página.' },
+  { id: 1, name: 'Por marcador QR Code', param: 'SEP-DOC', desc: 'Cria um novo documento sempre que encontra um QR Code de separação na página.' },
   { id: 2, name: 'Por número de páginas', param: 'a cada 1 pág.', desc: 'Cria um novo documento a cada N páginas do PDF de origem.' },
-  { id: 3, name: 'Por texto âncora', param: '“NOTA FISCAL”', desc: 'Inicia um novo documento ao encontrar um texto-chave no topo da página.' },
-  { id: 4, name: 'Por página em branco', param: 'sens. 98%', desc: 'Usa páginas em branco como separadores entre documentos.' },
+  { id: 3, name: 'Por palavra-chave', param: '“CONTRATO”', desc: 'Inicia um novo documento ao encontrar uma palavra-chave no topo da página.' },
+  { id: 4, name: 'Por página em branco', param: 'sensibilidade 98%', desc: 'Usa páginas em branco como separadores entre documentos.' },
 ]
 
 export const INTEGRATIONS: Integration[] = [

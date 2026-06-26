@@ -13,13 +13,13 @@ import { DryRunPage } from './pages/DryRunPage'
 type Theme = 'light' | 'dark'
 
 const PAGE_META: Record<Page, [title: string, desc: string]> = {
-  documentos: ['Documentos', 'Arquivos encontrados e tratados pelo watcher'],
+  documentos: ['Documentos', 'Arquivos recebidos e organizados pelo monitoramento de pastas'],
   atencao: [
     'Precisam de atenção',
-    'Documentos que pararam por falha, quarentena ou baixa confiança',
+    'Documentos que pararam por falha, por não terem sido identificados ou por pouca certeza na leitura',
   ],
-  templates: ['Templates', 'Modelos de extração de dados por tipo de documento'],
-  automacoes: ['Automações', 'Ações executadas após o tratamento dos documentos'],
+  templates: ['Tipos de documento', 'Defina como reconhecer cada tipo e quais dados ler'],
+  automacoes: ['Automações', 'Ações aplicadas aos arquivos depois de identificados'],
   dryrun: ['Pré-visualização das automações', 'Confira origem → destino antes de aplicar'],
   config: ['Configurações', 'Pastas monitoradas, regras, leitura e integrações'],
 }
