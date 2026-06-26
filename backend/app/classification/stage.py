@@ -261,10 +261,21 @@ async def classify_stage(
     # (ramo `else` acima já os definiu). Pitfall 5: o `Usage` da tentativa é SEMPRE
     # registrado (a chamada foi paga), mesmo quando a IA não casa — o bloco de
     # quarentena (6) persiste `usages` junto, e o caminho de casamento (9) também.
+    #
+    # DUAS GUARDAS de custo (code-review Fase 10):
+    # - `not called_ai` (WR-01): se o ramo "ambiguous" (5) JÁ pagou um desempate e a IA
+    #   recusou (matched_template_id segue None), NÃO re-disparar a IA aqui — seria a 2ª
+    #   chamada PAGA para o mesmo doc. Um desempate ambíguo recusado vai direto para
+    #   quarentena com o Usage já registrado.
+    # - `templates` (WR-03): sem nenhum template cadastrado (lista vazia = falsy) não há
+    #   nada que a IA possa casar — `disambiguate` contra lista vazia só queima token e
+    #   retorna null. O gate exige a lista NÃO-vazia para que a tentativa paga faça sentido.
     if (
         matched_template_id is None
         and settings.classify_ai_fallback_enabled
         and forced_template_id is None
+        and not called_ai
+        and templates
     ):
         result, usage = await openai_client.disambiguate(
             _candidates_summary(templates),
