@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 12 (robustez-de-ingestao-e-modo-de-aprovacao) — EXECUTING
 Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-06-26 - Completed quick task 260626-fot: fix audit split-materialize noise
+Last activity: 2026-06-26 - Completed quick task 260626-g4g: phase-10 classification fixes (WR-01/03/04)
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -178,6 +178,7 @@ None yet.
 | 260624-far | Ajustes UI/UX + backend: remover documento(s) na aba Documentos (POST /documents/delete em lote, só registro — NUNCA toca no arquivo; anti-órfão de dedup remove IngestedOriginal/Jobs quando sobra sem blocos); status real do watcher na Sidebar (GET /watcher/status: ativo, nº pastas, última varredura); desabilitar busca+sino no Header; desabilitar abas Regras/Integrações e controles mock da Leitura (mantendo Limiar funcional). 431 testes verdes, build frontend verde | 2026-06-24 | 7081b0c | [260624-far-ajustes-ui-remover-documentos-desabilita](./quick/260624-far-ajustes-ui-remover-documentos-desabilita/) |
 | fast | Integrações: remove SharePoint/ERP Omie, tira o aviso "em breve" e neutraliza as tags (badge cinza "Indisponível") | 2026-06-24 | e9fa026 | — |
 | 260626-fot | Achado cosmético: endpoint GET /documents/{id}/audit excluía mal os AuditLog de materialização de split → "Operações aplicadas" mostrava linha "Movido" espúria (origem=destino). Fix aplica o mesmo filtro de stage._has_done (or_(details IS NULL, NOT startswith split_to_files:)); can_undo passa a refletir só automações reais. Teste de regressão; 35 testes verdes | 2026-06-26 | 0a2ec3b | [260626-fot-fix-audit-split-materialize](./quick/260626-fot-fix-audit-split-materialize/) |
+| 260626-g4g | Code-review Phase 10 (motor de classificação): WR-01 gate do IA-fallback não paga 2x em doc ambíguo-recusado (and not called_ai); WR-03 não chama IA sem templates (and templates); WR-04 needle de texto curto (norm len<3) casa RAW casefolded p/ não over-matchar ("R$"→"r", "Nº"→"no"). TDD; +8 testes; 523 backend verdes | 2026-06-26 | 8d438ab | [260626-g4g-fix-classificacao-fase-10-custo-ia-e-nor](./quick/260626-g4g-fix-classificacao-fase-10-custo-ia-e-nor/) |
 
 ## Deferred Items
 
