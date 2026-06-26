@@ -56,7 +56,7 @@ function SituationBadge({ row }: { row: DryRunRow }) {
         style={{ color: 'var(--st-leitura)', background: 'var(--st-leitura-bg)' }}
         title="Já existe um arquivo diferente com esse nome — será salvo com sufixo (ex.: nome_1)."
       >
-        Renomeado p/ evitar colisão
+        Renomeado para não repetir o nome
       </span>
     )
   }
@@ -75,7 +75,7 @@ function SituationBadge({ row }: { row: DryRunRow }) {
     <span
       className="badge"
       style={{ color: 'var(--st-tratado)', background: 'var(--st-tratado-bg)' }}
-      title="O documento está pronto para ser movido/renomeado conforme o pipeline."
+      title="O documento está pronto para ser movido/renomeado conforme as automações."
     >
       Pronto
     </span>
@@ -238,7 +238,7 @@ export function DryRunPage() {
           </div>
           <div className="card stat-card">
             <div className="stat-head">
-              <span className="stat-label">Duplicatas puladas</span>
+              <span className="stat-label">Arquivos repetidos pulados</span>
               <span className="stat-dot" style={{ background: 'var(--st-encontrado)' }} />
             </div>
             <div className="stat-num">{skippedCount}</div>
@@ -252,7 +252,7 @@ export function DryRunPage() {
           </div>
           <div className="card stat-card">
             <div className="stat-head">
-              <span className="stat-label">Bloqueados → revisão</span>
+              <span className="stat-label">Faltando dados → revisão</span>
               <span className="stat-dot" style={{ background: 'var(--st-erro)' }} />
             </div>
             <div className="stat-num">{blockedCount}</div>
@@ -327,10 +327,10 @@ export function DryRunPage() {
                   <td colSpan={BODY_COLS}>
                     <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
-                        Não foi possível carregar.
+                        Não foi possível carregar a pré-visualização.
                       </div>
                       <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 16px' }}>
-                        Verifique se o servidor está rodando e tente de novo.
+                        Verifique se o aplicativo está aberto e tente de novo.
                       </p>
                       <button className="btn-primary" onClick={loadPreview}>
                         <Icon name="refresh" size={15} />
@@ -349,8 +349,8 @@ export function DryRunPage() {
                         Nenhum documento pronto para automação
                       </div>
                       <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, maxWidth: 480, marginInline: 'auto' }}>
-                        Documentos de alta confiança são aplicados automaticamente; os demais
-                        aguardam revisão.
+                        Documentos lidos com bastante certeza são aplicados automaticamente; os
+                        demais aguardam sua conferência.
                       </p>
                     </div>
                   </td>
@@ -431,13 +431,13 @@ export function DryRunPage() {
           {undoRunId && (
             <>
               <span className="foot-text" style={{ color: 'var(--text-3)' }}>
-                Último lote aplicado pode ser revertido.
+                A última aplicação pode ser desfeita.
               </span>
               <div className="spacer" />
               <button
                 className="row-action"
-                aria-label="Desfazer aplicação do último lote"
-                title="Desfazer aplicação do último lote"
+                aria-label="Desfazer a última aplicação"
+                title="Desfazer a última aplicação"
                 onClick={() => {
                   setUndoResult(null)
                   setConfirmOpen(true)
@@ -475,7 +475,7 @@ export function DryRunPage() {
               </p>
             ) : (
               <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 18px' }}>
-                Os arquivos movidos deste lote voltam ao local de origem (se o destino tiver
+                Os arquivos movidos nesta aplicação voltam ao local de origem (se o destino tiver
                 sumido, restauramos a cópia íntegra preservada pelo sistema). As cópias criadas
                 são apagadas do destino — o original nunca é tocado. Nenhum arquivo se perde.
               </p>
