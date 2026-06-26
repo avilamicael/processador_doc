@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 12 (robustez-de-ingestao-e-modo-de-aprovacao) — EXECUTING
 Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-06-25
+Last activity: 2026-06-26 - Completed quick task 260626-fot: fix audit split-materialize noise
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -177,6 +177,7 @@ None yet.
 | 260623-pzy | Separar PDF em arquivos na pasta monitorada (opt-in split_to_files, default OFF): materializa os blocos na pasta substituindo o original ANTES da IA; reversível (CAS+audit), anti-loop (hash no dedup antes de gravar), migração 0009; API+UI toggle; 419 testes verdes | 2026-06-23 | 0b90b8c | [260623-pzy-separar-pdf-em-arquivos-na-pasta-monitor](./quick/260623-pzy-separar-pdf-em-arquivos-na-pasta-monitor/) |
 | 260624-far | Ajustes UI/UX + backend: remover documento(s) na aba Documentos (POST /documents/delete em lote, só registro — NUNCA toca no arquivo; anti-órfão de dedup remove IngestedOriginal/Jobs quando sobra sem blocos); status real do watcher na Sidebar (GET /watcher/status: ativo, nº pastas, última varredura); desabilitar busca+sino no Header; desabilitar abas Regras/Integrações e controles mock da Leitura (mantendo Limiar funcional). 431 testes verdes, build frontend verde | 2026-06-24 | 7081b0c | [260624-far-ajustes-ui-remover-documentos-desabilita](./quick/260624-far-ajustes-ui-remover-documentos-desabilita/) |
 | fast | Integrações: remove SharePoint/ERP Omie, tira o aviso "em breve" e neutraliza as tags (badge cinza "Indisponível") | 2026-06-24 | e9fa026 | — |
+| 260626-fot | Achado cosmético: endpoint GET /documents/{id}/audit excluía mal os AuditLog de materialização de split → "Operações aplicadas" mostrava linha "Movido" espúria (origem=destino). Fix aplica o mesmo filtro de stage._has_done (or_(details IS NULL, NOT startswith split_to_files:)); can_undo passa a refletir só automações reais. Teste de regressão; 35 testes verdes | 2026-06-26 | 0a2ec3b | [260626-fot-fix-audit-split-materialize](./quick/260626-fot-fix-audit-split-materialize/) |
 
 ## Deferred Items
 
