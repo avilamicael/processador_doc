@@ -25,7 +25,7 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
   { value: 'data', label: 'data' },
   { value: 'moeda', label: 'moeda' },
   { value: 'cpf_cnpj', label: 'CPF/CNPJ' },
-  { value: 'booleano', label: 'booleano' },
+  { value: 'booleano', label: 'sim/não' },
 ]
 
 // --- Drafts com chave local p/ React (espelha o padrão FieldDraft & { key }) ---
@@ -191,11 +191,11 @@ export function TemplatesPage() {
     if (!form) return
     const name = form.name.trim()
     if (!name) {
-      setFormError('Informe o nome do template.')
+      setFormError('Informe o nome do tipo.')
       return
     }
     if (form.fields.length === 0) {
-      setFormError('Adicione ao menos um campo ao template.')
+      setFormError('Adicione ao menos um campo ao tipo.')
       return
     }
     if (form.fields.some((f) => !f.name.trim())) {
@@ -223,7 +223,7 @@ export function TemplatesPage() {
     }))
 
     const onError = () =>
-      setFormError('Não foi possível salvar o template. Confira os dados e tente novamente.')
+      setFormError('Não foi possível salvar o tipo. Confira os dados e tente novamente.')
 
     // Payload sem o campo "tipo de documento" (D-T5 — coluna dormente, fora do form).
     if (form.id == null) {
@@ -245,15 +245,15 @@ export function TemplatesPage() {
     <div>
       <div className="sec-head">
         <div className="sec-head-col">
-          <h2 className="sec-title">Templates de documento</h2>
+          <h2 className="sec-title">Tipos de documento</h2>
           <p className="sec-desc">
-            Defina um tipo de documento: como reconhecê-lo (Passo 1, sem IA) e o que extrair
-            (Passo 2, com IA).
+            Defina um tipo de documento: como reconhecê-lo (Passo 1, de graça e sem IA) e
+            quais dados ler dele (Passo 2, com IA).
           </p>
         </div>
         <button className="btn-primary" onClick={openAdd}>
           <Icon name="plus" size={15} />
-          Novo template
+          Novo tipo
         </button>
       </div>
 
@@ -263,19 +263,19 @@ export function TemplatesPage() {
           {/* Nome do template */}
           <div className="tpl-sec">
             <div className="tpl-sec-t">
-              {form.id == null ? 'Nome do template' : 'Editar template'}
+              {form.id == null ? 'Nome do tipo' : 'Editar tipo'}
               <span className="info">
                 i
                 <span className="tip">
-                  Como este tipo aparece no app (ex.: <b>Holerite</b>, <b>Nota Fiscal</b>). É
-                  também o nome que você seleciona nas automações.
+                  Como este tipo aparece no app (ex.: <b>Recibo</b>, <b>Contrato</b>,{' '}
+                  <b>Holerite</b>). É também o nome que você seleciona nas automações.
                 </span>
               </span>
             </div>
             <div style={{ marginTop: 10 }}>
               <input
                 className="tpl-inp"
-                placeholder="ex.: Nota Fiscal, Nota Fiscal — TryLab"
+                placeholder="ex.: Recibo, Contrato — Fornecedor X"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
@@ -285,32 +285,33 @@ export function TemplatesPage() {
           {/* Passo 1 — SINAIS (sem IA) — grupos E/OU (D-T3/D-T4) */}
           <div className="tpl-sec">
             <div className="tpl-sec-t">
-              Como reconhecer este tipo <span className="sec-tag t-noai">sem IA</span>
+              Passo 1 — Como reconhecer este tipo{' '}
+              <span className="sec-tag t-noai">de graça, sem IA</span>
               <span className="info">
                 i
                 <span className="tip">
-                  <b>Passo 1 — sem IA, de graça.</b> O sistema procura estes sinais no texto do
-                  documento. Bateu na lógica abaixo → é deste tipo. Em dúvida → vai para{' '}
-                  <b>revisão humana</b> (nada se perde).
+                  <b>Passo 1 — de graça, sem IA.</b> O sistema procura estas pistas no texto do
+                  documento. Se as pistas baterem, é deste tipo. Em dúvida → vai para a{' '}
+                  <b>sua conferência</b> (nada se perde).
                 </span>
               </span>
             </div>
             <div className="tpl-sec-mini">
-              O documento é deste tipo se bater em <b>qualquer grupo (OU)</b>; dentro do grupo,{' '}
-              <b>todas</b> as condições (E).
+              O documento é deste tipo se aparecer <b>qualquer um dos conjuntos de pistas</b>{' '}
+              abaixo. Dentro de um conjunto, <b>todas</b> as pistas precisam aparecer.
               <span className="info">
                 i
                 <span className="tip">
-                  <b>Cada condição é uma busca no documento:</b>
+                  <b>Cada pista é uma busca no documento:</b>
                   <br />• <b>contém o texto</b> = procura essa palavra/frase <b>dentro do
-                  documento</b> (ex.: <code>DANFE</code>, ou o nome <code>TryLab</code>).
-                  <br />• <b>corresponde ao padrão (regex)</b> = um “molde” para formatos que{' '}
-                  <b>variam</b>. Ex.: <code>\d{'{'}44{'}'}</code> casa qualquer chave de 44
-                  dígitos; você gera o regex onde preferir e <b>cola aqui</b>.
+                  documento</b> (ex.: <code>RECIBO</code>, ou <code>CONTRATO DE PRESTAÇÃO</code>).
+                  <br />• <b>padrão avançado</b> = um “molde” para formatos que <b>variam</b>{' '}
+                  (ex.: <code>\d{'{'}2{'}'}/\d{'{'}4{'}'}</code> para mês/ano). Fica no botão{' '}
+                  <b>Avançado</b> de cada pista.
                   <br />
                   <br />
-                  <b>Dica:</b> um template <b>geral</b> usa âncoras como <code>DANFE</code>; um
-                  template <b>por cliente</b> adiciona o <b>CNPJ ou o nome</b> do cliente.
+                  <b>Dica:</b> um tipo <b>geral</b> usa palavras-chave como <code>RECIBO</code>;
+                  um tipo <b>por cliente</b> adiciona o <b>nome do cliente</b>.
                 </span>
               </span>
             </div>
@@ -318,37 +319,49 @@ export function TemplatesPage() {
             {form.groups.map((g, gi) => (
               <div key={g.key}>
                 <div className="group">
-                  <div className="group-h">Grupo {gi + 1} — todas (E)</div>
+                  <div className="group-h">
+                    Conjunto {gi + 1} — reconhecer se TODAS estas pistas aparecerem
+                  </div>
                   {g.conds.map((c, ci) => {
                     const isRx = c.mode === 'regex'
                     return (
                       <div key={c.key} className="cond">
-                        <span className="cond-and">{ci === 0 ? '' : 'E'}</span>
-                        <select
-                          className="select"
-                          style={{ flex: 'none', width: 235 }}
-                          value={c.mode}
-                          onChange={(e) =>
-                            patchCond(g.key, c.key, { mode: e.target.value as SignalMode })
-                          }
+                        <span className="cond-and">{ci === 0 ? '' : 'e também'}</span>
+                        <span
+                          className="cond-type"
+                          style={{ flex: 'none', width: 130, fontSize: 13, color: 'var(--text-3)' }}
                         >
-                          <option value="texto">contém o texto</option>
-                          <option value="regex">corresponde ao padrão (regex)</option>
-                        </select>
+                          {isRx ? 'padrão avançado' : 'contém o texto'}
+                        </span>
                         <input
                           className={isRx ? 'tpl-inp mono' : 'tpl-inp'}
                           placeholder={
                             isRx
-                              ? 'cole o regex, ex.: \\d{44}'
-                              : 'ex.: NOTA FISCAL ELETRÔNICA, TryLab'
+                              ? 'ex.: \\d{2}/\\d{4} (mês/ano)'
+                              : 'ex.: RECIBO, CONTRATO DE PRESTAÇÃO'
                           }
                           value={c.value}
                           onChange={(e) => patchCond(g.key, c.key, { value: e.target.value })}
                         />
                         <button
+                          className="add-link"
+                          type="button"
+                          style={{ flex: 'none', whiteSpace: 'nowrap' }}
+                          title={
+                            isRx
+                              ? 'Voltar para busca por texto simples'
+                              : 'Avançado: usar um padrão para formatos que variam'
+                          }
+                          onClick={() =>
+                            patchCond(g.key, c.key, { mode: isRx ? 'texto' : 'regex' })
+                          }
+                        >
+                          {isRx ? 'Texto simples' : 'Avançado'}
+                        </button>
+                        <button
                           className="icon-x"
-                          title="Remover condição"
-                          aria-label="Remover condição"
+                          title="Remover pista"
+                          aria-label="Remover pista"
                           onClick={() => removeCond(g.key, c.key)}
                         >
                           ×
@@ -357,7 +370,7 @@ export function TemplatesPage() {
                     )
                   })}
                   <button className="add-link" onClick={() => addCond(g.key)}>
-                    + E — adicionar condição
+                    + Adicionar outra pista
                   </button>
                 </div>
                 {gi < form.groups.length - 1 && <div className="or-div">OU</div>}
@@ -365,7 +378,7 @@ export function TemplatesPage() {
             ))}
             <div style={{ marginTop: 12 }}>
               <button className="add-link" onClick={addGroup}>
-                + OU — adicionar grupo
+                + Adicionar alternativa (outro conjunto de pistas)
               </button>
             </div>
 
@@ -376,17 +389,18 @@ export function TemplatesPage() {
           {/* Passo 2 — CAMPOS (com IA) — linhas densas (D-T7) */}
           <div className="tpl-sec">
             <div className="tpl-sec-t">
-              O que extrair <span className="sec-tag t-ai">com IA</span>
+              Passo 2 — Quais dados ler <span className="sec-tag t-ai">com IA</span>
               <span className="info">
                 i
                 <span className="tip">
                   <b>Passo 2 — com IA.</b> A IA lê o documento inteiro e preenche os campos. O{' '}
-                  <b>nome do campo</b> descreve o dado que você quer (ex.: <b>Emitente</b>,{' '}
-                  <b>Número da NF</b>). Você não diz onde está — a IA acha pelo nome e pela dica.
+                  <b>nome do campo</b> descreve o dado que você quer (ex.: <b>Nome</b>,{' '}
+                  <b>Data</b>, <b>Valor</b>). Você não diz onde está — a IA acha pelo nome e
+                  pela dica.
                 </span>
               </span>
             </div>
-            <div className="tpl-sec-mini">Liste os dados que você quer tirar do documento.</div>
+            <div className="tpl-sec-mini">Liste os dados que você quer ler do documento.</div>
 
             <div className="fhead">
               <div className="h">
@@ -395,11 +409,11 @@ export function TemplatesPage() {
                   i
                   <span className="tip">
                     Dê um nome claro do <b>dado</b>; a IA procura no documento e preenche.
-                    Exemplo (NF da TryLab):
-                    <br />• <b>Emitente</b> → TryLab
-                    <br />• <b>CNPJ do emitente</b> → 12.345.678/0001-99
-                    <br />• <b>Número da NF</b> → 000123456
-                    <br />• <b>Valor total</b> → R$ 1.234,56
+                    Exemplos:
+                    <br />• <b>Nome</b> → Maria Souza
+                    <br />• <b>Data</b> → 2026-01-15
+                    <br />• <b>Valor</b> → R$ 1.234,56
+                    <br />• <b>Número do documento</b> → 000123456
                   </span>
                 </span>
               </div>
@@ -408,7 +422,7 @@ export function TemplatesPage() {
                 <span className="info">
                   i
                   <span className="tip">
-                    Valida e normaliza o formato: <b>data</b>, <b>moeda</b>, <b>CPF/CNPJ</b>,{' '}
+                    Confere e padroniza o formato: <b>data</b>, <b>moeda</b>, <b>CPF/CNPJ</b>,{' '}
                     <b>número</b>, <b>texto</b>, <b>sim/não</b>.
                   </span>
                 </span>
@@ -418,8 +432,8 @@ export function TemplatesPage() {
                 <span className="info">
                   i
                   <span className="tip">
-                    Se marcado e a IA não encontrar o dado, o documento vai para{' '}
-                    <b>revisão humana</b> em vez de seguir.
+                    Se marcado e a IA não encontrar o dado, o documento vai para a{' '}
+                    <b>sua conferência</b> em vez de seguir.
                   </span>
                 </span>
               </div>
@@ -431,7 +445,7 @@ export function TemplatesPage() {
               <div key={f.key} className="frow">
                 <input
                   className="tpl-inp"
-                  placeholder="ex.: Emitente, Número da NF, Valor total"
+                  placeholder="ex.: Nome, Data, Valor"
                   value={f.name}
                   onChange={(e) => patchField(f.key, { name: e.target.value })}
                 />
@@ -455,7 +469,7 @@ export function TemplatesPage() {
                 />
                 <button
                   className="iconbtn"
-                  title="Avançado: regex de validação e dica para a IA"
+                  title="Avançado: padrão de validação e dica para a IA"
                   aria-label={`Avançado do campo ${f.name || idx + 1}`}
                   aria-expanded={f.advOpen}
                   onClick={() => patchField(f.key, { advOpen: !f.advOpen })}
@@ -476,21 +490,21 @@ export function TemplatesPage() {
                     <div className="row2">
                       <div className="half">
                         <span className="adv-lbl">
-                          Validação por regex <span className="soft">— opcional</span>
+                          Validação por padrão avançado <span className="soft">— opcional</span>
                           <span className="info r">
                             i
                             <span className="tip">
-                              <b>Regra extra de formato</b>, opcional. Cole um regex que o valor
-                              extraído deve seguir. Ex.: <code>\d{'{'}2{'}'}/\d{'{'}4{'}'}</code>{' '}
-                              (mês/ano). Se o valor não casar, marca como inválido (vai para
-                              revisão). O <b>tipo</b> já valida o básico — use isto só se
-                              precisar.
+                              <b>Regra extra de formato</b>, opcional. Informe um padrão (no
+                              formato regex) que o valor lido deve seguir. Ex.:{' '}
+                              <code>\d{'{'}2{'}'}/\d{'{'}4{'}'}</code> (mês/ano). Se o valor não
+                              bater, marca como inválido (vai para conferência). O <b>tipo</b> já
+                              confere o básico — use isto só se precisar.
                             </span>
                           </span>
                         </span>
                         <input
                           className="tpl-inp mono"
-                          placeholder="cole o regex, ex.: \d{2}/\d{4}"
+                          placeholder="ex.: \d{2}/\d{4} (mês/ano)"
                           value={f.regex ?? ''}
                           onChange={(e) => patchField(f.key, { regex: e.target.value })}
                         />
@@ -502,14 +516,14 @@ export function TemplatesPage() {
                             i
                             <span className="tip">
                               Texto livre para orientar a IA <b>onde/como</b> achar o dado. Ex.:{' '}
-                              <i>“o valor após ‘Total da nota’”</i> ou{' '}
-                              <i>“o nome no topo, em maiúsculas”</i>.
+                              <i>“o valor que aparece após ‘Total’”</i> ou{' '}
+                              <i>“o nome no topo da página”</i>.
                             </span>
                           </span>
                         </span>
                         <input
                           className="tpl-inp"
-                          placeholder="ex.: o valor após 'Total da nota'"
+                          placeholder="ex.: o valor após 'Total'"
                           value={f.hint ?? ''}
                           onChange={(e) => patchField(f.key, { hint: e.target.value })}
                         />
@@ -534,13 +548,13 @@ export function TemplatesPage() {
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
               <button className="btn-ghost" onClick={closeForm} disabled={saving}>
-                {form.id == null ? 'Descartar template' : 'Descartar alterações'}
+                {form.id == null ? 'Descartar tipo' : 'Descartar alterações'}
               </button>
               <button className="btn-primary" onClick={submitForm} disabled={saving}>
                 {saving
                   ? 'Salvando…'
                   : form.id == null
-                    ? 'Salvar template'
+                    ? 'Salvar tipo'
                     : 'Salvar alterações'}
               </button>
             </div>
@@ -565,10 +579,10 @@ export function TemplatesPage() {
       {isError && (
         <div className="card" style={{ padding: '48px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
-            Não foi possível carregar os templates.
+            Não foi possível carregar os tipos de documento.
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 16px' }}>
-            Verifique se o serviço está em execução e tente novamente.
+            Verifique se o aplicativo está aberto e tente de novo.
           </p>
           <button className="btn-primary" onClick={() => templatesQuery.refetch()}>
             <Icon name="refresh" size={15} />
@@ -581,7 +595,7 @@ export function TemplatesPage() {
       {isEmpty && !form && (
         <div className="card" style={{ padding: '48px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
-            Nenhum template ainda
+            Nenhum tipo de documento ainda
           </div>
           <p
             style={{
@@ -592,8 +606,9 @@ export function TemplatesPage() {
               marginInline: 'auto',
             }}
           >
-            Crie um template declarando como reconhecer o tipo (sinais) e os campos a extrair. O
-            sistema usa os templates para classificar e preencher cada documento automaticamente.
+            Crie um tipo de documento dizendo como reconhecê-lo (as pistas) e quais dados ler
+            dele. O sistema usa os tipos para identificar e preencher cada documento
+            automaticamente.
           </p>
         </div>
       )}
@@ -614,24 +629,24 @@ export function TemplatesPage() {
                       <div className="tpl-name">{t.name}</div>
                       <div className="tpl-type">
                         {t.signals.length > 0
-                          ? `${t.signals.length} ${t.signals.length === 1 ? 'grupo' : 'grupos'} de sinais`
-                          : 'Sem sinais'}
+                          ? `${t.signals.length} ${t.signals.length === 1 ? 'conjunto' : 'conjuntos'} de pistas`
+                          : 'Sem pistas'}
                       </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button
                       className="row-action"
-                      title="Editar template"
-                      aria-label={`Editar template ${t.name}`}
+                      title="Editar tipo"
+                      aria-label={`Editar tipo ${t.name}`}
                       onClick={() => openEdit(t)}
                     >
                       <Icon name="dots" size={16} />
                     </button>
                     <button
                       className="row-action"
-                      title="Remover template"
-                      aria-label={`Remover template ${t.name}`}
+                      title="Remover tipo"
+                      aria-label={`Remover tipo ${t.name}`}
                       style={{ color: 'var(--st-erro)' }}
                       onClick={() => setConfirmRemove(t)}
                     >
@@ -640,7 +655,7 @@ export function TemplatesPage() {
                   </div>
                 </div>
 
-                <div className="tpl-fields-label">CAMPOS EXTRAÍDOS</div>
+                <div className="tpl-fields-label">DADOS LIDOS</div>
                 <div className="tags">
                   {t.fields.map((f) => (
                     <span key={f.id} className="tag">
@@ -657,7 +672,7 @@ export function TemplatesPage() {
                   {condCount > 0 && (
                     <span>
                       <Icon name="checkSmall" size={13} />
-                      {condCount} {condCount === 1 ? 'sinal' : 'sinais'}
+                      {condCount} {condCount === 1 ? 'pista' : 'pistas'}
                     </span>
                   )}
                 </div>
@@ -682,13 +697,13 @@ export function TemplatesPage() {
         >
           <div className="card" style={{ padding: 22, maxWidth: 440, width: '90%' }}>
             <h3 className="sec-title" style={{ fontSize: 15, marginBottom: 10 }}>
-              Remover template
+              Remover tipo
             </h3>
             <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 18px' }}>
-              Remover o template{' '}
+              Remover o tipo{' '}
               <b style={{ fontFamily: 'var(--font-mono)' }}>«{confirmRemove.name}»</b>? Os
-              documentos já classificados por ele permanecem; novos documentos deixarão de casar
-              com este template.
+              documentos já identificados por ele permanecem; novos documentos deixarão de ser
+              reconhecidos por este tipo.
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
@@ -696,7 +711,7 @@ export function TemplatesPage() {
                 onClick={() => setConfirmRemove(null)}
                 disabled={deleteTemplate.isPending}
               >
-                Manter template
+                Manter tipo
               </button>
               <button
                 className="btn-primary"
@@ -727,8 +742,8 @@ function TestSignalsPanel({ templateId }: { templateId: number | null }) {
   if (templateId == null) {
     return (
       <div className="tpl-sec-mini" style={{ marginTop: 14 }}>
-        Salve o template para liberar a ferramenta <b>Testar sinais</b> (enviar um PDF de teste
-        e ver quais sinais casam ou falham).
+        Salve o tipo para liberar a ferramenta <b>Testar com um arquivo de exemplo</b> (enviar
+        um PDF e ver quais pistas são reconhecidas ou falham).
       </div>
     )
   }
@@ -737,17 +752,19 @@ function TestSignalsPanel({ templateId }: { templateId: number | null }) {
 
   return (
     <div className="card" style={{ padding: 14, marginTop: 14 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Testar sinais</div>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+        Testar com um arquivo de exemplo
+      </div>
       <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
-        Envie um PDF de teste (texto nativo) para conferir quais grupos e sinais casam ou
-        falham — sem IA e sem custo. Use para diagnosticar por que um documento não casou.
+        Envie um PDF que já tenha texto para ver se este tipo seria reconhecido — sem custo.
+        Útil para entender por que um documento não foi reconhecido.
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <input
           type="file"
           accept="application/pdf"
-          aria-label="PDF de teste para testar os sinais"
+          aria-label="PDF de exemplo para testar o reconhecimento"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
         <button
@@ -756,13 +773,13 @@ function TestSignalsPanel({ templateId }: { templateId: number | null }) {
           onClick={() => file && preview.mutate({ templateId, file })}
         >
           <Icon name="checkSmall" size={15} />
-          {preview.isPending ? 'Testando…' : 'Testar sinais'}
+          {preview.isPending ? 'Testando…' : 'Testar'}
         </button>
       </div>
 
       {preview.isError && (
         <p style={{ fontSize: 13, color: 'var(--st-erro)', margin: '10px 0 0' }}>
-          Não foi possível testar os sinais. Confira se o arquivo é um PDF válido e tente novamente.
+          Não foi possível testar. Confira se o arquivo é um PDF válido e tente novamente.
         </p>
       )}
 
@@ -778,39 +795,41 @@ function TestSignalsPanel({ templateId }: { templateId: number | null }) {
                 fontSize: 13,
               }}
             >
-              Este documento parece <b>escaneado</b>; o teste de sinais só funciona com PDF de
-              texto nativo. Na ingestão real, a <b>IA</b> cuida de escaneados.
+              Este documento parece ser uma <b>imagem</b> (foto ou escaneado); este teste só
+              funciona com PDF que já tem texto. No processamento real, a <b>IA</b> cuida de
+              imagens.
             </div>
           ) : (
             <>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
                 {result.matched_any ? (
                   <span style={{ color: 'var(--st-encontrado, var(--st-ok, green))' }}>
-                    ✓ O documento casa este template.
+                    ✓ Este documento seria reconhecido como este tipo.
                   </span>
                 ) : (
                   <span style={{ color: 'var(--st-erro)' }}>
-                    ✗ Nenhum grupo casou — o documento não casaria este template.
+                    ✗ Nenhuma alternativa bateu — este documento não seria reconhecido como
+                    este tipo.
                   </span>
                 )}
               </div>
 
               {result.groups.length === 0 ? (
                 <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-                  Este template não tem sinais definidos.
+                  Este tipo ainda não tem pistas definidas.
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {result.groups.map((g, gi) => (
                     <div key={gi} className="group" style={{ padding: 10 }}>
                       <div className="group-h" style={{ marginBottom: 8 }}>
-                        Grupo {gi + 1} —{' '}
+                        Conjunto {gi + 1} —{' '}
                         {g.matched ? (
                           <span style={{ color: 'var(--st-encontrado, var(--st-ok, green))' }}>
-                            casa (todas as condições)
+                            reconhecido (todas as pistas apareceram)
                           </span>
                         ) : (
-                          <span style={{ color: 'var(--st-erro)' }}>não casa</span>
+                          <span style={{ color: 'var(--st-erro)' }}>não reconhecido</span>
                         )}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -831,7 +850,7 @@ function TestSignalsPanel({ templateId }: { templateId: number | null }) {
                               {c.matched ? '✓' : '✗'}
                             </span>
                             <span style={{ color: 'var(--text-3)' }}>
-                              {c.mode === 'regex' ? 'regex' : 'texto'}:
+                              {c.mode === 'regex' ? 'padrão avançado' : 'texto'}:
                             </span>
                             <span style={{ fontFamily: 'var(--font-mono)' }}>{c.value}</span>
                             <span style={{ color: 'var(--text-3)' }}>
