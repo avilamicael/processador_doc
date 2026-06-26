@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-15)
 Phase: 12 (robustez-de-ingestao-e-modo-de-aprovacao) — EXECUTING
 Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-06-26 - Completed quick task 260626-g4g: phase-10 classification fixes (WR-01/03/04)
+Last activity: 2026-06-26 - Completed gate fixes (quick 260626-g4g/gfr/g6x) for phases 10/12
 Next: Phase 5 (Confiança, Revisão Humana e Quarentena) — requer discuss/plan
 
 Progress: [█░░░░░░░░░] 13%
@@ -180,6 +180,7 @@ None yet.
 | 260626-fot | Achado cosmético: endpoint GET /documents/{id}/audit excluía mal os AuditLog de materialização de split → "Operações aplicadas" mostrava linha "Movido" espúria (origem=destino). Fix aplica o mesmo filtro de stage._has_done (or_(details IS NULL, NOT startswith split_to_files:)); can_undo passa a refletir só automações reais. Teste de regressão; 35 testes verdes | 2026-06-26 | 0a2ec3b | [260626-fot-fix-audit-split-materialize](./quick/260626-fot-fix-audit-split-materialize/) |
 | 260626-g4g | Code-review Phase 10 (motor de classificação): WR-01 gate do IA-fallback não paga 2x em doc ambíguo-recusado (and not called_ai); WR-03 não chama IA sem templates (and templates); WR-04 needle de texto curto (norm len<3) casa RAW casefolded p/ não over-matchar ("R$"→"r", "Nº"→"no"). TDD; +8 testes; 523 backend verdes | 2026-06-26 | 8d438ab | [260626-g4g-fix-classificacao-fase-10-custo-ia-e-nor](./quick/260626-g4g-fix-classificacao-fase-10-custo-ia-e-nor/) |
 | 260626-gfr | Code-review Phase 10 WR-02 (frontend): reprocess apagava correções manuais sem aviso. Os 3 botões "Reprocessar" da AttentionPage agora passam por window.confirm — ReviewRow avisa descarte das correções (condicional a manually_corrected), batch em_revisao idem, QuarantineRow confirm simples. tsc+build limpos | 2026-06-26 | 979446f | [260626-gfr-reprocess-confirma-e-avisa-perda-de-corr](./quick/260626-gfr-reprocess-confirma-e-avisa-perda-de-corr/) |
+| 260626-g6x | Code-review Phase 12 (modo aprovação): WR-01 worker em modo arq não via o toggle (lru_cache cross-process) → novo read_approval_mode_fresh() relê .env por chamada, gate do sweep lê fresco; WR-03 auto-apply já enfileirado escapava do gate → APPLY_STEP no-op quando job sem run_id + modo ON (manual com run_id sempre aplica, D-06). TDD; +5 testes; 528 backend verdes | 2026-06-26 | c1ac0a1 | [260626-g6x-fix-fase-12-modo-aprovacao-worker-freshn](./quick/260626-g6x-fix-fase-12-modo-aprovacao-worker-freshn/) |
 
 ## Deferred Items
 
