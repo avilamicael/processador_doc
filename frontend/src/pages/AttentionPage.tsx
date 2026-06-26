@@ -217,7 +217,11 @@ function ReprocessBucketBar({ bucket }: { bucket: 'quarentena' | 'em_revisao' })
           className="btn-ghost"
           disabled={reprocess.isPending}
           onClick={() => {
-            if (window.confirm(`Reprocessar todos os documentos d${label}?`)) {
+            const message =
+              bucket === 'em_revisao'
+                ? 'Reprocessar toda a revisão vai re-rodar a classificação e DESCARTAR as correções manuais dos documentos. Continuar?'
+                : `Reprocessar todos os documentos d${label}?`
+            if (window.confirm(message)) {
               reprocess.mutate(bucket)
             }
           }}
@@ -307,7 +311,11 @@ function QuarantineRow({ item }: { item: AttentionItem }) {
         <button
           className="btn-ghost"
           disabled={reprocess.isPending}
-          onClick={() => reprocess.mutate(item.id)}
+          onClick={() => {
+            if (window.confirm('Reprocessar este documento?')) {
+              reprocess.mutate(item.id)
+            }
+          }}
         >
           <Icon name="refresh" size={15} />
           {reprocess.isPending ? 'Reprocessando…' : 'Reprocessar'}
@@ -352,6 +360,8 @@ function ReviewRow({ item }: { item: ReviewItem }) {
   // Algum campo inválido → o gate D-07 (defesa em profundidade na UI; backend é o
   // guard autoritativo). Aproximação na UI: bloqueia se HOUVER qualquer campo inválido.
   const hasInvalid = item.fields.some((f) => !f.valid)
+  // Alguma correção manual feita neste documento → reprocessar vai DESCARTÁ-la (D-10/D-11).
+  const hasCorrections = item.fields.some((f) => f.manually_corrected)
 
   return (
     <ItemCard filename={item.original_filename}>
@@ -396,7 +406,14 @@ function ReviewRow({ item }: { item: ReviewItem }) {
           <button
             className="btn-ghost"
             disabled={reprocess.isPending}
-            onClick={() => reprocess.mutate(item.id)}
+            onClick={() => {
+              const message = hasCorrections
+                ? 'Reprocessar vai re-rodar a classificação e DESCARTAR as correções manuais feitas neste documento. Continuar?'
+                : 'Reprocessar vai re-rodar a classificação deste documento. Continuar?'
+              if (window.confirm(message)) {
+                reprocess.mutate(item.id)
+              }
+            }}
           >
             <Icon name="refresh" size={15} />
             {reprocess.isPending ? 'Reprocessando…' : 'Reprocessar'}
